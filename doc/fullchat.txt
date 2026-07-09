@@ -1,0 +1,186 @@
+I saw some recent data dashboards showing global events, sometimes on a map. This is a step forward for getting an overview of a global situation. The official news often take a long time to react, and dashboards may be more up-to-date. But such dashboards still show raw data, pulled mostly from APIs, I think. What I have in mind is more ambitious, and it involves a digital twin model of the world, which is an actual model. Machine learning would help find the structure and parameters of the model, and could include as many data sources, APIs, as practically possible. Obviously global economic and market data would be in there but a wide range of other sources such as flight, shipping, traffic and possibly webcam and even Washington pizza orders could be included. I would be mainly interested in detecting substantial global events, any novelty, unusual patters that may be worth some attention. Does this make sense and how would we do a more detailed plan for such a system? The idea is vague at the moment but we could make it a bit more concrete.Show lessArchitected layered framework addressing implementation challenges and phased deployment strategyArchitected layered framework addressing implementation challenges and phased deployment strategyYes, it makes sense — and interestingly, most of the pieces already exist in isolation. GDELT monitors global news events in near real time, epidemic intelligence firms like BlueDot flagged COVID days before the WHO by fusing flight data with health chatter, hedge funds routinely trade on satellite imagery of parking lots and tanker movements, and the "Pentagon pizza index" you're alluding to is a real (if noisy) folk indicator. What doesn't exist publicly is the fusion layer: a single system that learns the normal joint behavior of many heterogeneous streams and flags when the world deviates from it. That's the genuinely ambitious part of your idea, and it's the right part to focus on.
+One reframing I'd suggest early: drop the literal "digital twin" interpretation. A mechanistic simulation of the world is intractable and, for your goal, unnecessary. What you actually need is a learned model of normality — something that compresses the usual dynamics and correlations of your data streams well enough that abnormality stands out as prediction error or latent-state shift. You don't need the model to be right about the world; you need it to be calibrated about its own surprise. Anomaly detection is then: predicted vs. observed residuals per stream, plus breaks in cross-stream correlations, plus regime changes in a shared latent state.
+Here's the architecture I'd sketch:
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation-duration: 0.25s;
+    animation-timing-function: cubic-bezier(0.19, 1, 0.22, 1);
+  }
+VvisualizeVvisualize show_widgetA few notes on why the layers are shaped this way, and where the real difficulty lives.
+Normalization is half the project. Flights, ship positions, market ticks, and news events have wildly different granularities, latencies, and semantics. The classic move is to project everything onto a common representation — say, an H3 hexagonal grid × hourly time buckets, plus an entity graph (countries, ports, companies, airports). Once everything is "value per cell per hour per entity," cross-source reasoning becomes possible. Without this, you just have a pile of dashboards again.
+Per-stream models before fusion. Each stream first gets its own model of normality: seasonal forecasting (weekly/annual cycles, holidays), so that "quiet Sunday air traffic" isn't flagged. Anomaly score = how surprised the model is by what actually arrived. This alone gets you 70% of the value cheaply.
+Fusion is where your idea becomes distinctive. A shared latent model (state-space model, graph neural net over the entity graph, or a multivariate transformer over the grid) learns the correlations between streams. Then you can detect not just "shipping dropped" but "shipping dropped while flights rerouted and a currency wobbled in the same region" — and, more subtly, correlation breaks: two streams that normally move together suddenly decoupling is often more informative than either moving alone.
+The hardest problem is the base rate. With millions of series, something is always five sigma; a naive system fires constantly and gets ignored. The defenses are: require persistence (anomaly holds for N consecutive windows), require geographic coherence (neighboring cells agree), and above all require cross-source corroboration — an alert only escalates when independent modalities point at the same place and time. That corroboration rule is essentially why the flight-plus-news-plus-health-chatter approach worked for early epidemic detection while single-signal indicators (like pizza orders alone) stay in the folklore category.
+Evaluation is the other quietly hard part: you need ground truth for "a real event happened here." A practical trick is to use Wikipedia Current Events or GDELT's own event records as retrospective labels, and score your system on lead time — did it flag the region before the event hit mainstream coverage?
+As a concrete path from vague to real:
+Phase 0 (weeks): Pick 5–10 free, reliable feeds — market indices and FX (many free APIs), GDELT event counts, OpenSky flight density, Cloudflare Radar / IODA internet health, USGS earthquakes as a sanity-check ground truth. Build the ingestion → hourly grid → forecast → residual pipeline for each. Ship a map that colors cells by surprise score. This is achievable by one person and already beats most public dashboards.
+Phase 1: Add the corroboration engine and alert logic; tune false-positive rates against a labeled backtest of known events from the past two years (you can replay historical data).
+Phase 2: Add the entity graph and an LLM layer that, when an alert fires, pulls the contributing signals and recent news for that region and writes a one-paragraph hypothesis — this turns raw anomalies into something a human can act on in seconds.
+Phase 3: Replace the per-stream ensemble with a jointly trained latent world model, which is the research-grade version of your "digital twin."
+Two practical warnings: full-fidelity AIS and ADS-B feeds are commercially licensed and expensive (the free tiers are sampled), so budget for that or design around sampled data; and webcams raise real privacy and legality issues in many jurisdictions, so I'd leave them out of scope until the core works on cleaner feeds.
+Would you like to go deeper on one piece next — say, the Phase 0 data source shortlist with specific APIs, or the anomaly scoring math?Let's start with free sources (sampling is not a problem to get a global or regional indication). Let's get a list of the kinds of data sources we could aim for. (list only categories, not individual sources. e.g. public transport real time data, instead of listing all cities).Organized free data categories into thematic groupingsOrganized free data categories into thematic groupingsHere's a category-level inventory, grouped by theme. All of these have at least some free tier or open-data variant, and sampled coverage is fine for your purpose:
+Movement of people and goods
+
+Flight tracking (crowdsourced ADS-B networks)
+Ship/vessel tracking (sampled AIS)
+Road traffic and congestion indices
+Public transport real-time feeds (GTFS-RT)
+Border crossing / migration statistics
+Bicycle- and scooter-share system feeds
+
+Economy and markets
+
+Equity indices, FX rates, crypto prices
+Commodity prices (energy, metals, agriculture)
+Freight and shipping rate indices
+Central bank and government statistics (rates, inflation, trade)
+Corporate filings and registrations
+Job postings and labor market indicators
+
+Information and attention
+
+News event databases (machine-coded global news)
+Search trend data
+Wikipedia page views and edit activity
+Social media activity (increasingly restricted, but some open firehoses remain)
+App store rankings and download trends
+Domain registrations and certificate transparency logs
+
+Infrastructure and connectivity
+
+Internet health / outage monitoring (BGP, traffic volumes)
+Power grid frequency and load data (many operators publish live)
+Satellite-observed night lights
+GPS/GNSS interference reports
+Undersea cable and peering status feeds
+
+Environment and hazards
+
+Earthquake, volcano, and tsunami monitoring
+Weather observations and severe-weather alerts
+Wildfire detection (satellite hotspots)
+Flood and river gauge networks
+Air quality sensor networks
+Space weather (solar activity, geomagnetic indices)
+
+Health
+
+Disease surveillance and outbreak reporting
+Wastewater monitoring (where published)
+Excess mortality statistics
+
+Governance and conflict
+
+Armed conflict and protest event databases
+Sanctions lists and export control updates
+Legislative and regulatory activity feeds
+Election calendars and results
+Humanitarian data exchanges (UN and NGO open data)
+
+Physical-world proxies
+
+Satellite imagery derivatives (open constellations: land use, ship detection, radiance)
+Aviation NOTAMs and airspace closures
+Maritime navigational warnings
+Public event/venue activity proxies (opening hours anomalies, "busyness" style signals)
+
+A useful property to note when you later prioritize: the categories differ enormously in latency (seismic feeds are seconds; official statistics are months), spatial resolution, and manipulation resistance (GPS interference reports are hard to fake; social media is easy). A good Phase 0 mix takes two or three categories from each theme, deliberately spanning fast/slow and physical/informational — the physical streams (flights, ships, power, seismic) corroborate the informational ones (news, search, Wikipedia), which is exactly the cross-check the fusion layer needs.
+Want me to rank these by value-per-effort for a Phase 0 shortlist, or sketch the common schema they'd all normalize into?Yes. Maybe the data representation should also have multiple time scales: faster for very recent events and longer bins for older events. Maybe a fixed ratio between bin width and distance in time. Also, think about internet bandwidth, not to overload it. Not sure whether it would run locally or on VPS.Architected multi-scale binning, bandwidth optimization, and hybrid deployment strategyArchitected multi-scale binning, bandwidth optimization, and hybrid deployment strategyGood instincts on all three points — the multi-scale idea in particular has a well-proven ancestry. Let me take them in order.
+Phase 0 shortlist, ranked by value per effort
+Tier 1 — start here (trivial APIs, global coverage, fast latency):
+
+Seismic/hazard feeds — minutes latency, doubles as free ground truth for testing your alerting logic
+Markets, FX, crypto — the fastest-reacting sensor of anything economically relevant
+Machine-coded news events (GDELT-style) — global, ~15-minute cadence, already geocoded for you
+Wikipedia pageviews and edit spikes — an underrated global attention sensor, completely free, hourly
+Internet health/outage monitoring — regional resolution, very hard to fake, catches conflicts and disasters early
+Severe weather alerts — free, structured, geocoded
+
+Tier 2 — worth it, slightly more friction (registration, rate limits, patchier coverage):
+7. Flight density from crowdsourced ADS-B — free tiers are sampled but fine for regional density anomalies
+8. Air quality sensor networks — easy API, catches fires, industrial accidents, sometimes conflict
+9. Satellite fire hotspots — near-real-time, free
+10. Power grid load/frequency — excellent signal where published (Europe is best), patchy elsewhere
+11. Search trends — valuable but the free access paths are rate-limited and fragile
+12. Conflict/protest event databases — high value, but daily-to-weekly latency, so they're better as corroboration and training labels than as tripwires
+Tier 3 — defer (high integration effort or bandwidth relative to Phase 0 value):
+sampled AIS (few genuinely free sources), per-city transit feeds (each city is its own integration; aggregate later), satellite imagery derivatives (bandwidth and compute heavy), social media (API access keeps shrinking).
+A deliberate feature of Tier 1: it already spans physical (seismic, weather), economic (markets), infrastructural (internet), and informational (news, Wikipedia) — so the cross-corroboration logic can be built and tested from day one with just six feeds.
+Multi-scale time representation
+Your "fixed ratio between bin width and distance in time" is exactly right, and it's a known pattern: round-robin databases (RRDtool, Graphite's Whisper) have used cascaded consolidation for decades, and the streaming-algorithms literature calls the same idea telescoping or exponential histograms. Formally: bin width w ∝ age, i.e. geometric bins, which means a constant number of bins per octave of history. With, say, 8 bins per doubling, you cover one minute to ten years in roughly 8 × log₂(5M) ≈ 180 bins per series. That's the whole trick — logarithmic storage for unbounded history.
+Practically it works as a consolidation cascade, not as rebinning on read:
+
+Ring buffer of raw/fine data for the recent window (say, minute resolution for 48 hours)
+When data ages past a threshold, aggregate into the next coarser ring (5-min for a week, hourly for a month, daily for two years, weekly beyond)
+Crucially, when consolidating, keep not just the mean but min, max, count, and variance per bin — otherwise you destroy exactly the extremes your anomaly detector needs. An anomaly that lasted 10 minutes must remain visible in the daily bin as an outlier max.
+
+This structure also matches the detection problem: you run anomaly models per scale. The fine scales catch sharp events (an explosion, a flash crash); the coarse scales catch slow drifts (a supply chain quietly degrading over months) that are invisible at minute resolution. Novelty at any scale is reportable.
+Bandwidth
+Much smaller than you might fear, if you follow one rule: poll aggregated endpoints, never raw firehoses. Rough daily volumes for the Tier 1+2 set: news event files, a few hundred MB; flight state snapshots every 1–5 min, tens to a couple hundred MB; Wikipedia hourly pageview dumps, ~50–80 MB compressed if filtered; everything else (markets, seismic, weather, air quality, internet health) is negligible JSON. Realistic total: 1–3 GB/day down, comfortably within home broadband or the cheapest VPS transfer quota. The things that would blow the budget — raw ADS-B/AIS firehoses, satellite imagery — are precisely the Tier 3 items we deferred. Also use compression on every request, conditional/delta fetches where APIs support them, and drop fields at ingestion before anything touches disk.
+And note the pleasant consequence of the geometric binning: your retained dataset stays tiny. A thousand series × ~180 bins × a handful of statistics is megabytes, not terabytes. The pipeline is a funnel: gigabytes in, megabytes kept.
+Local vs VPS
+I'd split it, because the two halves have opposite requirements:
+
+Ingestion wants a small VPS: 24/7 uptime, stable IP (some APIs dislike residential/rotating IPs), no dependence on your home connection or power. A $5–10/month instance handles polling, parsing, consolidation into the geometric bins, and holds the compact store.
+Modeling wants your local machine: that's where GPU/CPU is cheap and iteration is fast. It syncs the consolidated store from the VPS (megabytes per day) and runs training, backtests, and the heavier fusion models.
+
+This split also gives you a clean interface to design early: the schema of the consolidated store is the contract between the two halves. Start fully local if you like — nothing in the design depends on the VPS — and add it the first time a home outage puts a hole in your time series, which is also a nice reminder that your own system is a sensor with anomalies of its own.
+Natural next step: define that common schema concretely — the record format for (stream, entity/cell, scale, bin) with its statistics — since everything upstream and downstream hangs off it. Want to do that?I like the list, especially the Wikipedia feed. More satellite would be great, not just for fires, if possible. Internet health includes major websites/services? City-transit feeds: I think GTFS-RT is quite popular in many places, no? Also, include some sources relevant to a real  SHTF scenario, e.g. radiation levels, energy, water, and emergency activity, if possibleSynthesized satellite expansions, internet monitoring clarification, transit feed standardization, and SHTF-critical infrastructure sourcesSynthesized satellite expansions, internet monitoring clarification, transit feed standardization, and SHTF-critical infrastructure sourcesAll four are good pushes. Taking them in turn:
+Satellite, beyond fires
+Open constellations (Sentinel, MODIS/VIIRS, GOES/Meteosat-class geostationary) give you far more than hotspots, and much of it comes as pre-computed, low-bandwidth products rather than raw imagery — which is what makes them Phase-0-compatible:
+
+Night lights radiance — arguably the single best SHTF satellite signal: power outages, blackouts from conflict, whole regions going dark. Daily global product.
+Atmospheric trace gases (NO₂, SO₂, CO, methane) — NO₂ is a direct proxy for industrial and traffic activity (its collapse made COVID lockdowns visible from orbit); SO₂ spikes flag volcanic eruptions and industrial accidents; methane plumes flag pipeline damage.
+Aerosols and smoke — dust events, large fires, explosions.
+Soil moisture and drought indices — slow-moving but critical for food security forecasting.
+Snow cover, ice, flood extent — flood mapping products exist as ready-made feeds.
+Sea surface temperature and river/reservoir altimetry — water supply and marine anomalies.
+Vegetation health (NDVI) — the standard famine early-warning input.
+
+The trick for bandwidth is to consume regional aggregates or anomaly products where they exist, and only pull imagery tiles on demand after an alert fires — imagery as an investigation tool, not an ingestion stream. That keeps satellite well within your gigabytes-per-day budget.
+Internet health — what it actually covers
+Two distinct layers, both useful:
+
+Infrastructure layer: BGP routing, country/region traffic volumes, DNS query patterns, outage detection. This tells you "Sudan's internet just dropped 90%" — a very strong conflict/coup/disaster signal, and hard to fake.
+Service layer: yes, major websites and services, partially. Public radar-style feeds track traffic trends per popular service and per domain ranking; many big providers publish machine-readable status pages; and certificate transparency logs show infrastructure changes. What you don't easily get free is fine-grained per-service outage reporting of the Downdetector type — those are commercial. A cheap substitute: run your own tiny active prober (a few hundred HTTP/DNS checks against major services every few minutes from your VPS — kilobytes of traffic) which gives you a first-party service-layer sensor you fully control.
+
+GTFS-RT — you're right, I was too pessimistic
+The standardization changes the math. One parser handles every agency, and there are public registries/aggregators of feed URLs, so the marginal cost per city is registration and a config entry, not an integration. I'd promote it to Tier 2 with this framing: you don't care about individual buses, you compute one number per city per bin — active vehicles as a fraction of the seasonal norm. A "heartbeat of the city." Fifty cities across continents is very achievable, and it's an excellent SHTF indicator precisely because transit stopping is a high-threshold event: strikes, disasters, fuel shortages, evacuations. Bandwidth is modest if you poll each feed every few minutes and discard everything but the vehicle count immediately.
+SHTF-relevant categories
+These exist and several are surprisingly good:
+
+Radiation monitoring — this is the star of the category. Government networks (the EU-wide exchange platform, national equivalents) plus citizen sensor networks (Safecast-style, community Geiger maps) publish near-real-time gamma dose rates from thousands of stations. Low bandwidth, numeric, geocoded, and the citizen networks provide independence from official channels — exactly the corroboration structure you want for the scenario where official channels go quiet.
+Energy — European grid transparency data is exceptional: load, generation mix, cross-border flows, prices, nearly real time. Gas network flows are also published in Europe. US equivalents exist at coarser granularity. Grid frequency deviations are a particularly sensitive real-time stress signal. Elsewhere coverage is patchy — which is where night lights fill the gap.
+Water — river gauges and reservoir levels are published by hydrological agencies in many countries (US and Europe best), plus satellite altimetry for large reservoirs globally. Municipal drinking-water system status is generally not published in real time anywhere — that's a genuine blind spot; the proxies are reservoir levels, drought indices, and emergency alerts.
+Emergency activity — several usable streams: official alert systems in the standardized CAP format (many countries publish public feeds covering everything from storms to hazmat to civil emergencies); global disaster coordination feeds (GDACS-style); and two clever derived signals — emergency squawk codes in the ADS-B data you already ingest (aircraft declaring emergencies, plus military/medevac activity patterns), and public-safety radio streaming aggregators as an activity-level indicator (US-centric, legally fine to measure activity volume, and you don't need to process the audio content — just "how busy are the fire/EMS channels vs. normal").
+
+One design point worth stating explicitly for the SHTF use case: these are exactly the feeds that die during the event they're meant to detect — grid data during a grid collapse, internet-hosted radiation feeds during an internet outage. Two consequences for your architecture. First, treat feed silence itself as a signal: "station stopped reporting" is an anomaly type of its own, and a cluster of stations going silent in one region is a strong alert even with zero data content. Second, it strengthens the case for the local node: the VPS ingests, but your local machine keeps a synced copy of recent state, so the system degrades to "last known picture plus silence map" rather than to nothing.
+The updated Tier 1 for a SHTF-weighted build would be: seismic, markets, news events, Wikipedia, internet health (both layers), weather alerts, radiation, and night lights — with energy grid, GTFS-RT heartbeats, trace gases, and CAP emergency feeds as the immediate Tier 2.
+Shall we lock this source list in and move to the schema — the (stream, cell, scale, bin) record format everything consolidates into, including how "silence" gets represented?Yes, please save the listed sources into a file, so you can read it later if reloaded.. At some point we'll need to get the individual links (e.g. on a city level) too. Can you register users (not connected to my name) on services that need logins? And what will the arcitecture of the system look like? A single process? Will data be stored locally on a continuously running server? What would be a good user interface?Architected comprehensive handoff package with development guide and implementation roadmapArchitected comprehensive handoff package with development guide and implementation roadmapFour files, forming a complete handoff package:
+
+CLAUDE.md — goes in the repo root; Claude Code reads it automatically at session start. It contains the project summary, the load-bearing glossary (q_value, presence channel, nursery, cascade...), the decided tech stack, proposed repo layout, coding conventions and guardrails (the interchange contract, no imputation, per-source isolation, calibration-as-tests), the testing approach, and operator context so its choices align with your preferences (self-hostable components, restic/B2, storage behind a thin interface for a possible Swarm backend later).
+worldwatch-architecture-v0.1.md — the authoritative spec, unchanged from before. Put it in docs/.
+p0-implementation-plan.md — new, and the most actionable one: Definition of Done for the first milestone, the 8-source table, a build order where every step leaves a working system, a full SQLite DDL sketch, the seven key algorithms each with concrete acceptance criteria (e.g. "PIT uniform under KS test on synthetic data", "level estimate not dragged by a single 10σ spike"), what's explicitly deferred to P1, and suggested opening tasks for the first session.
+global-anomaly-sources.md — the source catalog, also for docs/.
+
+Suggested setup: git init worldwatch, drop CLAUDE.md in the root and the other three in docs/, commit, then open Claude Code in that directory and start with something like "read the docs and begin with the opening tasks in p0-implementation-plan.md." The endpoint research for each source (item one in the catalog's next-steps) is best done at build time in Claude Code itself, since it can test each URL live as it writes the config stanzas.
+One thing intentionally left in your hands: the API registrations (some satellite portals, possibly a news-events key depending on access path). The plan has keys arriving via environment variables, so you can do those whenever — nothing blocks on them since the first two pollers (seismic, Wikipedia) need no auth at all.
+Good luck with the build — this converged into something genuinely worth making. When you hit design questions mid-implementation that deserve stepping back from the code, that's a good moment to come back here with the docs attached.ClaudeDocument · MD Worldwatch architecture v0.1Document · MD P0 implementation planDocument · MD Global anomaly sourcesDocument · MD Please save this whole chat into an md tooSynthesized chat content for markdown exportSynthesized chat content for markdown exportDone. CONVERSATION-ARCHIVE.md is now saved alongside the other four files — it's a structured chronicle of the entire conversation from opening vision through converged design and P0 implementation plan. Organized by conversation thread (opening, models, hierarchy, heavy tails, EBM-vs-Bayesian, sources, architecture, schema, topical focus, specification, implementation plan), with a design-decisions table at the end and the full artifact list.
+How to use this set for Claude Code development:
+
+Download all five files (plus the two earlier ones if you want complete history):
+
+CLAUDE.md — put in repo root, read first
+worldwatch-architecture-v0.1.md → docs/
+global-anomaly-sources.md → docs/
+p0-implementation-plan.md → docs/
+CONVERSATION-ARCHIVE.md → docs/ (reference; context when decisions need re-examining)
+
+
+Initialize the repo, commit the docs, open Claude Code.
+When Claude Code starts a session, it auto-reads CLAUDE.md — you don't need to paste anything. The plan is right there in the docs folder.
+If a design question arises during implementation ("wait, why q_values?" or "what's presence_q for?"), CONVERSATION-ARCHIVE has the reasoning — saves re-deriving it.
+When you want to resume design thinking later (e.g. "should we add this data source?"), attach the CONVERSATION-ARCHIVE and the relevant spec docs to that session, and we pick up where we left off — the full design is in those files.
+
+Good luck with the implementation. The design is genuinely complete; building it is the fun part.
