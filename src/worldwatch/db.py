@@ -106,6 +106,16 @@ MIGRATIONS: list[str] = [
         PRIMARY KEY (stream_id, cell, scale, version)
     );
     """,
+    # v3 — presence channel per-source state (expected-report model + cursor).
+    """
+    CREATE TABLE IF NOT EXISTS presence_state (
+        stream_id   TEXT PRIMARY KEY,
+        state       BLOB NOT NULL,
+        last_slot   INTEGER,
+        updated_at  INTEGER NOT NULL,
+        version     INTEGER NOT NULL
+    );
+    """,
 ]
 
 
