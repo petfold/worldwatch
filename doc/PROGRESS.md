@@ -1,6 +1,6 @@
 # Worldwatch — progress in plain language
 
-_Last updated: 2026-07-09. Companion to the technical docs
+_Last updated: 2026-07-10. Companion to the technical docs
 (`worldwatch-architecture-v0.1.md`, `p0-implementation-plan.md`)._
 
 ## What we're building, in one paragraph
@@ -71,8 +71,8 @@ surprise archive with sensible scores.
 | 4 | Continuous-feed model | ✅ done |
 | 5 | Count-feed model | ✅ done |
 | — | Runner (glues models to the data) | ✅ done |
-| 6 | Silence-as-a-signal | ⬜ next |
-| 7 | Remaining pollers | ⬜ |
+| 6 | Silence-as-a-signal | ✅ done |
+| 7 | Remaining pollers | ⬜ next |
 | 8 | Alert engine | ⬜ |
 | 9 | Push + map | ⬜ |
 | 10 | Run on server, soak test | ⬜ |
@@ -95,19 +95,25 @@ surprise archive with sensible scores.
 - **The runner** keeps one small model per feed-per-place, remembers each
   model's state between runs, and only scores new data — so it's cheap and
   restart-safe.
+- **The presence channel** treats a feed _falling silent_ as its own signal. It
+  learns each feed's normal rhythm, so a sensor going quiet during its usual
+  nightly maintenance window raises nothing, but a normally-reliable feed going
+  unexpectedly dark gets flagged — and the longer the silence, the louder. It is
+  careful to tell "the feed went quiet" apart from "our own poller wasn't
+  running", so the system never mistakes its own downtime for a world event.
 
 ### Trust level
 
-Everything above has automated tests (69 of them, all passing) plus code-quality
+Everything above has automated tests (81 of them, all passing) plus code-quality
 checks, and the earthquake pipeline has been run against the real live feed. So
 this isn't just written — it's verified working.
 
 ## What's next
 
-**Step 6, the presence channel:** teach the system that a feed _falling silent_
-is itself meaningful. A single sensor going quiet at night is normal; a whole
-region of sensors going quiet at once is a loud alarm. This slots neatly into
-the surprise archive the runner already fills.
+**Step 7, the remaining feeds:** wire up the other core sources (world news,
+internet health, severe-weather alerts, night-lights, and so on). Because adding
+a feed is meant to be "write a short config entry, not new code", this step is
+mostly breadth — pointing the existing machinery at more of the world.
 
 ## A note on where the code lives
 
