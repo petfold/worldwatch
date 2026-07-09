@@ -72,8 +72,8 @@ surprise archive with sensible scores.
 | 5 | Count-feed model | ✅ done |
 | — | Runner (glues models to the data) | ✅ done |
 | 6 | Silence-as-a-signal | ✅ done |
-| 7 | Remaining pollers | ⬜ next |
-| 8 | Alert engine | ⬜ |
+| 7 | Remaining pollers | ◐ partly — see below |
+| 8 | Alert engine | ⬜ next |
 | 9 | Push + map | ⬜ |
 | 10 | Run on server, soak test | ⬜ |
 
@@ -113,12 +113,31 @@ Everything above has automated tests (81 of them, all passing) plus code-quality
 checks, and the earthquake pipeline has been run against the real live feed. So
 this isn't just written — it's verified working.
 
+## Step 7 so far — feeds now connected
+
+Live and flowing end to end: **earthquakes** (USGS), **crypto markets** (BTC and
+ETH), **radiation** (Safecast), and **US severe-weather alerts** (NWS). Adding
+the second market (ETH) needed only a short config entry and no new code —
+confirming the "a feed is a recipe, not a program" design goal. The weather
+alerts needed one new small reader for that data shape, which now also covers
+similar alert feeds.
+
+The remaining core feeds are documented with exactly what each needs
+(`doc/tier1-onboarding-status.md`): **world news (GDELT)** needs a bit of format
+research; **Wikipedia traffic** is ready but needs a small tweak so the fetcher
+fills in the date range each poll; **internet health** and **night-lights** need
+you to register for a free account/API key (which stays out of the code — the
+system reads it from an environment variable). Those last two are the natural
+points where a bit of your input unblocks them.
+
 ## What's next
 
-**Step 7, the remaining feeds:** wire up the other core sources (world news,
-internet health, severe-weather alerts, night-lights, and so on). Because adding
-a feed is meant to be "write a short config entry, not new code", this step is
-mostly breadth — pointing the existing machinery at more of the world.
+**Step 8, the alert engine:** the first version of turning surprise into alarms.
+It only raises something when a surprise *persists*, is *geographically
+coherent* (neighbouring areas agree), and shows up across *two or more
+independent kinds of feed* in the same place and time. This is where the archive
+of surprise scores finally produces the headline output — a notification worth
+looking at.
 
 ## A note on where the code lives
 
