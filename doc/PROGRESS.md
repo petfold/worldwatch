@@ -101,6 +101,11 @@ surprise archive with sensible scores.
   unexpectedly dark gets flagged — and the longer the silence, the louder. It is
   careful to tell "the feed went quiet" apart from "our own poller wasn't
   running", so the system never mistakes its own downtime for a world event.
+  There is also a **common-mode guard**: if lots of unrelated feeds go quiet at
+  the same moment, that's the fingerprint of _our_ internet or server failing
+  (nothing real takes out earthquakes, markets, and Wikipedia at once), so that
+  silence is written off as our-side rather than raising a false global alarm.
+  (A dedicated connectivity prober will make this attribution airtight later.)
 
 ### Trust level
 
