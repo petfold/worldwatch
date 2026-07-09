@@ -1,0 +1,15 @@
+[Unit]
+Description=Worldwatch dashboard + API
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=worldwatch
+EnvironmentFile=/etc/worldwatch/worldwatch.env
+ExecStart=/opt/worldwatch/.venv/bin/python -m worldwatch api
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

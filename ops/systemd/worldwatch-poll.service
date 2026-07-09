@@ -1,0 +1,16 @@
+[Unit]
+Description=Worldwatch pollers (one async task per source)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=worldwatch
+EnvironmentFile=/etc/worldwatch/worldwatch.env
+ExecStart=/opt/worldwatch/.venv/bin/python -m worldwatch poll
+Restart=always
+RestartSec=10
+# The pipeline is crash-safe (idempotent passes); restarting is the normal case.
+
+[Install]
+WantedBy=multi-user.target

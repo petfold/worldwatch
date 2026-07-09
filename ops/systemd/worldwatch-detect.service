@@ -1,0 +1,8 @@
+[Unit]
+Description=Worldwatch detect pass (Layer-0 scoring -> alerts -> push)
+
+[Service]
+Type=oneshot
+User=worldwatch
+EnvironmentFile=/etc/worldwatch/worldwatch.env
+ExecStart=/opt/worldwatch/.venv/bin/python -m worldwatch detect

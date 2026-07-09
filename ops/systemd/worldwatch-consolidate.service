@@ -1,0 +1,8 @@
+[Unit]
+Description=Worldwatch consolidator pass (raw_ring -> bins)
+
+[Service]
+Type=oneshot
+User=worldwatch
+EnvironmentFile=/etc/worldwatch/worldwatch.env
+ExecStart=/opt/worldwatch/.venv/bin/python -m worldwatch consolidate

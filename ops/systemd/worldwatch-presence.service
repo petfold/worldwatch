@@ -1,0 +1,8 @@
+[Unit]
+Description=Worldwatch presence pass (silence detection)
+
+[Service]
+Type=oneshot
+User=worldwatch
+EnvironmentFile=/etc/worldwatch/worldwatch.env
+ExecStart=/opt/worldwatch/.venv/bin/python -m worldwatch presence
