@@ -42,7 +42,7 @@ strict = true
 mypy_path = "src"
 
 [[tool.mypy.overrides]]
-module = ["h3", "h3.*"]
+module = ["h3", "h3.*", "scipy.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
