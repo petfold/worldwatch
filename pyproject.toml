@@ -34,7 +34,8 @@ src = ["src", "tests"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM"]
-ignore = ["E501"]
+# B008: FastAPI's Depends()/Query() in argument defaults is the intended pattern.
+ignore = ["E501", "B008"]
 
 [tool.mypy]
 python_version = "3.12"

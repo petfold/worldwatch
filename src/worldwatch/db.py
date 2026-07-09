@@ -128,6 +128,15 @@ def open_db(path: Path) -> sqlite3.Connection:
     return conn
 
 
+def connect(path: Path) -> sqlite3.Connection:
+    """Lightweight connection (row factory, WAL) without running migrations —
+    for processes that attach to an already-initialized database (e.g. the API)."""
+    conn = sqlite3.connect(path)
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
 def _migrate(conn: sqlite3.Connection) -> None:
     conn.execute(
         "CREATE TABLE IF NOT EXISTS schema_version "

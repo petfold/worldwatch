@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Worldwatch</title>
+  <link href="https://unpkg.com/maplibre-gl@4.5.0/dist/maplibre-gl.css" rel="stylesheet" />
+  <script src="https://unpkg.com/maplibre-gl@4.5.0/dist/maplibre-gl.js"></script>
+  <style>
+    :root { color-scheme: dark; }
+    body { margin: 0; font: 14px/1.4 system-ui, sans-serif; background: #0b0f14; color: #dfe6ee; }
+    #map { position: absolute; inset: 0 340px 0 0; }
+    #panel { position: absolute; top: 0; right: 0; bottom: 0; width: 340px; overflow-y: auto;
+             background: #11161d; border-left: 1px solid #223; padding: 12px 14px; box-sizing: border-box; }
+    h1 { font-size: 16px; margin: 0 0 4px; }
+    .sub { color: #8aa; font-size: 12px; margin-bottom: 12px; }
+    .toggle { margin-bottom: 12px; }
+    .alert { border: 1px solid #2a3542; border-radius: 6px; padding: 8px 10px; margin-bottom: 8px; cursor: pointer; }
+    .alert:hover { border-color: #48607a; }
+    .sev { font-weight: 600; }
+    .sev.hi { color: #ff6b6b; } .sev.mid { color: #ffd166; } .sev.lo { color: #8ecae6; }
+    .meta { color: #8aa; font-size: 12px; }
+    .empty { color: #667; font-style: italic; }
+    .silence { color: #ffd166; font-size: 12px; margin-top: 4px; }
+    #detail { white-space: pre-wrap; font-size: 12px; color: #bcd; margin-top: 8px;
+              border-top: 1px solid #223; padding-top: 8px; display: none; }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <div id="panel">
+    <h1>Worldwatch</h1>
+    <div class="sub">calibrated surprise across open data streams</div>
+    <label class="toggle"><input type="checkbox" id="silenceToggle" /> show silent sources</label>
+    <div id="silence"></div>
+    <h2 style="font-size:14px;">Alerts</h2>
+    <div id="alerts"><span class="empty">loading…</span></div>
+    <div id="detail"></div>
+  </div>
+
+  <script>
+    const map = new maplibregl.Map({
+      container: "map",
+      style: "https://demotiles.maplibre.org/style.json",
+      center: [0, 20], zoom: 1.4,
+    });
+
+    function surpriseColor() {
+      // interpolate cell fill by the `surprise` property (0.5 calm → 1 extreme)
+      return ["interpolate", ["linear"], ["get", "surprise"],
+        0.5, "#1d3b53", 0.9, "#e8a33d", 0.99, "#ff4d4d"];
+    }
+
+    map.on("load", async () => {
+      const gj = await (await fetch("/api/surprise.geojson")).json();
+      map.addSource("surprise", { type: "geojson", data: gj });
+      map.addLayer({
+        id: "surprise-fill", type: "fill", source: "surprise",
+        paint: { "fill-color": surpriseColor(), "fill-opacity": 0.55 },
+      });
+      map.addLayer({
+        id: "surprise-line", type: "line", source: "surprise",
+        paint: { "line-color": "#ffffff", "line-opacity": 0.15 },
+      });
+      map.on("click", "surprise-fill", (e) => {
+        const p = e.features[0].properties;
+        showDetail(`cell ${p.cell}\nsurprise ${p.surprise}\nstreams ${p.n_streams}`);
+      });
+      loadAlerts();
+      loadSilence();
+    });
+
+    function sevClass(s) { return s >= 0.9 ? "hi" : s >= 0.7 ? "mid" : "lo"; }
+
+    async function loadAlerts() {
+      const el = document.getElementById("alerts");
+      const { alerts } = await (await fetch("/api/alerts?limit=50")).json();
+      if (!alerts.length) { el.innerHTML = '<span class="empty">no alerts</span>'; return; }
+      el.innerHTML = "";
+      for (const a of alerts) {
+        const mods = [...new Set(a.evidence.map((e) => e.modality))].join(", ");
+        const div = document.createElement("div");
+        div.className = "alert";
+        div.innerHTML =
+          `<span class="sev ${sevClass(a.severity)}">■ ${a.severity.toFixed(2)}</span> ` +
+          `${a.cell}<div class="meta">${a.status} · ${a.evidence.length} signals · ${mods}</div>`;
+        div.onclick = () => showAlert(a);
+        el.appendChild(div);
+      }
+    }
+
+    async function loadSilence() {
+      const { silent_sources } = await (await fetch("/api/silence")).json();
+      const el = document.getElementById("silence");
+      el.style.display = document.getElementById("silenceToggle").checked ? "block" : "none";
+      el.innerHTML = silent_sources.length
+        ? silent_sources.map((s) => `<div class="silence">🔇 ${s.stream_id} (${s.q.toFixed(2)})</div>`).join("")
+        : '<div class="silence empty">no silent sources</div>';
+    }
+    document.getElementById("silenceToggle").onchange = loadSilence;
+
+    function showAlert(a) {
+      const lines = a.evidence.map(
+        (e) => `  ${e.modality}/${e.stream_id} @ ${e.cell} q=${e.q_value ?? "—"} presence=${e.presence_q}`
+      );
+      showDetail(`alert #${a.alert_id} — ${a.cell}\nseverity ${a.severity.toFixed(2)} · ${a.status}\n\nevidence:\n${lines.join("\n")}`);
+    }
+    function showDetail(text) {
+      const d = document.getElementById("detail");
+      d.textContent = text; d.style.display = "block";
+    }
+  </script>
+</body>
+</html>
