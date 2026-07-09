@@ -74,8 +74,8 @@ surprise archive with sensible scores.
 | 6 | Silence-as-a-signal | ✅ done |
 | 7 | Remaining pollers | ◐ partly — see below |
 | 8 | Alert engine | ✅ done |
-| 9 | Push + map | ⬜ next |
-| 10 | Run on server, soak test | ⬜ |
+| 9 | Push + map | ✅ done |
+| 10 | Run on server, soak test | ⬜ next |
 
 ### What each finished piece actually does
 
@@ -133,18 +133,29 @@ points where a bit of your input unblocks them.
   as a surge, and a cluster of feeds going silent together is itself an alarm.
   Each alert carries its evidence (which feeds, how surprising) for review.
 
+- **The dashboard and push** are the human-facing end. A small web service
+  serves a world map (areas shaded by how surprising they are right now), an
+  alert feed you can click for the underlying evidence, and a toggle to show
+  which feeds have gone silent. When an alert opens it can push a phone
+  notification (via ntfy, which you can self-host); if no push channel is set up
+  yet it simply records that and carries on. You can also mark an alert
+  true/false from the dashboard, which feeds the accuracy scoring later.
+
 ### Trust level
 
-101 automated tests, all passing, plus code-quality checks; earthquakes,
-weather alerts, and Wikipedia pageviews have each run through the live pipeline.
+117 automated tests, all passing, plus code-quality checks. The *entire* chain
+has now been run against live feeds in one go — real earthquakes and weather
+alerts flowed all the way from fetch to the map, and the dashboard served it. (It
+correctly raised no alarms: the two live map-able feeds are both "physical", and
+an alert needs two *different* kinds of feed to agree — so it didn't cry wolf.)
 
 ## What's next
 
-**Step 9, push + map:** the human-facing end. A phone notification when an alert
-opens, and a simple world map showing where surprise is concentrated (with a
-"silence map" toggle), so you can click through from an alarm to the evidence.
-This is the last big feature before the final step — running it unattended on a
-server for two weeks.
+**Step 10, the soak — the last P0 step:** run the whole thing unattended on a
+small server for two weeks, backed up, restarting cleanly through crashes and
+outages. This is less about new features and more about packaging (start-up
+scripts, backup wiring) and proving it survives real-world running. A few items
+here need you — see `OPERATOR-TODO.md`.
 
 ## A note on where the code lives
 
