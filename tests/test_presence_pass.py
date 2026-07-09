@@ -145,3 +145,49 @@ def test_retired_source_skipped(db, sources):
     for i in range(10):
         _health(db, cfg.stream_id, T0 + i * HOUR + 5, "http_error")
     assert run_presence(db, src, now=T0 + 10 * HOUR) == 0
+
+
+def _multi(sources, n):
+    base = _cfg(sources)
+    return {
+        f"s{i}": dataclasses.replace(base, stream_id=f"s{i}", cadence_seconds=HOUR)
+        for i in range(n)
+    }
+
+
+def test_common_mode_outage_is_suppressed(db, sources):
+    """All sources down in the same windows = our internet/host, not the world."""
+    src = _multi(sources, 4)
+    for sid in src:
+        for i in range(50):
+            _health(db, sid, T0 + i * HOUR + 5, "ok")
+        for i in range(50, 53):  # every source fails the same 3 windows
+            _health(db, sid, T0 + i * HOUR + 5, "http_error")
+
+    written = run_presence(db, src, now=T0 + 53 * HOUR)
+    assert written == 0, "global simultaneous silence should be suppressed"
+    faults = db.execute(
+        "SELECT COUNT(*) FROM health WHERE component='presence' AND event='common_mode_fault'"
+    ).fetchone()[0]
+    assert faults == 3  # the three all-down windows tagged as our-side
+
+
+def test_regional_silence_still_flagged(db, sources):
+    """One source down while the others report = a real (world) signal."""
+    src = _multi(sources, 4)
+    for sid in src:
+        for i in range(50):
+            _health(db, sid, T0 + i * HOUR + 5, "ok")
+    # window 50: only s0 fails, s1..s3 fine → fraction 1/4 < 0.5, not common-mode
+    _health(db, "s0", T0 + 50 * HOUR + 5, "http_error")
+    for sid in ("s1", "s2", "s3"):
+        _health(db, sid, T0 + 50 * HOUR + 5, "ok")
+
+    written = run_presence(db, src, now=T0 + 51 * HOUR)
+    assert written >= 1
+    rows = _silence_rows(db, "s0")
+    assert len(rows) == 1 and rows[0]["bin_start"] == T0 + 50 * HOUR
+    for sid in ("s1", "s2", "s3"):
+        assert _silence_rows(db, sid) == []
+    faults = db.execute("SELECT COUNT(*) FROM health WHERE event='common_mode_fault'").fetchone()[0]
+    assert faults == 0

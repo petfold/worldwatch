@@ -25,6 +25,7 @@ import json
 import math
 import sqlite3
 import time
+from collections import defaultdict
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -43,6 +44,15 @@ PRESENCE_CELL = "_PRESENCE_"
 _PRESENT_EVENTS = frozenset({"ok", "not_modified"})
 # Only silence at least this surprising is archived (expected gaps score ~0).
 DEFAULT_SILENCE_Q_THRESHOLD = 0.5
+
+# Common-mode guard (P9): if a large fraction of independently-polled sources go
+# absent in the same window, that is our internet/DNS/host failing — not the
+# world. Such windows are tagged and their silence is suppressed (treated like
+# system-deaf), rather than flagging a planet-wide event. The active prober is
+# the principled cause-attribution fix (P1); this is the cheap global guard.
+DEFAULT_COMMON_MODE_WINDOW = 3600
+DEFAULT_COMMON_MODE_MIN_SOURCES = 3
+DEFAULT_COMMON_MODE_FRACTION = 0.5
 
 
 @dataclass
@@ -96,42 +106,123 @@ def run_presence(
     sources: dict[str, SourceConfig],
     now: int | None = None,
     silence_q_threshold: float = DEFAULT_SILENCE_Q_THRESHOLD,
+    common_mode_window: int = DEFAULT_COMMON_MODE_WINDOW,
+    common_mode_min_sources: int = DEFAULT_COMMON_MODE_MIN_SOURCES,
+    common_mode_fraction: float = DEFAULT_COMMON_MODE_FRACTION,
 ) -> int:
     """Walk each source's expected reporting slots (from the health table),
     update its presence model, and archive surprising silence rows. Returns the
     number of silence rows written. Incremental and restart-safe via a per-source
     slot cursor in presence_state.
+
+    A common-mode guard (P9) first identifies windows in which many sources were
+    simultaneously absent (our-side failure) and suppresses their silence.
     """
     run_now = now if now is not None else int(time.time())
-    total = 0
-    for cfg in sources.values():
-        if cfg.status == "retired":
+    active = [cfg for cfg in sources.values() if cfg.status != "retired"]
+
+    # Resolve each source's model + starting slot up front (needed to bound the
+    # common-mode scan and to avoid re-reading presence_state).
+    plans: list[tuple[SourceConfig, PresenceModel, int]] = []
+    min_start: int | None = None
+    for cfg in active:
+        loaded = _load_presence(conn, cfg)
+        if loaded is None:
             continue
-        total += _presence_stream(conn, cfg, run_now, silence_q_threshold)
+        model, start_slot = loaded
+        plans.append((cfg, model, start_slot))
+        min_start = start_slot if min_start is None else min(min_start, start_slot)
+
+    flagged: set[int] = set()
+    if min_start is not None and len(plans) >= common_mode_min_sources:
+        flagged = _common_mode_windows(
+            conn,
+            [cfg.stream_id for cfg, _, _ in plans],
+            min_start,
+            run_now,
+            common_mode_window,
+            common_mode_min_sources,
+            common_mode_fraction,
+        )
+        for w in sorted(flagged):
+            record_health(conn, "presence", "common_mode_fault", f"window_start={w}", ts=w)
+
+    total = 0
+    for cfg, model, start_slot in plans:
+        total += _presence_stream(
+            conn, cfg, model, start_slot, run_now, silence_q_threshold, flagged, common_mode_window
+        )
     record_health(conn, "presence", "ok", f"silence_rows={total}", ts=run_now)
     return total
 
 
-def _presence_stream(
-    conn: sqlite3.Connection, cfg: SourceConfig, run_now: int, threshold: float
-) -> int:
+def _load_presence(conn: sqlite3.Connection, cfg: SourceConfig) -> tuple[PresenceModel, int] | None:
+    """Return (model, start_slot) for a source, or None if it has never polled."""
     cadence = cfg.cadence_seconds
     state_row = conn.execute(
         "SELECT state, last_slot FROM presence_state WHERE stream_id = ?",
         (cfg.stream_id,),
     ).fetchone()
-
     if state_row is not None:
-        model = PresenceModel.from_bytes(state_row["state"])
-        start_slot = state_row["last_slot"] + cadence
-    else:
-        model = PresenceModel()
-        first = conn.execute(
-            "SELECT MIN(ts) AS t FROM health WHERE component = ?", (cfg.stream_id,)
-        ).fetchone()["t"]
-        if first is None:
-            return 0  # source has never been polled
-        start_slot = (first // cadence) * cadence
+        return PresenceModel.from_bytes(state_row["state"]), state_row["last_slot"] + cadence
+    first = conn.execute(
+        "SELECT MIN(ts) AS t FROM health WHERE component = ?", (cfg.stream_id,)
+    ).fetchone()["t"]
+    if first is None:
+        return None
+    return PresenceModel(), (first // cadence) * cadence
+
+
+def _common_mode_windows(
+    conn: sqlite3.Connection,
+    stream_ids: list[str],
+    range_start: int,
+    now: int,
+    window: int,
+    min_sources: int,
+    fraction: float,
+) -> set[int]:
+    """Windows in which >= `fraction` of the sources that were polled came back
+    absent (only failures) — the signature of an our-side outage. Only complete
+    windows (fully in the past) are considered."""
+    if not stream_ids:
+        return set()
+    placeholders = ",".join("?" * len(stream_ids))
+    rows = conn.execute(
+        f"SELECT component, ts, event FROM health "
+        f"WHERE ts >= ? AND ts < ? AND component IN ({placeholders})",
+        (range_start, now, *stream_ids),
+    ).fetchall()
+    polled: dict[int, set[str]] = defaultdict(set)
+    present: dict[int, set[str]] = defaultdict(set)
+    for r in rows:
+        w = (r["ts"] // window) * window
+        polled[w].add(r["component"])
+        if r["event"] in _PRESENT_EVENTS:
+            present[w].add(r["component"])
+
+    flagged = set()
+    for w, pol in polled.items():
+        if w + window > now:
+            continue  # incomplete window
+        n_polled = len(pol)
+        n_absent = n_polled - len(present.get(w, set()))
+        if n_polled >= min_sources and n_absent / n_polled >= fraction:
+            flagged.add(w)
+    return flagged
+
+
+def _presence_stream(
+    conn: sqlite3.Connection,
+    cfg: SourceConfig,
+    model: PresenceModel,
+    start_slot: int,
+    run_now: int,
+    threshold: float,
+    common_mode_windows: set[int],
+    common_mode_window: int,
+) -> int:
+    cadence = cfg.cadence_seconds
 
     # Only score slots whose window has fully elapsed.
     if start_slot + cadence > run_now:
@@ -156,6 +247,12 @@ def _presence_stream(
             slot += cadence
             continue  # poller didn't run this slot → system-deaf, not source-silent
         reported = bool(evs & _PRESENT_EVENTS)
+        if (
+            not reported
+            and (slot // common_mode_window) * common_mode_window in common_mode_windows
+        ):
+            slot += cadence
+            continue  # our-side common-mode outage → don't blame or learn from it
         q = model.observe(slot, reported)
         if not reported and q >= threshold:
             silence_rows.append(
