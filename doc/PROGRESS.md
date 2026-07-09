@@ -73,8 +73,8 @@ surprise archive with sensible scores.
 | — | Runner (glues models to the data) | ✅ done |
 | 6 | Silence-as-a-signal | ✅ done |
 | 7 | Remaining pollers | ◐ partly — see below |
-| 8 | Alert engine | ⬜ next |
-| 9 | Push + map | ⬜ |
+| 8 | Alert engine | ✅ done |
+| 9 | Push + map | ⬜ next |
 | 10 | Run on server, soak test | ⬜ |
 
 ### What each finished piece actually does
@@ -107,12 +107,6 @@ surprise archive with sensible scores.
   silence is written off as our-side rather than raising a false global alarm.
   (A dedicated connectivity prober will make this attribution airtight later.)
 
-### Trust level
-
-Everything above has automated tests (81 of them, all passing) plus code-quality
-checks, and the earthquake pipeline has been run against the real live feed. So
-this isn't just written — it's verified working.
-
 ## Step 7 so far — feeds now connected
 
 Live and flowing end to end: **earthquakes** (USGS), **crypto markets** (BTC and
@@ -130,14 +124,27 @@ you to register for a free account/API key (which stays out of the code — the
 system reads it from an environment variable). Those last two are the natural
 points where a bit of your input unblocks them.
 
+- **The alert engine** turns surprise into alarms — but only when three things
+  line up at once: the surprise *persists* over several time windows, it's
+  *geographically coherent* (nearby areas from different feeds fall in the same
+  region), and it shows up across *two or more independent kinds of feed* in the
+  same place. A lone spike in a single feed never raises an alarm — it takes
+  corroboration. A crash (a value dropping far below normal) counts just as much
+  as a surge, and a cluster of feeds going silent together is itself an alarm.
+  Each alert carries its evidence (which feeds, how surprising) for review.
+
+### Trust level
+
+101 automated tests, all passing, plus code-quality checks; earthquakes,
+weather alerts, and Wikipedia pageviews have each run through the live pipeline.
+
 ## What's next
 
-**Step 8, the alert engine:** the first version of turning surprise into alarms.
-It only raises something when a surprise *persists*, is *geographically
-coherent* (neighbouring areas agree), and shows up across *two or more
-independent kinds of feed* in the same place and time. This is where the archive
-of surprise scores finally produces the headline output — a notification worth
-looking at.
+**Step 9, push + map:** the human-facing end. A phone notification when an alert
+opens, and a simple world map showing where surprise is concentrated (with a
+"silence map" toggle), so you can click through from an alarm to the evidence.
+This is the last big feature before the final step — running it unattended on a
+server for two weeks.
 
 ## A note on where the code lives
 
