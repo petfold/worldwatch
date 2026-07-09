@@ -34,10 +34,11 @@ notes            = "Hourly project-level pageview aggregates"
 
 [wikipedia_pageviews.parse]
 format           = "wikimedia_pageviews"
-project          = "en.wikipedia"
+project          = "en.wikipedia.org"
 access           = "all-access"
 agent            = "all-agents"
 granularity      = "hourly"
+lookback_seconds = 259200   # 3 days; overlapping windows dedup on the raw_ring PK
 
 [wikipedia_pageviews.geocode]
 strategy         = "project_entity"

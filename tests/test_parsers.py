@@ -31,7 +31,7 @@ def test_wikimedia_pageviews_parses_timestamps(sources):
     # 2026070910 UTC → epoch
     assert obs[0].ts == 1783591200
     # non-spatial: cell is the project name
-    assert obs[0].cell == "en.wikipedia"
+    assert obs[0].cell == "en.wikipedia.org"
 
 
 def test_coinbase_spot_uses_now_sentinel(sources):

@@ -21,6 +21,7 @@ from worldwatch.ingest import parsers
 from worldwatch.ingest.models import Observation
 from worldwatch.instrument import record_health
 from worldwatch.poll.http import CacheValidators, conditional_get
+from worldwatch.poll.url import build_url
 from worldwatch.store import write_observations
 
 # Deterministic per-source jitter fraction of the cadence (no Date/random needed):
@@ -54,7 +55,8 @@ async def poll_once(
     classifies failures into a PollOutcome and instruments them."""
     poll_time = now if now is not None else int(time.time())
     try:
-        result = await conditional_get(client, cfg.endpoint, validators)
+        url = build_url(cfg, poll_time)
+        result = await conditional_get(client, url, validators)
     except httpx.TimeoutException as e:
         record_health(conn, cfg.stream_id, "timeout", str(e), ts=poll_time)
         return PollOutcome("timeout", detail=str(e))

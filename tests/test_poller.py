@@ -110,6 +110,22 @@ async def test_poll_once_timeout_isolated(db, sources):
     assert db.execute("SELECT COUNT(*) FROM health WHERE event='timeout'").fetchone()[0] == 1
 
 
+async def test_templated_endpoint_is_fetched(db, sources):
+    """The poller fetches the date-filled URL, not the raw template."""
+    cfg = sources["wikipedia_pageviews"]
+    requested = []
+
+    def handler(request):
+        requested.append(str(request.url))
+        return httpx.Response(200, json={"items": []})
+
+    async with _client(handler) as client:
+        await poll_once(client, db, cfg, CacheValidators(), now=1_783_641_600)
+
+    assert "{" not in requested[0]
+    assert "/hourly/" in requested[0] and requested[0].endswith("2026071000")
+
+
 async def test_spot_price_stamped_with_poll_time(db, sources):
     cfg = sources["btc_usd"]
 
