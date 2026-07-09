@@ -75,7 +75,7 @@ surprise archive with sensible scores.
 | 7 | Remaining pollers | ◐ partly — see below |
 | 8 | Alert engine | ✅ done |
 | 9 | Push + map | ✅ done |
-| 10 | Run on server, soak test | ⬜ next |
+| 10 | Run on server, soak test | ◐ scaffolding done; soak needs the server |
 
 ### What each finished piece actually does
 
@@ -149,13 +149,35 @@ alerts flowed all the way from fetch to the map, and the dashboard served it. (I
 correctly raised no alarms: the two live map-able feeds are both "physical", and
 an alert needs two *different* kinds of feed to agree — so it didn't cry wolf.)
 
-## What's next
+- **The ops scaffolding** packages everything to run unattended: one command per
+  job (fetch, roll-up, score, silence-check, serve), ready-made start-up scripts
+  so the server keeps them running and restarts them cleanly after crashes or
+  reboots, a one-shot deploy script, and a backup hook into your existing
+  restic/B2. Each job talks only through the one database file, so any of them
+  can restart at any moment without harm.
 
-**Step 10, the soak — the last P0 step:** run the whole thing unattended on a
-small server for two weeks, backed up, restarting cleanly through crashes and
-outages. This is less about new features and more about packaging (start-up
-scripts, backup wiring) and proving it survives real-world running. A few items
-here need you — see `OPERATOR-TODO.md`.
+### Trust level
+
+122 automated tests, all passing, plus code-quality checks. Every piece of P0
+has now been exercised — including the packaged commands run as real processes,
+and the whole chain run against live feeds into the dashboard.
+
+## What's left for P0
+
+The software for all ten steps is **written and verified**. What remains is not
+code — it's the real-world run:
+
+1. **You**: stand up the small server, pick a push channel, and register for the
+   few feeds that need a free account/key (all listed in `OPERATOR-TODO.md`).
+2. **Deploy**: one command (`ops/deploy.sh`) installs and starts everything.
+3. **Soak**: let it run unattended for two weeks and confirm it survives crashes,
+   outages, and a reboot, keeps the surprise archive filling, and visibly flags
+   at least one real event (a sizeable earthquake is essentially guaranteed).
+
+After that, P0 is done and the project moves to **P1**: the coupling graph — the
+first version of learning *how the world's systems move together*, which is the
+scientifically interesting payoff and the thing the attention allocator (your
+earlier question) will later steer with.
 
 ## A note on where the code lives
 
