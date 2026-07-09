@@ -1,0 +1,7 @@
+{
+  "items": [
+    {"project": "en.wikipedia", "access": "all-access", "agent": "all-agents", "granularity": "hourly", "timestamp": "2026070910", "views": 8123456},
+    {"project": "en.wikipedia", "access": "all-access", "agent": "all-agents", "granularity": "hourly", "timestamp": "2026070911", "views": 8250011},
+    {"project": "en.wikipedia", "access": "all-access", "agent": "all-agents", "granularity": "hourly", "timestamp": "2026070912", "views": 9911002}
+  ]
+}

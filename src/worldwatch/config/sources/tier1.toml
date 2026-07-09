@@ -1,0 +1,82 @@
+# Tier-1 source stanzas — one per flavor for reference.
+# Auth tokens go in env vars, never here.
+
+[usgs_seismic]
+class            = "seismic_feed"
+modality         = "physical"
+topic_tags       = ["seismic", "hazard"]
+flavor           = "count"
+endpoint         = "https://earthquake.usgs.gov/fdsnws/event/1/query"
+cadence_seconds  = 300
+status           = "nursery"
+notes            = "GeoJSON event feed; count events per H3 cell per bin"
+
+[usgs_seismic.parse]
+format           = "geojson_features"
+value_field      = "mag"
+time_field       = "time"
+filter_min_mag   = 1.0
+
+[usgs_seismic.geocode]
+strategy         = "feature_coords"
+h3_resolution    = 3
+
+
+[wikipedia_pageviews]
+class            = "attention_feed"
+modality         = "informational"
+topic_tags       = ["attention", "information"]
+flavor           = "count"
+endpoint         = "https://wikimedia.org/api/rest_v1/metrics/pageviews/aggregate/{project}/{access}/{agent}/{granularity}/{start}/{end}"
+cadence_seconds  = 3600
+status           = "nursery"
+notes            = "Hourly project-level pageview aggregates"
+
+[wikipedia_pageviews.parse]
+format           = "wikimedia_pageviews"
+project          = "en.wikipedia"
+access           = "all-access"
+agent            = "all-agents"
+granularity      = "hourly"
+
+[wikipedia_pageviews.geocode]
+strategy         = "project_entity"
+
+
+[btc_usd]
+class            = "crypto_market"
+modality         = "economic"
+topic_tags       = ["markets", "crypto"]
+flavor           = "continuous"
+endpoint         = "https://api.coinbase.com/v2/prices/BTC-USD/spot"
+cadence_seconds  = 300
+status           = "nursery"
+notes            = "BTC/USD spot price — continuous flavor reference"
+
+[btc_usd.parse]
+format           = "coinbase_spot"
+value_path       = "data.amount"
+
+[btc_usd.geocode]
+strategy         = "global"
+cell             = "GLOBAL"
+
+
+[safecast_radiation]
+class            = "radiation_station"
+modality         = "physical"
+topic_tags       = ["radiation", "nuclear"]
+flavor           = "continuous"
+endpoint         = "https://api.safecast.org/measurements.json"
+cadence_seconds  = 900
+status           = "nursery"
+notes            = "Citizen radiation network; geocoded point measurements"
+
+[safecast_radiation.parse]
+format           = "safecast_json"
+value_field      = "value"
+unit             = "cpm"
+
+[safecast_radiation.geocode]
+strategy         = "feature_coords"
+h3_resolution    = 4

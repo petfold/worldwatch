@@ -1,0 +1,24 @@
+{
+  "type": "FeatureCollection",
+  "metadata": {"generated": 1751000000000, "title": "USGS Earthquakes"},
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {"mag": 5.4, "place": "off the coast", "time": 1751000000000, "type": "earthquake"},
+      "geometry": {"type": "Point", "coordinates": [-122.5, 38.1, 10.2]},
+      "id": "aaa1"
+    },
+    {
+      "type": "Feature",
+      "properties": {"mag": 0.7, "place": "tiny", "time": 1751000060000, "type": "earthquake"},
+      "geometry": {"type": "Point", "coordinates": [140.3, 35.6, 5.0]},
+      "id": "aaa2"
+    },
+    {
+      "type": "Feature",
+      "properties": {"mag": 6.9, "place": "big one", "time": 1751000120000, "type": "earthquake"},
+      "geometry": {"type": "Point", "coordinates": [90.1, 23.7, 25.0]},
+      "id": "aaa3"
+    }
+  ]
+}
