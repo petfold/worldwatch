@@ -51,3 +51,40 @@ def test_unknown_format_raises(sources):
 
     with pytest.raises(ValueError, match="No parser registered"):
         parsers.parse({}, bad)
+
+
+def test_geojson_events_alerts(sources):
+    cfg = sources["nws_severe_alerts"]
+    payload = load_fixture("nws_alerts_sample.json")
+    obs = parsers.parse(payload, cfg)
+
+    # null-geometry (zone-only) alert is skipped; polygon + point remain
+    assert len(obs) == 2
+    for o in obs:
+        assert o.stream_id == "nws_severe_alerts"
+        assert o.value is None  # pure-event → count flavor
+        assert len(o.cell) > 0
+
+    # polygon reduced to its ring centroid, near (-100.385, 48.21)
+    poly = obs[0]
+    from worldwatch.ingest.geocode import h3_cell
+
+    assert poly.cell == h3_cell(48.21, -100.385, 3)
+    # onset ISO-8601 with -05:00 offset → epoch (17:30 −05:00 = 22:30 UTC)
+    assert poly.ts == 1783636200
+
+
+def test_geojson_events_time_fallback(sources):
+    """onset=null falls back to effective."""
+    cfg = sources["nws_severe_alerts"]
+    payload = load_fixture("nws_alerts_sample.json")
+    point = parsers.parse(payload, cfg)[1]  # the Point/Tornado alert, onset null
+    # effective 18:05 −05:00 = 23:05 UTC
+    assert point.ts == 1783638300
+
+
+def test_parse_event_time_handles_ms_and_seconds():
+    assert parsers._parse_event_time(1751000000000) == 1751000000  # ms
+    assert parsers._parse_event_time(1751000000) == 1751000000  # seconds
+    assert parsers._parse_event_time("2026-07-09T22:30:00Z") == 1783636200
+    assert parsers._parse_event_time("not-a-time") is None

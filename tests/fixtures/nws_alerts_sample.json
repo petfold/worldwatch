@@ -1,0 +1,41 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[-100.57, 48.07], [-100.20, 48.07], [-100.20, 48.35], [-100.57, 48.35], [-100.57, 48.07]]]
+      },
+      "properties": {
+        "event": "Severe Thunderstorm Warning",
+        "severity": "Severe",
+        "onset": "2026-07-09T17:30:00-05:00",
+        "effective": "2026-07-09T17:30:00-05:00",
+        "sent": "2026-07-09T17:29:00-05:00"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": null,
+      "properties": {
+        "event": "Heat Advisory",
+        "severity": "Moderate",
+        "onset": "2026-07-09T12:00:00-05:00",
+        "effective": "2026-07-09T12:00:00-05:00",
+        "sent": "2026-07-09T11:50:00-05:00"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {"type": "Point", "coordinates": [-97.5, 35.4]},
+      "properties": {
+        "event": "Tornado Warning",
+        "severity": "Extreme",
+        "onset": null,
+        "effective": "2026-07-09T18:05:00-05:00",
+        "sent": "2026-07-09T18:05:00-05:00"
+      }
+    }
+  ]
+}

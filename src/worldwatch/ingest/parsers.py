@@ -82,6 +82,92 @@ def parse_geojson_features(payload: Any, cfg: SourceConfig) -> list[Observation]
     return obs
 
 
+@register("geojson_events")
+def parse_geojson_events(payload: Any, cfg: SourceConfig) -> list[Observation]:
+    """General GeoJSON event feed (e.g. NWS/CAP severe-weather alerts).
+
+    More permissive than geojson_features: geometry may be Point, Polygon, or
+    MultiPolygon (reduced to a centroid) or null (skipped); time may be ISO-8601
+    or epoch ms; value is optional (pure-event → count flavor). time_field falls
+    back through a list so alert feeds with onset/effective/sent all work.
+    """
+    time_fields = cfg.parse.get("time_fields") or [
+        cfg.parse.get("time_field", "onset"),
+        "effective",
+        "sent",
+    ]
+    value_field = cfg.parse.get("value_field")  # optional
+    resolution = int(cfg.geocode.get("h3_resolution", 3))
+
+    obs: list[Observation] = []
+    for feat in payload.get("features", []):
+        centroid = _feature_centroid(feat.get("geometry"))
+        if centroid is None:
+            continue
+        lon, lat = centroid
+
+        props = feat.get("properties") or {}
+        raw_time = next((props[f] for f in time_fields if props.get(f) is not None), None)
+        if raw_time is None:
+            continue
+        ts = _parse_event_time(raw_time)
+        if ts is None:
+            continue
+
+        val = None
+        if value_field is not None and props.get(value_field) is not None:
+            val = float(props[value_field])
+
+        obs.append(
+            Observation(
+                stream_id=cfg.stream_id,
+                cell=h3_cell(lat, lon, resolution),
+                ts=ts,
+                value=val,
+            )
+        )
+    return obs
+
+
+def _feature_centroid(geometry: Any) -> tuple[float, float] | None:
+    """(lon, lat) centroid of a GeoJSON geometry, or None if unusable.
+
+    Zone-only alerts (null geometry) are skipped in P0 — resolving UGC/FIPS
+    zones to coordinates needs a gazetteer, which is later work.
+    """
+    if not geometry:
+        return None
+    gtype = geometry.get("type")
+    coords = geometry.get("coordinates")
+    if not coords:
+        return None
+    if gtype == "Point":
+        return float(coords[0]), float(coords[1])
+    if gtype == "Polygon":
+        ring = coords[0]
+    elif gtype == "MultiPolygon":
+        ring = coords[0][0]
+    else:
+        return None
+    lons = [float(p[0]) for p in ring]
+    lats = [float(p[1]) for p in ring]
+    return sum(lons) / len(lons), sum(lats) / len(lats)
+
+
+def _parse_event_time(raw: Any) -> int | None:
+    """Epoch seconds from an ISO-8601 string (offset or Z) or an epoch int.
+
+    Integers >= 1e11 are treated as epoch milliseconds.
+    """
+    if isinstance(raw, int | float):
+        v = int(raw)
+        return v // 1000 if v >= 100_000_000_000 else v
+    try:
+        return _iso_to_epoch(str(raw))
+    except ValueError:
+        return None
+
+
 @register("coinbase_spot")
 def parse_coinbase_spot(payload: Any, cfg: SourceConfig) -> list[Observation]:
     """Single scalar price from a dotted value_path (e.g. 'data.amount')."""

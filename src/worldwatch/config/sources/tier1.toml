@@ -6,10 +6,10 @@ class            = "seismic_feed"
 modality         = "physical"
 topic_tags       = ["seismic", "hazard"]
 flavor           = "count"
-endpoint         = "https://earthquake.usgs.gov/fdsnws/event/1/query"
+endpoint         = "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_hour.geojson"
 cadence_seconds  = 300
 status           = "nursery"
-notes            = "GeoJSON event feed; count events per H3 cell per bin"
+notes            = "USGS all-hour summary feed (GeoJSON); dedup by PK across overlapping polls"
 
 [usgs_seismic.parse]
 format           = "geojson_features"
@@ -60,6 +60,45 @@ value_path       = "data.amount"
 [btc_usd.geocode]
 strategy         = "global"
 cell             = "GLOBAL"
+
+
+# Adding a second market is stanza-only — reuses the coinbase_spot parser.
+[eth_usd]
+class            = "crypto_market"
+modality         = "economic"
+topic_tags       = ["markets", "crypto"]
+flavor           = "continuous"
+endpoint         = "https://api.coinbase.com/v2/prices/ETH-USD/spot"
+cadence_seconds  = 300
+status           = "nursery"
+notes            = "ETH/USD spot price"
+
+[eth_usd.parse]
+format           = "coinbase_spot"
+value_path       = "data.amount"
+
+[eth_usd.geocode]
+strategy         = "global"
+cell             = "GLOBAL"
+
+
+[nws_severe_alerts]
+class            = "weather_alert_feed"
+modality         = "physical"
+topic_tags       = ["weather", "hazard", "severe"]
+flavor           = "count"
+endpoint         = "https://api.weather.gov/alerts/active"
+cadence_seconds  = 900
+status           = "nursery"
+notes            = "NWS active alerts (US); polygon/point alerts only — zone-only (null-geometry) alerts skipped in P0"
+
+[nws_severe_alerts.parse]
+format           = "geojson_events"
+time_field       = "onset"
+
+[nws_severe_alerts.geocode]
+strategy         = "feature_coords"
+h3_resolution    = 3
 
 
 [safecast_radiation]
