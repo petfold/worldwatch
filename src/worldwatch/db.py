@@ -89,6 +89,23 @@ MIGRATIONS: list[str] = [
         applied_at  INTEGER NOT NULL
     );
     """,
+    # v2 — per-(stream, cell, scale) Layer-0 models.
+    # The v1 model_state sketch keyed only (stream_id, version); per-(stream,
+    # cell, scale) modeling needs cell + scale in the key. No production data
+    # yet, so recreate rather than ALTER.
+    """
+    DROP TABLE IF EXISTS model_state;
+    CREATE TABLE model_state (
+        stream_id   TEXT NOT NULL,
+        cell        TEXT NOT NULL,
+        scale       INTEGER NOT NULL,
+        version     INTEGER NOT NULL,
+        state       BLOB NOT NULL,
+        updated_at  INTEGER NOT NULL,
+        pit_stat    REAL,
+        PRIMARY KEY (stream_id, cell, scale, version)
+    );
+    """,
 ]
 
 
