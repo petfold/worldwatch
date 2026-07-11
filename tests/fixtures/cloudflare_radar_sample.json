@@ -1,0 +1,23 @@
+{
+  "success": true,
+  "errors": [],
+  "result": {
+    "serie_0": {
+      "timestamps": [
+        "2026-07-10T19:00:00Z",
+        "2026-07-10T19:15:00Z",
+        "2026-07-10T19:30:00Z",
+        "2026-07-10T19:45:00Z"
+      ],
+      "values": ["0.922149", "0.930001", "0.911500", "0.412000"]
+    },
+    "meta": {
+      "dateRange": [
+        { "startTime": "2026-07-10T19:00:00Z", "endTime": "2026-07-10T20:00:00Z" }
+      ],
+      "aggInterval": "FIFTEEN_MINUTES",
+      "normalization": "MIN0_MAX",
+      "lastUpdated": "2026-07-10T20:00:00Z"
+    }
+  }
+}

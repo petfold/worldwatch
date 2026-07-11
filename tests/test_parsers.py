@@ -88,3 +88,111 @@ def test_parse_event_time_handles_ms_and_seconds():
     assert parsers._parse_event_time(1751000000) == 1751000000  # seconds
     assert parsers._parse_event_time("2026-07-09T22:30:00Z") == 1783636200
     assert parsers._parse_event_time("not-a-time") is None
+
+
+def test_cloudflare_radar_drops_in_progress_bucket(sources):
+    cfg = sources["cf_radar_netflows_global"]
+    payload = load_fixture("cloudflare_radar_sample.json")
+    obs = parsers.parse(payload, cfg)
+
+    # 4 buckets in the fixture; the final (in-progress) one is dropped
+    assert len(obs) == 3
+    assert [o.value for o in obs] == [0.922149, 0.930001, 0.9115]
+    assert obs[0].ts == 1783710000  # 2026-07-10T19:00:00Z
+    assert obs[1].ts - obs[0].ts == 900
+    assert all(o.cell == "GLOBAL" for o in obs)
+
+
+def test_cloudflare_radar_country_gets_centroid_h3_cell(sources):
+    from worldwatch.ingest.geocode import h3_cell
+
+    cfg = sources["cf_radar_netflows_gb"]
+    payload = load_fixture("cloudflare_radar_sample.json")
+    obs = parsers.parse(payload, cfg)
+    assert obs[0].cell == h3_cell(54.0, -2.5, 2)
+
+
+def _vnp46a2_payload(ntl, quality, lat, lon, time_start="2026-07-02T00:00:00.000Z"):
+    """Synthetic VNP46A2 granule bytes mirroring the real group layout."""
+    import io
+
+    import h5py
+    import numpy as np
+
+    buf = io.BytesIO()
+    with h5py.File(buf, "w") as f:
+        grid = f.create_group("HDFEOS/GRIDS/VIIRS_Grid_DNB_2d/Data Fields")
+        ds = grid.create_dataset("DNB_BRDF-Corrected_NTL", data=np.asarray(ntl, "float32"))
+        ds.attrs["_FillValue"] = np.array([-999.9], dtype="float32")
+        grid.create_dataset("Mandatory_Quality_Flag", data=np.asarray(quality, "uint8"))
+        grid.create_dataset("lat", data=np.asarray(lat, "float64"))
+        grid.create_dataset("lon", data=np.asarray(lon, "float64"))
+    return {"granule_id": "TEST", "time_start": time_start, "content": buf.getvalue()}
+
+
+def _nl_cfg(sources, **geocode):
+    import dataclasses
+
+    base = sources["night_lights_h17v03"]
+    return dataclasses.replace(
+        base, geocode={**base.geocode, **geocode}, parse={**base.parse, "block_pixels": 16}
+    )
+
+
+def test_vnp46a2_masks_fill_and_poor_quality(sources):
+    import math
+
+    import numpy as np
+
+    cfg = _nl_cfg(sources, h3_resolution=1)  # coarse: all blocks land in one cell
+    ntl = np.full((32, 32), 3.0)
+    quality = np.zeros((32, 32), dtype="uint8")
+    # poison half the pixels: fill value or poor quality — all must be excluded
+    ntl[:, 16:] = -999.9
+    quality[:16, :16] = 0
+    quality[16:, :16] = 1
+    ntl[16:, :16] = 9999.0  # poor-quality pixels carry garbage values
+    lat = np.linspace(50.0, 49.9, 32)
+    lon = np.linspace(-3.0, -2.9, 32)
+
+    obs = parsers.parse(_vnp46a2_payload(ntl, quality, lat, lon), cfg)
+    assert len(obs) == 1
+    # only the qf==0, non-fill quadrant (value 3.0) survives the mask
+    assert math.isclose(obs[0].value, math.log1p(3.0))
+    assert obs[0].ts == 1782950400  # 2026-07-02T00:00:00Z
+    assert obs[0].stream_id == "night_lights_h17v03"
+
+
+def test_vnp46a2_drops_low_coverage_cells(sources):
+    import numpy as np
+
+    cfg = _nl_cfg(sources, h3_resolution=1)
+    ntl = np.full((32, 32), 5.0)
+    quality = np.full((32, 32), 255, dtype="uint8")  # no retrieval anywhere...
+    quality[0, 0] = 0  # ...except one pixel: coverage 1/1024 < min_valid_frac
+    lat = np.linspace(50.0, 49.9, 32)
+    lon = np.linspace(-3.0, -2.9, 32)
+
+    obs = parsers.parse(_vnp46a2_payload(ntl, quality, lat, lon), cfg)
+    assert obs == []
+
+
+def test_vnp46a2_groups_blocks_into_h3_cells(sources):
+    import math
+
+    import numpy as np
+
+    cfg = _nl_cfg(sources, h3_resolution=1)
+    # top 16 rows near lat 50 (value 1.0), bottom 16 near lat 20 (value 4.0):
+    # far apart → two res-1 cells with distinct means
+    ntl = np.vstack([np.full((16, 32), 1.0), np.full((16, 32), 4.0)])
+    quality = np.zeros((32, 32), dtype="uint8")
+    lat = np.concatenate([np.linspace(50.0, 49.9, 16), np.linspace(20.0, 19.9, 16)])
+    lon = np.linspace(-3.0, -2.9, 32)
+
+    obs = parsers.parse(_vnp46a2_payload(ntl, quality, lat, lon), cfg)
+    assert len(obs) == 2
+    values = sorted(o.value for o in obs)
+    assert math.isclose(values[0], math.log1p(1.0))
+    assert math.isclose(values[1], math.log1p(4.0))
+    assert len({o.cell for o in obs}) == 2

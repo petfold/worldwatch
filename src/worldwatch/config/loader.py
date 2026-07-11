@@ -22,6 +22,7 @@ class SourceConfig:
     cadence_seconds: int
     parse: dict[str, Any]
     geocode: dict[str, Any]
+    fetch: dict[str, Any] = field(default_factory=dict)
     auth_env_var: str | None = None
     status: Status = "nursery"
     notes: str = ""
@@ -61,6 +62,7 @@ def _parse_stanza(stream_id: str, s: dict[str, Any]) -> SourceConfig:
         cadence_seconds=int(s["cadence_seconds"]),
         parse=dict(s.get("parse", {})),
         geocode=dict(s.get("geocode", {})),
+        fetch=dict(s.get("fetch", {})),
         auth_env_var=str(s["auth_env_var"]) if "auth_env_var" in s else None,
         status=s.get("status", "nursery"),
         notes=str(s.get("notes", "")),
@@ -77,6 +79,7 @@ _KNOWN_KEYS = {
     "cadence_seconds",
     "parse",
     "geocode",
+    "fetch",
     "auth_env_var",
     "status",
     "notes",

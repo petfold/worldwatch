@@ -120,3 +120,191 @@ unit             = "cpm"
 [safecast_radiation.geocode]
 strategy         = "feature_coords"
 h3_resolution    = 4
+
+
+# --- Internet health: Cloudflare Radar netflows ------------------------------
+# Values are min0_max-normalized over the queried window (Radar exposes no raw
+# values); the 7d window keeps the anchor (weekly peak) stable across polls.
+# The parser drops the in-progress final bucket. Adding a country = copy a
+# stanza, change `location=XX` and the centroid lat/lon.
+
+[cf_radar_netflows_global]
+class            = "internet_health"
+modality         = "infrastructural"
+topic_tags       = ["internet", "traffic", "infrastructure"]
+flavor           = "continuous"
+endpoint         = "https://api.cloudflare.com/client/v4/radar/netflows/timeseries?dateRange=7d&aggInterval=15m&format=json"
+cadence_seconds  = 900
+auth_env_var     = "WW_CLOUDFLARE_TOKEN"
+status           = "nursery"
+notes            = "Cloudflare Radar global network-layer traffic, 15-min buckets"
+
+[cf_radar_netflows_global.parse]
+format           = "cloudflare_radar_timeseries"
+
+[cf_radar_netflows_global.geocode]
+strategy         = "global"
+cell             = "GLOBAL"
+
+
+[cf_radar_netflows_gb]
+class            = "internet_health"
+modality         = "infrastructural"
+topic_tags       = ["internet", "traffic", "infrastructure"]
+flavor           = "continuous"
+endpoint         = "https://api.cloudflare.com/client/v4/radar/netflows/timeseries?dateRange=7d&aggInterval=15m&format=json&location=GB"
+cadence_seconds  = 900
+auth_env_var     = "WW_CLOUDFLARE_TOKEN"
+status           = "nursery"
+notes            = "Cloudflare Radar UK traffic; country centroid cell for spatial coherence"
+
+[cf_radar_netflows_gb.parse]
+format           = "cloudflare_radar_timeseries"
+
+[cf_radar_netflows_gb.geocode]
+strategy         = "fixed_latlon"
+lat              = 54.0
+lon              = -2.5
+h3_resolution    = 2
+
+
+[cf_radar_netflows_us]
+class            = "internet_health"
+modality         = "infrastructural"
+topic_tags       = ["internet", "traffic", "infrastructure"]
+flavor           = "continuous"
+endpoint         = "https://api.cloudflare.com/client/v4/radar/netflows/timeseries?dateRange=7d&aggInterval=15m&format=json&location=US"
+cadence_seconds  = 900
+auth_env_var     = "WW_CLOUDFLARE_TOKEN"
+status           = "nursery"
+notes            = "Cloudflare Radar US traffic"
+
+[cf_radar_netflows_us.parse]
+format           = "cloudflare_radar_timeseries"
+
+[cf_radar_netflows_us.geocode]
+strategy         = "fixed_latlon"
+lat              = 39.8
+lon              = -98.6
+h3_resolution    = 2
+
+
+[cf_radar_netflows_jp]
+class            = "internet_health"
+modality         = "infrastructural"
+topic_tags       = ["internet", "traffic", "infrastructure"]
+flavor           = "continuous"
+endpoint         = "https://api.cloudflare.com/client/v4/radar/netflows/timeseries?dateRange=7d&aggInterval=15m&format=json&location=JP"
+cadence_seconds  = 900
+auth_env_var     = "WW_CLOUDFLARE_TOKEN"
+status           = "nursery"
+notes            = "Cloudflare Radar Japan traffic"
+
+[cf_radar_netflows_jp.parse]
+format           = "cloudflare_radar_timeseries"
+
+[cf_radar_netflows_jp.geocode]
+strategy         = "fixed_latlon"
+lat              = 36.2
+lon              = 138.3
+h3_resolution    = 2
+
+
+# --- Night lights: NASA Black Marble VNP46A2 ---------------------------------
+# One stanza per 10°×10° tile. Endpoint is a CMR granule search (newest first);
+# the earthdata_granule fetcher downloads a granule only when its id changes
+# (~10 MB once/day per tile) and needs WW_EARTHDATA_USER + WW_EARTHDATA_PASS.
+# VNP46A2 lags 2–9 days; observations carry the granule's own day, so they fold
+# into the cascade late — accepted (frozen-archive semantics). Days skipped
+# while a tile lags surface through the presence channel, never imputed.
+# Adding a tile = copy a stanza, change the hXXvYY in endpoint + stream id
+# (tile grid: lon_min = -180 + 10·h, lat_max = 90 - 10·v).
+# modality is "physical" (satellite radiometry), so blackouts corroborate with
+# infrastructural signals like internet traffic.
+# Caveat: tiles above ~50°N get NO high-quality retrievals around midsummer
+# (nights never reach astronomical darkness → Mandatory_Quality_Flag 2/255,
+# verified live on h17v03 in July) — an honest seasonal gap the presence
+# channel sees; pick tiles below 50°N for year-round signal.
+
+[night_lights_h17v03]
+class            = "night_lights"
+modality         = "physical"
+topic_tags       = ["nightlights", "power", "activity"]
+flavor           = "continuous"
+endpoint         = "https://cmr.earthdata.nasa.gov/search/granules.json?short_name=VNP46A2&page_size=1&sort_key=-start_date&options[readable_granule_name][pattern]=true&readable_granule_name[]=*.h17v03.*"
+cadence_seconds  = 21600
+status           = "nursery"
+notes            = "VIIRS Black Marble tile h17v03: UK + Ireland (50-60N: dark-season only, no retrievals ~May-Jul)"
+
+[night_lights_h17v03.fetch]
+kind             = "earthdata_granule"
+
+[night_lights_h17v03.parse]
+format           = "vnp46a2_grid"
+
+[night_lights_h17v03.geocode]
+strategy         = "granule_grid"
+h3_resolution    = 4
+
+
+[night_lights_h18v04]
+class            = "night_lights"
+modality         = "physical"
+topic_tags       = ["nightlights", "power", "activity"]
+flavor           = "continuous"
+endpoint         = "https://cmr.earthdata.nasa.gov/search/granules.json?short_name=VNP46A2&page_size=1&sort_key=-start_date&options[readable_granule_name][pattern]=true&readable_granule_name[]=*.h18v04.*"
+cadence_seconds  = 21600
+status           = "nursery"
+notes            = "VIIRS Black Marble tile h18v04: France, S. Germany, Switzerland, N. Italy"
+
+[night_lights_h18v04.fetch]
+kind             = "earthdata_granule"
+
+[night_lights_h18v04.parse]
+format           = "vnp46a2_grid"
+
+[night_lights_h18v04.geocode]
+strategy         = "granule_grid"
+h3_resolution    = 4
+
+
+[night_lights_h10v05]
+class            = "night_lights"
+modality         = "physical"
+topic_tags       = ["nightlights", "power", "activity"]
+flavor           = "continuous"
+endpoint         = "https://cmr.earthdata.nasa.gov/search/granules.json?short_name=VNP46A2&page_size=1&sort_key=-start_date&options[readable_granule_name][pattern]=true&readable_granule_name[]=*.h10v05.*"
+cadence_seconds  = 21600
+status           = "nursery"
+notes            = "VIIRS Black Marble tile h10v05: US mid-Atlantic / Southeast coast"
+
+[night_lights_h10v05.fetch]
+kind             = "earthdata_granule"
+
+[night_lights_h10v05.parse]
+format           = "vnp46a2_grid"
+
+[night_lights_h10v05.geocode]
+strategy         = "granule_grid"
+h3_resolution    = 4
+
+
+[night_lights_h31v05]
+class            = "night_lights"
+modality         = "physical"
+topic_tags       = ["nightlights", "power", "activity"]
+flavor           = "continuous"
+endpoint         = "https://cmr.earthdata.nasa.gov/search/granules.json?short_name=VNP46A2&page_size=1&sort_key=-start_date&options[readable_granule_name][pattern]=true&readable_granule_name[]=*.h31v05.*"
+cadence_seconds  = 21600
+status           = "nursery"
+notes            = "VIIRS Black Marble tile h31v05: Japan (main islands)"
+
+[night_lights_h31v05.fetch]
+kind             = "earthdata_granule"
+
+[night_lights_h31v05.parse]
+format           = "vnp46a2_grid"
+
+[night_lights_h31v05.geocode]
+strategy         = "granule_grid"
+h3_resolution    = 4

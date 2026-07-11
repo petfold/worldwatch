@@ -14,7 +14,7 @@ from collections.abc import Callable
 from typing import Any
 
 from worldwatch.config.loader import SourceConfig
-from worldwatch.ingest.geocode import fixed_cell, h3_cell
+from worldwatch.ingest.geocode import fixed_cell, h3_cell, resolve_fixed
 from worldwatch.ingest.models import Observation
 
 Parser = Callable[[Any, SourceConfig], list[Observation]]
@@ -224,6 +224,109 @@ def parse_wikimedia_pageviews(payload: Any, cfg: SourceConfig) -> list[Observati
                 cell=cell,
                 ts=ts,
                 value=float(item["views"]),
+            )
+        )
+    return obs
+
+
+@register("cloudflare_radar_timeseries")
+def parse_cloudflare_radar_timeseries(payload: Any, cfg: SourceConfig) -> list[Observation]:
+    """Cloudflare Radar timeseries: result.serie_0.{timestamps, values}.
+
+    Values are min0_max-normalized over the queried dateRange (Radar exposes no
+    raw values); the stanza uses a long window so the normalization anchor (the
+    weekly traffic peak) is stable across polls. The final point is the
+    in-progress bucket and is dropped; earlier points are final, so PK dedup
+    across overlapping windows keeps consistent values.
+    """
+    serie = payload["result"]["serie_0"]
+    cell = resolve_fixed(cfg.geocode)
+    points = list(zip(serie["timestamps"], serie["values"], strict=True))[:-1]
+    return [
+        Observation(
+            stream_id=cfg.stream_id,
+            cell=cell,
+            ts=_iso_to_epoch(str(stamp)),
+            value=float(val),
+        )
+        for stamp, val in points
+    ]
+
+
+@register("vnp46a2_grid")
+def parse_vnp46a2_grid(payload: Any, cfg: SourceConfig) -> list[Observation]:
+    """NASA Black Marble VNP46A2 granule → per-H3-cell mean night radiance.
+
+    payload comes from the earthdata_granule fetcher: {granule_id, time_start,
+    content: HDF5 bytes}. Pixels are kept only where Mandatory_Quality_Flag == 0
+    (high-quality main-algorithm retrieval) and the radiance is a real value;
+    they are block-averaged, blocks are assigned to H3 cells, and each cell with
+    enough valid coverage emits one observation at the granule's day. Cells
+    below min_valid_frac are dropped, not imputed (guardrail 4): clouded or
+    unretrievable regions go missing and the presence channel sees it.
+
+    value = log1p(mean radiance in nW/(cm²·sr)) by default — night-lights
+    radiance is heavy-tailed across cities vs countryside; the log keeps the
+    continuous flavor's Student-t predictive sane on bright cells.
+    """
+    import io
+
+    import h5py
+    import numpy as np
+
+    group_path = str(
+        cfg.parse.get("grid_group", "HDFEOS/GRIDS/VIIRS_Grid_DNB_2d/Data Fields")
+    )
+    value_name = str(cfg.parse.get("value_dataset", "DNB_BRDF-Corrected_NTL"))
+    quality_name = str(cfg.parse.get("quality_dataset", "Mandatory_Quality_Flag"))
+    block = int(cfg.parse.get("block_pixels", 16))
+    min_valid_frac = float(cfg.parse.get("min_valid_frac", 0.2))
+    use_log1p = str(cfg.parse.get("transform", "log1p")) == "log1p"
+    resolution = int(cfg.geocode.get("h3_resolution", 4))
+    ts = _iso_to_epoch(str(payload["time_start"]))
+
+    with h5py.File(io.BytesIO(payload["content"]), "r") as f:
+        grid = f[group_path]
+        ntl_ds = grid[value_name]
+        fill = float(ntl_ds.attrs["_FillValue"][0]) if "_FillValue" in ntl_ds.attrs else -999.9
+        ntl = ntl_ds[:].astype(np.float64)
+        quality = grid[quality_name][:]
+        lat = grid["lat"][:]
+        lon = grid["lon"][:]
+
+    # Trim to a whole number of blocks, then block-reduce valid-pixel sums.
+    nrow = (ntl.shape[0] // block) * block
+    ncol = (ntl.shape[1] // block) * block
+    ntl, quality = ntl[:nrow, :ncol], quality[:nrow, :ncol]
+    valid = (quality == 0) & (ntl != fill) & (ntl >= 0.0)
+
+    shape4 = (nrow // block, block, ncol // block, block)
+    value_sum = np.where(valid, ntl, 0.0).reshape(shape4).sum(axis=(1, 3))
+    valid_count = valid.reshape(shape4).sum(axis=(1, 3))
+    block_lat = lat[:nrow].reshape(nrow // block, block).mean(axis=1)
+    block_lon = lon[:ncol].reshape(ncol // block, block).mean(axis=1)
+
+    # Accumulate blocks into H3 cells: [valid-weighted sum, valid px, total px].
+    cells: dict[str, list[float]] = {}
+    for i in range(valid_count.shape[0]):
+        for j in range(valid_count.shape[1]):
+            cell = h3_cell(float(block_lat[i]), float(block_lon[j]), resolution)
+            acc = cells.setdefault(cell, [0.0, 0.0, 0.0])
+            acc[0] += value_sum[i, j]
+            acc[1] += float(valid_count[i, j])
+            acc[2] += block * block
+
+    obs: list[Observation] = []
+    for cell, (vsum, vcount, total) in sorted(cells.items()):
+        if vcount == 0 or vcount / total < min_valid_frac:
+            continue
+        mean = vsum / vcount
+        obs.append(
+            Observation(
+                stream_id=cfg.stream_id,
+                cell=cell,
+                ts=ts,
+                value=float(np.log1p(mean)) if use_log1p else float(mean),
             )
         )
     return obs

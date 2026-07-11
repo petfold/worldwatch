@@ -9,14 +9,14 @@ Legend: 🔴 blocks a source/feature · 🟡 nice-to-have · ⚪ later (deploy p
 
 ## Accounts, keys & source decisions
 
-- [ ] 🔴 **Internet health** — pick a provider and register. Cloudflare Radar is
-      the richest free option and needs an API token. Once you have it, set it in
-      an env var (e.g. `WW_CLOUDFLARE_TOKEN`) and tell Claude the var name so the
-      stanza can reference it via `auth_env_var`. _(Blocks Tier-1 source #5.)_
-- [ ] 🔴 **Night lights** — create a free NASA **Earthdata** login and decide
-      which derived VIIRS/Black Marble regional-radiance product to ingest (not
-      raw imagery — that's a non-goal). Provide credentials via env vars.
-      _(Blocks Tier-1 source #8.)_
+- [x] 🔴 **Internet health** — done 2026-07-11: `WW_CLOUDFLARE_TOKEN` set and
+      verified; `cf_radar_netflows_{global,gb,us,jp}` live (Radar netflows,
+      15-min buckets). Remember to set the env var on the VPS too.
+- [x] 🔴 **Night lights** — done 2026-07-11: Earthdata login verified
+      (`WW_EARTHDATA_USER`/`WW_EARTHDATA_PASS`); product = VNP46A2 Black Marble
+      daily gap-filled radiance, reduced to per-cell means at ingest (no raw
+      imagery kept). 4 tiles live; note h17v03 (UK) has no retrievals near
+      midsummer (physics, not a bug). Set the env vars on the VPS too.
 - [ ] 🟡 **GDELT news** — no account needed, but decide the access mode (raw
       15-min event files vs the DOC/GEO 2.0 query API). This is a design call for
       you to weigh in on; Claude will build the parser once the mode is chosen.
