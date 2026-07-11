@@ -17,10 +17,8 @@ Legend: 🔴 blocks a source/feature · 🟡 nice-to-have · ⚪ later (deploy p
       daily gap-filled radiance, reduced to per-cell means at ingest (no raw
       imagery kept). 4 tiles live; note h17v03 (UK) has no retrievals near
       midsummer (physics, not a bug). Set the env vars on the VPS too.
-- [ ] 🟡 **GDELT news** — no account needed, but decide the access mode (raw
-      15-min event files vs the DOC/GEO 2.0 query API). This is a design call for
-      you to weigh in on; Claude will build the parser once the mode is chosen.
-      _(Blocks Tier-1 source #3.)_
+- [x] 🟡 **GDELT news** — done 2026-07-11: you chose the raw 15-min event
+      files; `gdelt_events` is live (no account needed).
 - [ ] 🟡 **FX markets** — crypto (BTC/ETH) is live without a key. If you want
       fiat FX pairs too, pick a free provider; most need an API key + env var.
 

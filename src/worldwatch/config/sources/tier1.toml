@@ -122,6 +122,30 @@ strategy         = "feature_coords"
 h3_resolution    = 4
 
 
+# --- News events: GDELT 2.0 raw 15-min export files --------------------------
+
+[gdelt_events]
+class            = "news_event_feed"
+modality         = "informational"
+topic_tags       = ["news", "events", "society", "conflict"]
+flavor           = "count"
+endpoint         = "http://data.gdeltproject.org/gdeltv2/lastupdate.txt"
+cadence_seconds  = 900
+status           = "nursery"
+notes            = "GDELT 2.0 export batches (~1 MB zip / 15 min, no auth; plain http — the host serves no TLS). Only the newest batch is listed, so a missed poll is a skipped batch (visible to the presence channel). Geocoded events only; per-event content dropped at the door."
+
+[gdelt_events.fetch]
+kind             = "gdelt_lastupdate"
+file_marker      = ".export.CSV.zip"
+
+[gdelt_events.parse]
+format           = "gdelt_export_events"
+
+[gdelt_events.geocode]
+strategy         = "feature_coords"
+h3_resolution    = 3
+
+
 # --- Internet health: Cloudflare Radar netflows ------------------------------
 # Values are min0_max-normalized over the queried window (Radar exposes no raw
 # values); the 7d window keeps the anchor (weekly peak) stable across polls.

@@ -332,6 +332,65 @@ def parse_vnp46a2_grid(payload: Any, cfg: SourceConfig) -> list[Observation]:
     return obs
 
 
+@register("gdelt_export_events")
+def parse_gdelt_export_events(payload: Any, cfg: SourceConfig) -> list[Observation]:
+    """GDELT 2.0 export batch (zipped TSV, one row per event) → pure-event
+    count observations for geocoded events (ActionGeo lat/lon; ungeocoded rows
+    are dropped).
+
+    Every row in a batch shares one DATEADDED stamp (the batch end), but
+    raw_ring's PK is (stream, cell, ts), so same-cell events would collapse to
+    one row. True per-event times are unknown below batch granularity; events
+    are spread deterministically across the batch's window — per cell, ordered
+    by event id — which is collision-free while a cell has ≤ window events.
+    Same file → same rows, so re-ingest stays idempotent.
+
+    Event *content* fields (actors, CAMEO codes, tone) are dropped at the door
+    (guardrail 8): the P0 signal is geocoded news-event counts per cell.
+    """
+    import io
+    import zipfile
+
+    lat_col = int(cfg.parse.get("lat_col", 56))
+    lon_col = int(cfg.parse.get("lon_col", 57))
+    window = int(cfg.parse.get("batch_window_seconds", 900))
+    resolution = int(cfg.geocode.get("h3_resolution", 3))
+    batch_end = int(payload["batch_epoch"])
+
+    with zipfile.ZipFile(io.BytesIO(payload["content"])) as z:
+        text = z.read(z.namelist()[0]).decode("utf-8", errors="replace")
+
+    by_cell: dict[str, list[int]] = {}
+    for line in text.splitlines():
+        cols = line.split("\t")
+        if len(cols) <= max(lat_col, lon_col):
+            continue
+        lat_s, lon_s = cols[lat_col].strip(), cols[lon_col].strip()
+        if not lat_s or not lon_s:
+            continue
+        try:
+            lat, lon, event_id = float(lat_s), float(lon_s), int(cols[0])
+        except ValueError:
+            continue
+        if not (-90.0 <= lat <= 90.0 and -180.0 <= lon <= 180.0):
+            continue
+        by_cell.setdefault(h3_cell(lat, lon, resolution), []).append(event_id)
+
+    obs: list[Observation] = []
+    for cell, event_ids in sorted(by_cell.items()):
+        event_ids.sort()
+        count = len(event_ids)
+        for i in range(count):
+            obs.append(
+                Observation(
+                    stream_id=cfg.stream_id,
+                    cell=cell,
+                    ts=batch_end - window + (i * window) // count,
+                )
+            )
+    return obs
+
+
 # Sentinel: parser could not derive a timestamp; the poller substitutes poll time.
 _NOW_SENTINEL = -1
 

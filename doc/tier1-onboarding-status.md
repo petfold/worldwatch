@@ -9,27 +9,24 @@ checked-in fixture and/or the real feed).
 |---|--------|--------|--------|--------|--------|
 | 1 | Seismic (USGS) | count | `usgs_seismic` | `geojson_features` | ✅ live (all-hour summary feed) |
 | 2 | Markets/crypto | continuous | `btc_usd`, `eth_usd` | `coinbase_spot` | ✅ live (crypto); FX needs a keyed provider |
-| 3 | News events (GDELT) | count | — | — | ⬜ needs endpoint research + parser |
-| 4 | Wikipedia pageviews | count | `wikipedia_pageviews` | `wikimedia_pageviews` | ◐ parser ready; needs poller URL templating |
+| 3 | News events (GDELT) | count | `gdelt_events` | `gdelt_export_events` | ✅ live (raw 15-min export files) |
+| 4 | Wikipedia pageviews | count | `wikipedia_pageviews` | `wikimedia_pageviews` | ✅ live (URL templating in `poll/url.py`) |
 | 5 | Internet health | continuous | `cf_radar_netflows_*` | `cloudflare_radar_timeseries` | ✅ live (global + GB/US/JP; `WW_CLOUDFLARE_TOKEN`) |
 | 6 | Severe weather (NWS) | count | `nws_severe_alerts` | `geojson_events` | ✅ live (US); zone-only alerts skipped |
 | 7 | Radiation (Safecast) | continuous | `safecast_radiation` | `safecast_json` | ✅ live |
 | 8 | Night lights | continuous | `night_lights_*` | `vnp46a2_grid` | ✅ live (4 VNP46A2 tiles; `WW_EARTHDATA_USER/PASS`) |
 
-## What the not-yet-live sources need
-
-**News events (GDELT)** — GDELT publishes event/GKG files every 15 min and has
-the DOC/GEO 2.0 query APIs. Pick a concrete access mode (raw 15-min CSV vs a
-timeline/geo query), then add a parser for it. Geocoded → count flavor per cell.
-No account, but terms/rate limits apply.
-
-**Wikipedia pageviews** — the parser (`wikimedia_pageviews`) and stanza exist and
-are tested, but the endpoint is a template with `{project}/.../{start}/{end}`
-date placeholders. The poller currently does a plain GET, so it needs a small
-addition: per-source URL templating that fills in the rolling date range each
-poll. Until then this source can't be fetched live.
-
 ## Notes on the auth'd sources (live 2026-07-11)
+
+**News events (GDELT)** — `gdelt_events` polls `lastupdate.txt` every 15 min
+(the `gdelt_lastupdate` fetcher) and downloads the export batch zip (~1 MB)
+only when its URL changes. The parser keeps geocoded events as pure-event
+count observations (res-3 H3 cells) and drops all event content at the door.
+All rows in a batch share one DATEADDED stamp, so events are spread
+deterministically across the batch's 15-min window per cell (collision-free,
+idempotent) — otherwise the raw_ring PK would collapse same-cell counts.
+Only the newest batch is listed upstream: a missed poll = a skipped batch,
+visible to the presence channel. No auth; plain http (host serves no TLS).
 
 **Internet health (Cloudflare Radar)** — `cf_radar_netflows_{global,gb,us,jp}`
 poll the netflows timeseries (15-min buckets). Radar exposes only normalized

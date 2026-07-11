@@ -112,6 +112,80 @@ def test_cloudflare_radar_country_gets_centroid_h3_cell(sources):
     assert obs[0].cell == h3_cell(54.0, -2.5, 2)
 
 
+GDELT_BATCH_EPOCH = 1783803600  # 20260711210000 UTC, the fixture's batch stamp
+
+
+def _gdelt_payload(content: bytes) -> dict:
+    return {"batch_url": "x", "batch_epoch": GDELT_BATCH_EPOCH, "content": content}
+
+
+def test_gdelt_export_geocodes_and_drops_ungeocoded(sources):
+    import pathlib
+
+    from worldwatch.ingest.geocode import h3_cell
+
+    cfg = sources["gdelt_events"]
+    content = (pathlib.Path(__file__).parent / "fixtures" / "gdelt_export_sample.zip").read_bytes()
+    obs = parsers.parse(_gdelt_payload(content), cfg)
+
+    # fixture: 3 geocoded rows (2× Utah, 1× Australia) + 1 ungeocoded (dropped)
+    assert len(obs) == 3
+    cells = {o.cell for o in obs}
+    assert cells == {
+        h3_cell(40.2222, -111.659, 3),
+        h3_cell(40.1135, -111.854, 3),
+        h3_cell(-36.7582, 144.28, 3),
+    }
+    for o in obs:
+        assert o.value is None  # pure-event → count flavor
+        assert GDELT_BATCH_EPOCH - 900 <= o.ts < GDELT_BATCH_EPOCH
+
+
+def _gdelt_zip(rows: list[list[str]]) -> bytes:
+    import io
+    import zipfile
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as z:
+        z.writestr("x.export.CSV", "\n".join("\t".join(r) for r in rows) + "\n")
+    return buf.getvalue()
+
+
+def _gdelt_row(event_id: str, lat: str, lon: str) -> list[str]:
+    row = ["0"] * 61
+    row[0], row[56], row[57], row[59] = event_id, lat, lon, "20260711210000"
+    return row
+
+
+def test_gdelt_same_cell_events_get_distinct_deterministic_ts(sources):
+    cfg = sources["gdelt_events"]
+    rows = [_gdelt_row(str(eid), "40.0", "-111.7") for eid in (30, 10, 20)]
+    obs = parsers.parse(_gdelt_payload(_gdelt_zip(rows)), cfg)
+
+    # one cell, three events → three rows with distinct spread timestamps
+    assert len(obs) == 3
+    assert len({o.cell for o in obs}) == 1
+    ts = [o.ts for o in obs]
+    assert len(set(ts)) == 3  # collision-free despite identical batch stamp
+    assert ts == sorted(ts)
+    assert ts[0] == GDELT_BATCH_EPOCH - 900  # spread ordered by event id
+
+    # deterministic: re-parsing the same batch yields identical rows (PK dedup)
+    assert parsers.parse(_gdelt_payload(_gdelt_zip(rows)), cfg) == obs
+
+
+def test_gdelt_tolerates_malformed_lines(sources):
+    cfg = sources["gdelt_events"]
+    rows = [
+        _gdelt_row("1", "40.0", "-111.7"),
+        ["7", "short", "row"],  # too few columns
+        _gdelt_row("2", "not-a-lat", "-111.7"),  # unparseable coords
+        _gdelt_row("3", "91.0", "-111.7"),  # out-of-range latitude
+    ]
+    obs = parsers.parse(_gdelt_payload(_gdelt_zip(rows)), cfg)
+    assert len(obs) == 1
+
+
 def _vnp46a2_payload(ntl, quality, lat, lon, time_start="2026-07-02T00:00:00.000Z"):
     """Synthetic VNP46A2 granule bytes mirroring the real group layout."""
     import io

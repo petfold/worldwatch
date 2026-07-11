@@ -217,6 +217,69 @@ async def test_earthdata_expired_token_cache_cleared_on_403(db, sources, monkeyp
     assert fetch._edl_tokens == {}  # next poll re-mints instead of looping on 403
 
 
+# --- gdelt_lastupdate --------------------------------------------------------
+
+GDELT_URL = "http://data.gdeltproject.org/gdeltv2/20260711210000.export.CSV.zip"
+GDELT_LISTING = (
+    f"39218 dee38266f156e8f84e173f0ca02b9a1d {GDELT_URL}\n"
+    "49321 d9d3c1d2da0893e22ad80eccfc009de1 "
+    "http://data.gdeltproject.org/gdeltv2/20260711210000.mentions.CSV.zip\n"
+)
+
+
+def _gdelt_handler(counters):
+    import pathlib
+
+    zip_bytes = (
+        pathlib.Path(__file__).parent / "fixtures" / "gdelt_export_sample.zip"
+    ).read_bytes()
+
+    def handler(request):
+        if str(request.url).endswith("lastupdate.txt"):
+            counters["listing"] += 1
+            return httpx.Response(200, text=GDELT_LISTING)
+        if str(request.url) == GDELT_URL:
+            counters["download"] += 1
+            return httpx.Response(200, content=zip_bytes)
+        raise AssertionError(f"unexpected request: {request.url}")
+
+    return handler
+
+
+async def test_gdelt_end_to_end_and_batch_memo(db, sources):
+    cfg = sources["gdelt_events"]
+    counters = {"listing": 0, "download": 0}
+    validators = CacheValidators()
+
+    async with _client(_gdelt_handler(counters)) as client:
+        outcome = await poll_once(client, db, cfg, validators, now=1783803700)
+        assert outcome.event == "ok"
+        assert outcome.rows_written == 3  # 3 geocoded fixture events
+        # spread timestamps sit inside the batch's 15-min window
+        ts = [r["ts"] for r in db.execute("SELECT ts FROM raw_ring ORDER BY ts").fetchall()]
+        assert all(1783803600 - 900 <= t < 1783803600 for t in ts)
+        assert validators.etag == GDELT_URL  # batch-url memo
+
+        outcome2 = await poll_once(client, db, cfg, validators, now=1783804600)
+
+    assert outcome2.event == "not_modified"
+    assert counters["download"] == 1
+    assert counters["listing"] == 2
+
+
+async def test_gdelt_listing_without_export_entry_is_isolated(db, sources):
+    cfg = sources["gdelt_events"]
+
+    def handler(request):
+        return httpx.Response(200, text="malformed listing\n")
+
+    async with _client(handler) as client:
+        outcome = await poll_once(client, db, cfg, CacheValidators(), now=1783803700)
+
+    assert outcome.event == "fetch_error"
+    assert ".export.CSV.zip" in (outcome.detail or "")
+
+
 def test_unknown_fetch_kind_raises(sources):
     import dataclasses
 

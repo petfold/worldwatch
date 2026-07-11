@@ -18,6 +18,11 @@ kinds:
                      Earthdata Login (EDL) bearer token. The token is reused
                      from `token_env` if set, else listed/minted via the URS
                      API from `user_env`/`pass_env` and cached per process.
+  gdelt_lastupdate   GDELT 2.0: GET the endpoint (lastupdate.txt, "size md5
+                     url" lines refreshed every 15 min) → the newest batch file
+                     URL matching `file_marker`; skip if it matches the last
+                     fetched one (ETag validator slot); else download the
+                     zipped batch. No auth.
 """
 
 from __future__ import annotations
@@ -67,6 +72,73 @@ async def fetch_json_get(
     if token is not None:
         headers = {"Authorization": f"Bearer {token}"}
     return await conditional_get(client, build_url(cfg, now), validators, headers=headers)
+
+
+# --- GDELT 2.0 batch-file fetch ---------------------------------------------
+
+
+@register("gdelt_lastupdate")
+async def fetch_gdelt_lastupdate(
+    client: httpx.AsyncClient,
+    cfg: SourceConfig,
+    validators: CacheValidators,
+    now: int,
+) -> FetchResult:
+    listing = await client.get(cfg.endpoint, headers={"User-Agent": USER_AGENT}, timeout=30.0)
+    listing.raise_for_status()
+
+    marker = str(cfg.fetch.get("file_marker", ".export.CSV.zip"))
+    url = next(
+        (
+            parts[2]
+            for line in listing.text.splitlines()
+            if len(parts := line.split()) == 3 and parts[2].endswith(marker)
+        ),
+        None,
+    )
+    if url is None:
+        raise ValueError(f"lastupdate listing has no {marker!r} entry")
+
+    if validators.etag == url:
+        return FetchResult(304, None, validators, not_modified=True)
+
+    resp = await client.get(url, headers={"User-Agent": USER_AGENT}, timeout=120.0)
+    resp.raise_for_status()
+
+    # Batch stamp from the filename: .../YYYYMMDDHHMMSS.export.CSV.zip — the
+    # END of the 15-min window this file's events were added in.
+    stamp = url.rsplit("/", 1)[-1].split(".", 1)[0]
+    payload: dict[str, Any] = {
+        "batch_url": url,
+        "batch_epoch": _stamp_to_epoch(stamp),
+        "content": resp.content,
+    }
+    return FetchResult(
+        resp.status_code,
+        payload,
+        CacheValidators(etag=url, last_modified=validators.last_modified),
+    )
+
+
+def _stamp_to_epoch(stamp: str) -> int:
+    """YYYYMMDDHHMMSS (UTC) → epoch seconds."""
+    import calendar
+
+    if len(stamp) != 14 or not stamp.isdigit():
+        raise ValueError(f"Bad batch stamp {stamp!r} in file URL")
+    return calendar.timegm(
+        (
+            int(stamp[0:4]),
+            int(stamp[4:6]),
+            int(stamp[6:8]),
+            int(stamp[8:10]),
+            int(stamp[10:12]),
+            int(stamp[12:14]),
+            0,
+            0,
+            0,
+        )
+    )
 
 
 # --- NASA Earthdata granule fetch ------------------------------------------
