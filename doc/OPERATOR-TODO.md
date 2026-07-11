@@ -24,10 +24,10 @@ Legend: 🔴 blocks a source/feature · 🟡 nice-to-have · ⚪ later (deploy p
 
 ## Push notifications (needed before step 9 is useful)
 
-- [ ] 🔴 **Choose a channel**: self-hosted **ntfy** (preferred per your
-      self-hosting preference) or Telegram. For ntfy: stand up / pick a server
-      and topic. For Telegram: create a bot (@BotFather) and get the bot token +
-      chat id. Provide via env vars.
+- [x] 🔴 **Choose a channel** — decided 2026-07-11: **self-hosted ntfy on
+      the VPS** (no Telegram; SimpleX considered as a possible later addition).
+      Claude sets up the ntfy server + access token during the deploy; you just
+      subscribe to the topic in the ntfy app afterwards.
 
 ## Deployment (step 10 — the soak)
 
