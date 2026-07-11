@@ -158,10 +158,13 @@ WW_NTFY_TOKEN=
 **Recommendation**: **Hetzner** (€3 ≈ $3.25/mo, best specs, reliable).
 
 **When you spin it up:**
-1. Choose **Ubuntu 22.04 LTS** as the image
-2. Size: use **4GB RAM** (Hetzner CX21) — gives headroom for Layer-1 work later
-3. SSH into it
-4. I'll walk you through `ops/deploy.sh`
+1. Choose **Ubuntu 24.04 LTS** as the image — it ships Python 3.12, which
+   Worldwatch requires (22.04 ships 3.10 and the install would fail)
+2. Size: use **4GB RAM** — gives headroom for Layer-1 work later
+3. Add your SSH public key (`~/.ssh/id_ed25519.pub`) in the provider console so
+   Claude can drive the deploy from your machine
+4. Tell Claude the IP — the rest (`ops/deploy.sh`, env file, verification) is
+   driven over SSH
 
 ---
 
@@ -184,19 +187,21 @@ That's it — piggyback on your existing setup.
 
 ---
 
-## ✅ What to do right now
+## ✅ What to do right now (updated 2026-07-11)
 
-1. **Cloudflare Radar**: Create account, get API token ← **start here**
-2. **NASA Earthdata**: Create account ← **start here**
-3. **ntfy**: Decide public (https://ntfy.sh) or self-host, pick topic name
-4. **GDELT**: Decide raw files (Option A) or API (Option B) — **recommend A**
+Done and verified: Cloudflare Radar token, NASA Earthdata login (both live in
+the local `.env`), GDELT (raw files, live), and all 8 Tier-1 sources.
 
-Once these are done, you'll have:
-- `WW_CLOUDFLARE_TOKEN=...`
-- `WW_EARTHDATA_USER=...` and `WW_EARTHDATA_PASS=...`
-- `WW_NTFY_SERVER=...` and `WW_NTFY_TOPIC=...`
+Remaining — all deployment-phase:
 
-Then I'll help with the VPS deploy.
+1. **ntfy**: pick a topic, subscribe on your phone (§5; public ntfy.sh
+   recommended to start)
+2. **VPS**: provision per §6 (Hetzner, **Ubuntu 24.04**, 4 GB, your SSH key)
+3. **Deploy**: give Claude the IP; it runs `ops/deploy.sh`, copies the three
+   keys from your local `.env` plus the ntfy settings into
+   `/etc/worldwatch/worldwatch.env`, and verifies all sources are polling
+4. **Backup**: point your existing restic/B2 at the DB (§7)
+5. **Soak**: 14 days unattended (`ops/README.md` for what to check)
 
 ---
 
