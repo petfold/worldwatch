@@ -14,7 +14,7 @@ from collections.abc import Callable
 from typing import Any
 
 from worldwatch.config.loader import SourceConfig
-from worldwatch.ingest.geocode import fixed_cell, h3_cell
+from worldwatch.ingest.geocode import fixed_cell, h3_cell, resolve_fixed
 from worldwatch.ingest.models import Observation
 
 Parser = Callable[[Any, SourceConfig], list[Observation]]
@@ -170,12 +170,21 @@ def _parse_event_time(raw: Any) -> int | None:
 
 @register("coinbase_spot")
 def parse_coinbase_spot(payload: Any, cfg: SourceConfig) -> list[Observation]:
-    """Single scalar price from a dotted value_path (e.g. 'data.amount')."""
+    """Single scalar price from a dotted value_path (e.g. 'data.amount').
+
+    transform = "log1p" stores log(1+price): prices move multiplicatively, and
+    the log keeps the fixed obs_scale workable until P1's online scale
+    inference (raw ~1e4-scale prices under the default obs_scale pin the PIT).
+    """
+    import math
+
     path = str(cfg.parse.get("value_path", "data.amount")).split(".")
     node: Any = payload
     for key in path:
         node = node[key]
     value = float(node)
+    if str(cfg.parse.get("transform", "")) == "log1p":
+        value = math.log1p(value)
     cell = fixed_cell(cfg.geocode)
     # No timestamp in the spot payload; caller stamps `now` via poll time.
     return [Observation(stream_id=cfg.stream_id, cell=cell, ts=_NOW_SENTINEL, value=value)]
@@ -212,20 +221,190 @@ def parse_safecast(payload: Any, cfg: SourceConfig) -> list[Observation]:
 
 @register("wikimedia_pageviews")
 def parse_wikimedia_pageviews(payload: Any, cfg: SourceConfig) -> list[Observation]:
-    """Wikimedia pageviews aggregate: items[] with `timestamp` (YYYYMMDDHH) and `views`."""
+    """Wikimedia pageviews aggregate: items[] with `timestamp` (YYYYMMDDHH) and
+    `views`. One valued observation per hour (continuous flavor: the views ARE
+    the signal, not the row count). transform = "log1p" stores log(1+views) —
+    attention is multiplicative, and it keeps the fixed obs_scale workable
+    until P1's online scale inference."""
+    import math
+
     cell = fixed_cell(cfg.geocode, default=str(cfg.parse.get("project", "wikipedia")))
+    use_log1p = str(cfg.parse.get("transform", "")) == "log1p"
     obs: list[Observation] = []
     for item in payload.get("items", []):
         stamp = str(item["timestamp"])  # e.g. 2026070912 (hour granularity)
         ts = _wiki_stamp_to_epoch(stamp)
+        views = float(item["views"])
         obs.append(
             Observation(
                 stream_id=cfg.stream_id,
                 cell=cell,
                 ts=ts,
-                value=float(item["views"]),
+                value=math.log1p(views) if use_log1p else views,
             )
         )
+    return obs
+
+
+@register("cloudflare_radar_timeseries")
+def parse_cloudflare_radar_timeseries(payload: Any, cfg: SourceConfig) -> list[Observation]:
+    """Cloudflare Radar timeseries: result.serie_0.{timestamps, values}.
+
+    Values are min0_max-normalized over the queried dateRange (Radar exposes no
+    raw values); the stanza uses a long window so the normalization anchor (the
+    weekly traffic peak) is stable across polls. The final point is the
+    in-progress bucket and is dropped; earlier points are final, so PK dedup
+    across overlapping windows keeps consistent values.
+    """
+    serie = payload["result"]["serie_0"]
+    cell = resolve_fixed(cfg.geocode)
+    points = list(zip(serie["timestamps"], serie["values"], strict=True))[:-1]
+    return [
+        Observation(
+            stream_id=cfg.stream_id,
+            cell=cell,
+            ts=_iso_to_epoch(str(stamp)),
+            value=float(val),
+        )
+        for stamp, val in points
+    ]
+
+
+@register("vnp46a2_grid")
+def parse_vnp46a2_grid(payload: Any, cfg: SourceConfig) -> list[Observation]:
+    """NASA Black Marble VNP46A2 granule → per-H3-cell mean night radiance.
+
+    payload comes from the earthdata_granule fetcher: {granule_id, time_start,
+    content: HDF5 bytes}. Pixels are kept only where Mandatory_Quality_Flag == 0
+    (high-quality main-algorithm retrieval) and the radiance is a real value;
+    they are block-averaged, blocks are assigned to H3 cells, and each cell with
+    enough valid coverage emits one observation at the granule's day. Cells
+    below min_valid_frac are dropped, not imputed (guardrail 4): clouded or
+    unretrievable regions go missing and the presence channel sees it.
+
+    value = log1p(mean radiance in nW/(cm²·sr)) by default — night-lights
+    radiance is heavy-tailed across cities vs countryside; the log keeps the
+    continuous flavor's Student-t predictive sane on bright cells.
+    """
+    import io
+
+    import h5py
+    import numpy as np
+
+    group_path = str(
+        cfg.parse.get("grid_group", "HDFEOS/GRIDS/VIIRS_Grid_DNB_2d/Data Fields")
+    )
+    value_name = str(cfg.parse.get("value_dataset", "DNB_BRDF-Corrected_NTL"))
+    quality_name = str(cfg.parse.get("quality_dataset", "Mandatory_Quality_Flag"))
+    block = int(cfg.parse.get("block_pixels", 16))
+    min_valid_frac = float(cfg.parse.get("min_valid_frac", 0.2))
+    use_log1p = str(cfg.parse.get("transform", "log1p")) == "log1p"
+    resolution = int(cfg.geocode.get("h3_resolution", 4))
+    ts = _iso_to_epoch(str(payload["time_start"]))
+
+    with h5py.File(io.BytesIO(payload["content"]), "r") as f:
+        grid = f[group_path]
+        ntl_ds = grid[value_name]
+        fill = float(ntl_ds.attrs["_FillValue"][0]) if "_FillValue" in ntl_ds.attrs else -999.9
+        ntl = ntl_ds[:].astype(np.float64)
+        quality = grid[quality_name][:]
+        lat = grid["lat"][:]
+        lon = grid["lon"][:]
+
+    # Trim to a whole number of blocks, then block-reduce valid-pixel sums.
+    nrow = (ntl.shape[0] // block) * block
+    ncol = (ntl.shape[1] // block) * block
+    ntl, quality = ntl[:nrow, :ncol], quality[:nrow, :ncol]
+    valid = (quality == 0) & (ntl != fill) & (ntl >= 0.0)
+
+    shape4 = (nrow // block, block, ncol // block, block)
+    value_sum = np.where(valid, ntl, 0.0).reshape(shape4).sum(axis=(1, 3))
+    valid_count = valid.reshape(shape4).sum(axis=(1, 3))
+    block_lat = lat[:nrow].reshape(nrow // block, block).mean(axis=1)
+    block_lon = lon[:ncol].reshape(ncol // block, block).mean(axis=1)
+
+    # Accumulate blocks into H3 cells: [valid-weighted sum, valid px, total px].
+    cells: dict[str, list[float]] = {}
+    for i in range(valid_count.shape[0]):
+        for j in range(valid_count.shape[1]):
+            cell = h3_cell(float(block_lat[i]), float(block_lon[j]), resolution)
+            acc = cells.setdefault(cell, [0.0, 0.0, 0.0])
+            acc[0] += value_sum[i, j]
+            acc[1] += float(valid_count[i, j])
+            acc[2] += block * block
+
+    obs: list[Observation] = []
+    for cell, (vsum, vcount, total) in sorted(cells.items()):
+        if vcount == 0 or vcount / total < min_valid_frac:
+            continue
+        mean = vsum / vcount
+        obs.append(
+            Observation(
+                stream_id=cfg.stream_id,
+                cell=cell,
+                ts=ts,
+                value=float(np.log1p(mean)) if use_log1p else float(mean),
+            )
+        )
+    return obs
+
+
+@register("gdelt_export_events")
+def parse_gdelt_export_events(payload: Any, cfg: SourceConfig) -> list[Observation]:
+    """GDELT 2.0 export batch (zipped TSV, one row per event) → pure-event
+    count observations for geocoded events (ActionGeo lat/lon; ungeocoded rows
+    are dropped).
+
+    Every row in a batch shares one DATEADDED stamp (the batch end), but
+    raw_ring's PK is (stream, cell, ts), so same-cell events would collapse to
+    one row. True per-event times are unknown below batch granularity; events
+    are spread deterministically across the batch's window — per cell, ordered
+    by event id — which is collision-free while a cell has ≤ window events.
+    Same file → same rows, so re-ingest stays idempotent.
+
+    Event *content* fields (actors, CAMEO codes, tone) are dropped at the door
+    (guardrail 8): the P0 signal is geocoded news-event counts per cell.
+    """
+    import io
+    import zipfile
+
+    lat_col = int(cfg.parse.get("lat_col", 56))
+    lon_col = int(cfg.parse.get("lon_col", 57))
+    window = int(cfg.parse.get("batch_window_seconds", 900))
+    resolution = int(cfg.geocode.get("h3_resolution", 3))
+    batch_end = int(payload["batch_epoch"])
+
+    with zipfile.ZipFile(io.BytesIO(payload["content"])) as z:
+        text = z.read(z.namelist()[0]).decode("utf-8", errors="replace")
+
+    by_cell: dict[str, list[int]] = {}
+    for line in text.splitlines():
+        cols = line.split("\t")
+        if len(cols) <= max(lat_col, lon_col):
+            continue
+        lat_s, lon_s = cols[lat_col].strip(), cols[lon_col].strip()
+        if not lat_s or not lon_s:
+            continue
+        try:
+            lat, lon, event_id = float(lat_s), float(lon_s), int(cols[0])
+        except ValueError:
+            continue
+        if not (-90.0 <= lat <= 90.0 and -180.0 <= lon <= 180.0):
+            continue
+        by_cell.setdefault(h3_cell(lat, lon, resolution), []).append(event_id)
+
+    obs: list[Observation] = []
+    for cell, event_ids in sorted(by_cell.items()):
+        event_ids.sort()
+        count = len(event_ids)
+        for i in range(count):
+            obs.append(
+                Observation(
+                    stream_id=cfg.stream_id,
+                    cell=cell,
+                    ts=batch_end - window + (i * window) // count,
+                )
+            )
     return obs
 
 

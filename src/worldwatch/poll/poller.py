@@ -20,8 +20,8 @@ from worldwatch.config.loader import SourceConfig
 from worldwatch.ingest import parsers
 from worldwatch.ingest.models import Observation
 from worldwatch.instrument import record_health
-from worldwatch.poll.http import CacheValidators, conditional_get
-from worldwatch.poll.url import build_url
+from worldwatch.poll.fetch import get_fetcher
+from worldwatch.poll.http import CacheValidators
 from worldwatch.store import write_observations
 
 # Deterministic per-source jitter fraction of the cadence (no Date/random needed):
@@ -38,7 +38,7 @@ def jitter_seconds(stream_id: str, cadence: int) -> float:
 
 @dataclass(slots=True)
 class PollOutcome:
-    event: str  # ok | not_modified | http_error | timeout | parse_error
+    event: str  # ok | not_modified | http_error | timeout | fetch_error | parse_error
     rows_written: int = 0
     detail: str | None = None
 
@@ -55,14 +55,17 @@ async def poll_once(
     classifies failures into a PollOutcome and instruments them."""
     poll_time = now if now is not None else int(time.time())
     try:
-        url = build_url(cfg, poll_time)
-        result = await conditional_get(client, url, validators)
+        fetcher = get_fetcher(cfg)
+        result = await fetcher(client, cfg, validators, poll_time)
     except httpx.TimeoutException as e:
         record_health(conn, cfg.stream_id, "timeout", str(e), ts=poll_time)
         return PollOutcome("timeout", detail=str(e))
     except httpx.HTTPError as e:
         record_health(conn, cfg.stream_id, "http_error", str(e), ts=poll_time)
         return PollOutcome("http_error", detail=str(e))
+    except Exception as e:  # isolation boundary: fetcher fault → data, not a crash
+        record_health(conn, cfg.stream_id, "fetch_error", f"{type(e).__name__}: {e}", ts=poll_time)
+        return PollOutcome("fetch_error", detail=str(e))
 
     # Carry updated validators back to the caller's state.
     validators.etag = result.validators.etag
@@ -113,7 +116,7 @@ async def run_poller(
 
     while stop is None or not stop.is_set():
         outcome = await poll_once(client, conn, cfg, validators)
-        if outcome.event in ("timeout", "http_error"):
+        if outcome.event in ("timeout", "http_error", "fetch_error"):
             backoff = min(cfg.cadence_seconds, max(1.0, backoff * 2 or 1.0))
             sleep_for = backoff
         else:

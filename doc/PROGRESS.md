@@ -1,6 +1,6 @@
 # Worldwatch — progress in plain language
 
-_Last updated: 2026-07-10. Companion to the technical docs
+_Last updated: 2026-07-11. Companion to the technical docs
 (`worldwatch-architecture-v0.1.md`, `p0-implementation-plan.md`)._
 
 ## What we're building, in one paragraph
@@ -72,7 +72,7 @@ surprise archive with sensible scores.
 | 5 | Count-feed model | ✅ done |
 | — | Runner (glues models to the data) | ✅ done |
 | 6 | Silence-as-a-signal | ✅ done |
-| 7 | Remaining pollers | ◐ partly — see below |
+| 7 | Remaining pollers | ✅ done — all 8 feeds live |
 | 8 | Alert engine | ✅ done |
 | 9 | Push + map | ✅ done |
 | 10 | Run on server, soak test | ◐ scaffolding done; soak needs the server |
@@ -107,22 +107,36 @@ surprise archive with sensible scores.
   silence is written off as our-side rather than raising a false global alarm.
   (A dedicated connectivity prober will make this attribution airtight later.)
 
-## Step 7 so far — feeds now connected
+## Step 7 complete — all eight feeds connected
 
 Live and flowing end to end: **earthquakes** (USGS), **crypto markets** (BTC and
-ETH), **radiation** (Safecast), and **US severe-weather alerts** (NWS). Adding
-the second market (ETH) needed only a short config entry and no new code —
-confirming the "a feed is a recipe, not a program" design goal. The weather
-alerts needed one new small reader for that data shape, which now also covers
-similar alert feeds.
+ETH), **world news** (GDELT), **Wikipedia traffic**, **internet health**
+(Cloudflare Radar — global plus UK, US, and Japan), **US severe-weather alerts**
+(NWS), **radiation** (Safecast), and **satellite night lights** (NASA Black
+Marble, four regions: UK/Ireland, western Europe, US east coast, Japan). Every
+one has been tested against the real feed, not just in simulation.
 
-The remaining core feeds are documented with exactly what each needs
-(`doc/tier1-onboarding-status.md`): **world news (GDELT)** needs a bit of format
-research; **Wikipedia traffic** is ready but needs a small tweak so the fetcher
-fills in the date range each poll; **internet health** and **night-lights** need
-you to register for a free account/API key (which stays out of the code — the
-system reads it from an environment variable). Those last two are the natural
-points where a bit of your input unblocks them.
+Highlights from connecting the last four:
+
+- **Internet health** uses the API key you registered. One wrinkle: Cloudflare
+  only shares traffic numbers rescaled against the busiest moment of the
+  window you ask about — so we always ask for a full week, which keeps that
+  yardstick (the weekly peak) steady from poll to poll.
+- **Night lights** downloads one small (~10 MB) satellite file per region per
+  day using your NASA account, boils it down on the spot to a few hundred
+  "average brightness of this ~50 km area" numbers, and throws the file away —
+  no imagery is ever stored. One genuine discovery: above ~50° north there is
+  simply no usable night-lights data around midsummer, because the sky never
+  gets fully dark — so the UK region reports only in the darker months. The
+  system treats that as an honest seasonal silence, not a fault.
+- **World news** pulls GDELT's raw batch file every 15 minutes (about 1 MB,
+  ~700 geolocated news events per batch) and keeps only "an event happened
+  here, now" — headlines, actors, and links are discarded at the door.
+- **Wikipedia traffic and the crypto prices** got a correctness fix along the
+  way: the hourly view-counts and prices are now actually fed into the models
+  on a sensible scale (before, views were silently ignored and prices would
+  have looked "infinitely surprising" all the time). Both were verified live
+  and with synthetic data.
 
 - **The alert engine** turns surprise into alarms — but only when three things
   line up at once: the surprise *persists* over several time windows, it's
@@ -141,14 +155,6 @@ points where a bit of your input unblocks them.
   yet it simply records that and carries on. You can also mark an alert
   true/false from the dashboard, which feeds the accuracy scoring later.
 
-### Trust level
-
-117 automated tests, all passing, plus code-quality checks. The *entire* chain
-has now been run against live feeds in one go — real earthquakes and weather
-alerts flowed all the way from fetch to the map, and the dashboard served it. (It
-correctly raised no alarms: the two live map-able feeds are both "physical", and
-an alert needs two *different* kinds of feed to agree — so it didn't cry wolf.)
-
 - **The ops scaffolding** packages everything to run unattended: one command per
   job (fetch, roll-up, score, silence-check, serve), ready-made start-up scripts
   so the server keeps them running and restarts them cleanly after crashes or
@@ -158,17 +164,21 @@ an alert needs two *different* kinds of feed to agree — so it didn't cry wolf.
 
 ### Trust level
 
-122 automated tests, all passing, plus code-quality checks. Every piece of P0
-has now been exercised — including the packaged commands run as real processes,
-and the whole chain run against live feeds into the dashboard.
+144 automated tests, all passing, plus code-quality checks. Every piece of P0
+has been exercised — the packaged commands run as real processes, and the whole
+chain run against live feeds into the dashboard. All eight feeds have ingested
+real data through to surprise scores; earlier the full path to the map was also
+proven live. (No false alarms so far: an alert needs two *different* kinds of
+feed to agree on a place and time, so lone spikes stay quiet.)
 
 ## What's left for P0
 
 The software for all ten steps is **written and verified**. What remains is not
 code — it's the real-world run:
 
-1. **You**: stand up the small server, pick a push channel, and register for the
-   few feeds that need a free account/key (all listed in `OPERATOR-TODO.md`).
+1. **You**: stand up the small server and pick a push channel (the feed
+   registrations are done — remember to copy the three access keys from your
+   local `.env` onto the server; see `OPERATOR-TODO.md`).
 2. **Deploy**: one command (`ops/deploy.sh`) installs and starts everything.
 3. **Soak**: let it run unattended for two weeks and confirm it survives crashes,
    outages, and a reboot, keeps the surprise archive filling, and visibly flags
@@ -181,6 +191,6 @@ earlier question) will later steer with.
 
 ## A note on where the code lives
 
-All of this is on a work branch called `p0-skeleton-pollers` (six commits), not
+All of this is on a work branch called `p0-skeleton-pollers` (26 commits), not
 yet merged into the main line — so it's easy to review before it becomes
 official.
