@@ -170,12 +170,21 @@ def _parse_event_time(raw: Any) -> int | None:
 
 @register("coinbase_spot")
 def parse_coinbase_spot(payload: Any, cfg: SourceConfig) -> list[Observation]:
-    """Single scalar price from a dotted value_path (e.g. 'data.amount')."""
+    """Single scalar price from a dotted value_path (e.g. 'data.amount').
+
+    transform = "log1p" stores log(1+price): prices move multiplicatively, and
+    the log keeps the fixed obs_scale workable until P1's online scale
+    inference (raw ~1e4-scale prices under the default obs_scale pin the PIT).
+    """
+    import math
+
     path = str(cfg.parse.get("value_path", "data.amount")).split(".")
     node: Any = payload
     for key in path:
         node = node[key]
     value = float(node)
+    if str(cfg.parse.get("transform", "")) == "log1p":
+        value = math.log1p(value)
     cell = fixed_cell(cfg.geocode)
     # No timestamp in the spot payload; caller stamps `now` via poll time.
     return [Observation(stream_id=cfg.stream_id, cell=cell, ts=_NOW_SENTINEL, value=value)]

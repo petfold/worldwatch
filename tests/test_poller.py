@@ -135,9 +135,11 @@ async def test_spot_price_stamped_with_poll_time(db, sources):
     async with _client(handler) as client:
         await poll_once(client, db, cfg, CacheValidators(), now=1751000200)
 
+    import math
+
     row = db.execute("SELECT ts, value FROM raw_ring").fetchone()
     assert row["ts"] == 1751000200  # sentinel replaced by poll time
-    assert row["value"] == 63000.42
+    assert row["value"] == math.log1p(63000.42)  # stanza sets transform = "log1p"
 
 
 def test_jitter_is_deterministic_and_bounded(sources):

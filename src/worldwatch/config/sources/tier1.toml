@@ -55,6 +55,9 @@ obs_scale        = 0.05   # ~5% residual on log-views; fixed until P1
 level_var        = 1e-4
 
 
+# value = log1p(price): multiplicative moves on a fixed obs_scale (see the
+# wikipedia stanza note). ~0.4%/√h log-price diffusion → level_var; no
+# harmonics (crypto trades around the clock, no strong daily cycle).
 [btc_usd]
 class            = "crypto_market"
 modality         = "economic"
@@ -63,15 +66,20 @@ flavor           = "continuous"
 endpoint         = "https://api.coinbase.com/v2/prices/BTC-USD/spot"
 cadence_seconds  = 300
 status           = "nursery"
-notes            = "BTC/USD spot price — continuous flavor reference"
+notes            = "BTC/USD spot price — continuous flavor reference; value = log1p(price)"
 
 [btc_usd.parse]
 format           = "coinbase_spot"
 value_path       = "data.amount"
+transform        = "log1p"
 
 [btc_usd.geocode]
 strategy         = "global"
 cell             = "GLOBAL"
+
+[btc_usd.model]
+obs_scale        = 0.002   # ~0.2% five-minute log-return noise; fixed until P1
+level_var        = 2e-5
 
 
 # Adding a second market is stanza-only — reuses the coinbase_spot parser.
@@ -83,15 +91,20 @@ flavor           = "continuous"
 endpoint         = "https://api.coinbase.com/v2/prices/ETH-USD/spot"
 cadence_seconds  = 300
 status           = "nursery"
-notes            = "ETH/USD spot price"
+notes            = "ETH/USD spot price; value = log1p(price)"
 
 [eth_usd.parse]
 format           = "coinbase_spot"
 value_path       = "data.amount"
+transform        = "log1p"
 
 [eth_usd.geocode]
 strategy         = "global"
 cell             = "GLOBAL"
+
+[eth_usd.model]
+obs_scale        = 0.003   # ETH runs a touch more volatile than BTC
+level_var        = 4e-5
 
 
 [nws_severe_alerts]
