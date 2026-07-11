@@ -1,6 +1,9 @@
 # Secrets (operator credentials — never in the repo)
 .env
 
+# Claude Code: machine-local session state (shared settings + skills ARE committed)
+.claude/settings.local.json
+
 # Python
 __pycache__/
 *.py[cod]
