@@ -1,3 +1,6 @@
+# Secrets (operator credentials — never in the repo)
+.env
+
 # Python
 __pycache__/
 *.py[cod]
