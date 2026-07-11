@@ -134,6 +134,33 @@ def test_unsupported_flavor_is_skipped(db, sources):
     assert run_layer0(db, rate_src, now=NOW) == 0
 
 
+def test_flavor_switch_resets_stale_model_state(db, sources):
+    """A saved model_state from a source's previous flavor (e.g. wikipedia's
+    count → continuous switch) cold-starts instead of crashing the pass, and
+    the reset is recorded as health data."""
+    w = bin_width(3)
+    base = (NOW // w) * w - 20 * w
+    count_cfg = dataclasses.replace(sources["wikipedia_pageviews"], flavor="count")
+    for i in range(3):
+        _insert_bin(db, "wikipedia_pageviews", "en.wikipedia.org", 3, base + i * w, 5, 15.9)
+    assert run_layer0(db, {"wikipedia_pageviews": count_cfg}, now=NOW) == 3
+    # model_state now holds a count-model blob for this group
+
+    _insert_bin(db, "wikipedia_pageviews", "en.wikipedia.org", 3, base + 3 * w, 5, 15.9)
+    written = run_layer0(db, sources, now=NOW + 100)  # real config: continuous
+
+    assert written == 1  # scored (cold-started), not crashed
+    reset = db.execute(
+        "SELECT detail FROM health WHERE component='wikipedia_pageviews' AND event='model_reset'"
+    ).fetchone()
+    assert reset is not None and "en.wikipedia.org/3" in reset["detail"]
+    # the replaced state now loads cleanly as the new flavor → no reset next run
+    _insert_bin(db, "wikipedia_pageviews", "en.wikipedia.org", 3, base + 4 * w, 5, 15.9)
+    assert run_layer0(db, sources, now=NOW + 200) == 1
+    resets = db.execute("SELECT COUNT(*) FROM health WHERE event='model_reset'").fetchone()[0]
+    assert resets == 1
+
+
 def test_first_bin_in_group_is_cold_start(db, sources):
     _insert_bin(db, "btc_usd", "GLOBAL", 2, 1000, n=1, vmean=42.0)
     run_layer0(db, sources, now=NOW)

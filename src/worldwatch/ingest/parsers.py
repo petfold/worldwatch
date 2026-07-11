@@ -212,18 +212,26 @@ def parse_safecast(payload: Any, cfg: SourceConfig) -> list[Observation]:
 
 @register("wikimedia_pageviews")
 def parse_wikimedia_pageviews(payload: Any, cfg: SourceConfig) -> list[Observation]:
-    """Wikimedia pageviews aggregate: items[] with `timestamp` (YYYYMMDDHH) and `views`."""
+    """Wikimedia pageviews aggregate: items[] with `timestamp` (YYYYMMDDHH) and
+    `views`. One valued observation per hour (continuous flavor: the views ARE
+    the signal, not the row count). transform = "log1p" stores log(1+views) —
+    attention is multiplicative, and it keeps the fixed obs_scale workable
+    until P1's online scale inference."""
+    import math
+
     cell = fixed_cell(cfg.geocode, default=str(cfg.parse.get("project", "wikipedia")))
+    use_log1p = str(cfg.parse.get("transform", "")) == "log1p"
     obs: list[Observation] = []
     for item in payload.get("items", []):
         stamp = str(item["timestamp"])  # e.g. 2026070912 (hour granularity)
         ts = _wiki_stamp_to_epoch(stamp)
+        views = float(item["views"])
         obs.append(
             Observation(
                 stream_id=cfg.stream_id,
                 cell=cell,
                 ts=ts,
-                value=float(item["views"]),
+                value=math.log1p(views) if use_log1p else views,
             )
         )
     return obs

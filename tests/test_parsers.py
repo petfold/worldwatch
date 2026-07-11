@@ -22,16 +22,29 @@ def test_geojson_features_filters_and_geocodes(sources):
 
 
 def test_wikimedia_pageviews_parses_timestamps(sources):
+    import math
+
     cfg = sources["wikipedia_pageviews"]
     payload = load_fixture("wikimedia_sample.json")
     obs = parsers.parse(payload, cfg)
 
     assert len(obs) == 3
-    assert obs[0].value == 8123456.0
+    # stanza sets transform = "log1p": views feed the continuous model on a
+    # workable scale (raw views with a fixed obs_scale would pin the PIT)
+    assert obs[0].value == math.log1p(8123456.0)
     # 2026070910 UTC → epoch
     assert obs[0].ts == 1783591200
     # non-spatial: cell is the project name
     assert obs[0].cell == "en.wikipedia.org"
+
+
+def test_wikimedia_pageviews_raw_without_transform(sources):
+    import dataclasses
+
+    base = sources["wikipedia_pageviews"]
+    cfg = dataclasses.replace(base, parse={k: v for k, v in base.parse.items() if k != "transform"})
+    obs = parsers.parse(load_fixture("wikimedia_sample.json"), cfg)
+    assert obs[0].value == 8123456.0
 
 
 def test_coinbase_spot_uses_now_sentinel(sources):

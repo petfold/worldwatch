@@ -148,7 +148,19 @@ def _load_group_model(
     ).fetchone()
     if row is None:
         return models.make_model(cfg)
-    return models.load_model(cfg.flavor, row["state"])
+    try:
+        return models.load_model(cfg.flavor, row["state"])
+    except Exception as e:
+        # Saved state predates a flavor/format change for this source. States
+        # are caches — the surprise archive is the record — so cold-start and
+        # record the reset as data rather than crashing the detect pass.
+        record_health(
+            conn,
+            cfg.stream_id,
+            "model_reset",
+            f"{cell}/{scale}: {type(e).__name__}: {e}",
+        )
+        return models.make_model(cfg)
 
 
 def _observation(flavor: str, n: int, vmean: float | None) -> float | None:

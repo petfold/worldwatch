@@ -22,15 +22,19 @@ strategy         = "feature_coords"
 h3_resolution    = 3
 
 
+# Continuous, not count: the hourly `views` value is the signal — as a count
+# stream Layer 0 would score bins.n (rows per bin, a near-constant) and ignore
+# views entirely. log1p + a fixed obs_scale keep the Student-t predictive sane
+# until P1's online scale inference; daily+weekly harmonics carry the cycle.
 [wikipedia_pageviews]
 class            = "attention_feed"
 modality         = "informational"
 topic_tags       = ["attention", "information"]
-flavor           = "count"
+flavor           = "continuous"
 endpoint         = "https://wikimedia.org/api/rest_v1/metrics/pageviews/aggregate/{project}/{access}/{agent}/{granularity}/{start}/{end}"
 cadence_seconds  = 3600
 status           = "nursery"
-notes            = "Hourly project-level pageview aggregates"
+notes            = "Hourly project-level pageview aggregates; value = log1p(views)"
 
 [wikipedia_pageviews.parse]
 format           = "wikimedia_pageviews"
@@ -39,9 +43,16 @@ access           = "all-access"
 agent            = "all-agents"
 granularity      = "hourly"
 lookback_seconds = 259200   # 3 days; overlapping windows dedup on the raw_ring PK
+transform        = "log1p"
 
 [wikipedia_pageviews.geocode]
 strategy         = "project_entity"
+
+[wikipedia_pageviews.model]
+periods_seconds  = [86400.0, 604800.0]
+n_harmonics      = 2
+obs_scale        = 0.05   # ~5% residual on log-views; fixed until P1
+level_var        = 1e-4
 
 
 [btc_usd]
