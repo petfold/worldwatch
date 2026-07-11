@@ -8,7 +8,7 @@ import httpx
 
 USER_AGENT = (
     "worldwatch/0.1 (global anomaly monitor; "
-    "https://github.com/petfold/worldmonitor; contact via repo)"
+    "https://github.com/petfold/worldwatch; contact via repo)"
 )
 
 

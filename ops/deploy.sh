@@ -12,7 +12,7 @@ APP_DIR=/opt/worldwatch                 # repo checkout lives here
 VENV_DIR="$APP_DIR/.venv"
 DATA_DIR=/var/lib/worldwatch            # WW_DB_PATH parent
 ETC_DIR=/etc/worldwatch                 # env file lives here
-REPO_URL="${REPO_URL:-https://github.com/petfold/worldmonitor}"
+REPO_URL="${REPO_URL:-https://github.com/petfold/worldwatch}"
 
 echo ">> system user"
 id -u "$APP_USER" &>/dev/null || useradd --system --home "$APP_DIR" --shell /usr/sbin/nologin "$APP_USER"
