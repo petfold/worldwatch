@@ -22,13 +22,14 @@ dependencies = [
 worldwatch = "worldwatch.cli:main"
 
 [project.optional-dependencies]
-dev = [
+test = [
     "pytest>=8",
     "pytest-asyncio>=0.23",
     "hypothesis>=6.100",
     "ruff>=0.4",
     "mypy>=1.10",
 ]
+dev = ["worldwatch[test]"] # back-compat alias; [test] is the stack-wide name
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/worldwatch"]
