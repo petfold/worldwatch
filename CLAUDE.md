@@ -2,9 +2,9 @@
 
 This file orients Claude Code (or any developer) on the Worldwatch project.
 Read together with:
-- `docs/worldwatch-architecture-v0.1.md` — the authoritative converged design spec
-- `docs/global-anomaly-sources.md`       — data source catalog (tiers, principles)
-- `docs/p0-implementation-plan.md`       — concrete first milestone
+- `doc/worldwatch-architecture-v0.1.md` — the authoritative converged design spec
+- `doc/global-anomaly-sources.md`       — data source catalog (tiers, principles)
+- `doc/p0-implementation-plan.md`       — concrete first milestone
 The spec is the source of truth. This file adds context, conventions, and guardrails.
 
 ## What this project is
@@ -57,7 +57,7 @@ primary scientific output ("the digital twin condenses out of the residuals").
 
 ```
 worldwatch/
-  docs/                  # the three docs above + ADRs as decisions accumulate
+  doc/                   # the three docs above + ADRs as decisions accumulate
   src/worldwatch/
     config/              # per-source TOML stanzas (endpoint, parse, geocode, cadence,
                          #   topic tags, type hint) — adding a source = adding a stanza
