@@ -52,3 +52,4 @@ Legend: 🔴 blocks a source/feature · 🟡 nice-to-have · ⚪ later (deploy p
 
 - Per-source detail and what each remaining feed needs: `tier1-onboarding-status.md`
 - Plain-language project status: `PROGRESS.md`
+- Milestone index and what gates P0: `../ROADMAP.md`

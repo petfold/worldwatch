@@ -129,6 +129,7 @@ a signal to refactor rather than a normal cost.
 New here? [`doc/PROGRESS.md`](doc/PROGRESS.md) explains the whole system in
 plain language, without the vocabulary.
 
+- [`ROADMAP.md`](ROADMAP.md) — milestone index: what is live, what gates P0, what the operator still owes
 - [`doc/worldwatch-architecture-v0.1.md`](doc/worldwatch-architecture-v0.1.md) — the authoritative design spec
 - [`doc/global-anomaly-sources.md`](doc/global-anomaly-sources.md) — data source catalogue, tiers and selection principles
 - [`doc/p0-implementation-plan.md`](doc/p0-implementation-plan.md) — the current milestone
