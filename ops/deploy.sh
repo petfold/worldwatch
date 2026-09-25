@@ -22,7 +22,14 @@ mkdir -p "$APP_DIR" "$DATA_DIR" "$ETC_DIR"
 
 echo ">> code"
 if [ -d "$APP_DIR/.git" ]; then
+  before=$(git -C "$APP_DIR" rev-parse HEAD)
   git -C "$APP_DIR" pull --ff-only
+  # bash keeps running the script it started with; hand over to the pulled one
+  # so an update that changes deploy.sh takes effect in this same run.
+  if [ -z "${WW_DEPLOY_REEXEC:-}" ] && [ "$(git -C "$APP_DIR" rev-parse HEAD)" != "$before" ]; then
+    echo "   code updated — re-running the new deploy.sh"
+    WW_DEPLOY_REEXEC=1 exec "$APP_DIR/ops/deploy.sh" "$@"
+  fi
 else
   git clone "$REPO_URL" "$APP_DIR"
 fi
