@@ -2,6 +2,7 @@
 Description=Worldwatch consolidator pass (raw_ring -> bins)
 
 [Service]
+Slice=worldwatch.slice
 Type=oneshot
 User=worldwatch
 EnvironmentFile=/etc/worldwatch/worldwatch.env

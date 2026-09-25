@@ -2,6 +2,7 @@
 Description=Worldwatch presence pass (silence detection)
 
 [Service]
+Slice=worldwatch.slice
 Type=oneshot
 User=worldwatch
 EnvironmentFile=/etc/worldwatch/worldwatch.env

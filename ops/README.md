@@ -35,6 +35,11 @@ sudo systemctl restart 'worldwatch-*'
 All passes are idempotent and crash-safe, so timers can fire freely and a
 restart mid-pass is harmless.
 
+Every unit runs in `worldwatch.slice`: a 3.6 GB memory cap for all of them
+together and half the default CPU/IO weight, so a co-hosted website keeps
+priority and an OOM stays inside worldwatch. Adjust in
+`ops/systemd/worldwatch.slice`.
+
 ## Manual invocation (debugging)
 
 ```bash

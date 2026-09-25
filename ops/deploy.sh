@@ -46,9 +46,11 @@ sudo -u "$APP_USER" env $(grep -v '^#' "$ETC_DIR/worldwatch.env" | xargs) \
   "$VENV_DIR/bin/python" -m worldwatch init
 
 echo ">> systemd units"
-cp "$APP_DIR"/ops/systemd/*.service "$APP_DIR"/ops/systemd/*.timer /etc/systemd/system/
+cp "$APP_DIR"/ops/systemd/*.slice "$APP_DIR"/ops/systemd/*.service "$APP_DIR"/ops/systemd/*.timer /etc/systemd/system/
 systemctl daemon-reload
 systemctl enable --now worldwatch-poll.service worldwatch-api.service
 systemctl enable --now worldwatch-consolidate.timer worldwatch-detect.timer worldwatch-presence.timer
+# enable --now leaves running services alone; restart them onto new code/units.
+systemctl try-restart worldwatch-poll.service worldwatch-api.service
 
 echo ">> done. Check: systemctl status 'worldwatch-*'"

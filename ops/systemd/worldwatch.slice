@@ -1,0 +1,11 @@
+[Unit]
+Description=Worldwatch resource group (shares the host with a website)
+
+[Slice]
+# Hard cap for all worldwatch units together; the host has no swap, so this
+# keeps an OOM inside worldwatch instead of letting the kernel pick the site.
+MemoryHigh=3G
+MemoryMax=3600M
+# Half the default weight: under contention the website gets the CPU/disk.
+CPUWeight=50
+IOWeight=50

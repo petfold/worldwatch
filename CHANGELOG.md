@@ -9,6 +9,21 @@ than recorded at the time. Note that 0.1.0 was uploaded to PyPI directly rather
 than by a `v*` tag push, so this repo has no release tags yet — unlike the
 sibling projects, where the tag is what publishes.
 
+## [Unreleased]
+
+### Fixed
+
+- **GDELT polling** — GDELT now 301-redirects `http://` to `https://`, and its
+  `lastupdate.txt` still lists `http://` file URLs. The endpoint is `https://`
+  and both requests follow redirects.
+
+### Changed
+
+- **Resource limits for co-hosting** — every systemd unit runs in
+  `worldwatch.slice` (3.6 GB memory cap, half CPU/IO weight), so a website on
+  the same VPS keeps priority. `deploy.sh` installs the slice and restarts
+  running services so a re-run picks up new code.
+
 ## [0.1.0] — 2026-09-10
 
 First PyPI release: calibrated anomaly detection over heterogeneous world data

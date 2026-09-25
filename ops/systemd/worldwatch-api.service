@@ -4,6 +4,7 @@ After=network-online.target
 Wants=network-online.target
 
 [Service]
+Slice=worldwatch.slice
 Type=simple
 User=worldwatch
 EnvironmentFile=/etc/worldwatch/worldwatch.env

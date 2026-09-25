@@ -84,7 +84,11 @@ async def fetch_gdelt_lastupdate(
     validators: CacheValidators,
     now: int,
 ) -> FetchResult:
-    listing = await client.get(cfg.endpoint, headers={"User-Agent": USER_AGENT}, timeout=30.0)
+    # follow_redirects: GDELT now 301s http:// → https://, and the listing still
+    # names http:// file URLs.
+    listing = await client.get(
+        cfg.endpoint, headers={"User-Agent": USER_AGENT}, timeout=30.0, follow_redirects=True
+    )
     listing.raise_for_status()
 
     marker = str(cfg.fetch.get("file_marker", ".export.CSV.zip"))
@@ -102,7 +106,9 @@ async def fetch_gdelt_lastupdate(
     if validators.etag == url:
         return FetchResult(304, None, validators, not_modified=True)
 
-    resp = await client.get(url, headers={"User-Agent": USER_AGENT}, timeout=120.0)
+    resp = await client.get(
+        url, headers={"User-Agent": USER_AGENT}, timeout=120.0, follow_redirects=True
+    )
     resp.raise_for_status()
 
     # Batch stamp from the filename: .../YYYYMMDDHHMMSS.export.CSV.zip — the
