@@ -77,6 +77,17 @@ async def fetch_json_get(
 # --- GDELT 2.0 batch-file fetch ---------------------------------------------
 
 
+_GDELT_HOST = "data.gdeltproject.org"
+
+
+def _gdelt_bucket_url(url: str) -> str | None:
+    """The same GDELT file straight from its GCS bucket, bypassing the CDN."""
+    for scheme in ("http://", "https://"):
+        if url.startswith(f"{scheme}{_GDELT_HOST}/"):
+            return f"https://storage.googleapis.com/{_GDELT_HOST}/{url[len(scheme) + len(_GDELT_HOST) + 1:]}"
+    return None
+
+
 @register("gdelt_lastupdate")
 async def fetch_gdelt_lastupdate(
     client: httpx.AsyncClient,
@@ -109,6 +120,12 @@ async def fetch_gdelt_lastupdate(
     resp = await client.get(
         url, headers={"User-Agent": USER_AGENT}, timeout=120.0, follow_redirects=True
     )
+    if resp.status_code == 404 and (direct := _gdelt_bucket_url(url)):
+        # Some Google CDN edges serve a cached empty 404 for fresh files; the
+        # bucket behind data.gdeltproject.org answers directly.
+        resp = await client.get(
+            direct, headers={"User-Agent": USER_AGENT}, timeout=120.0, follow_redirects=True
+        )
     resp.raise_for_status()
 
     # Batch stamp from the filename: .../YYYYMMDDHHMMSS.export.CSV.zip — the

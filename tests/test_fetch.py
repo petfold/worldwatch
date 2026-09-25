@@ -267,6 +267,31 @@ async def test_gdelt_end_to_end_and_batch_memo(db, sources):
     assert counters["listing"] == 2
 
 
+async def test_gdelt_cdn_404_falls_back_to_bucket(db, sources):
+    # A Google CDN edge can serve a cached empty 404 for a fresh file.
+    cfg = sources["gdelt_events"]
+    bucket_url = GDELT_URL.replace(
+        "http://data.gdeltproject.org/", "https://storage.googleapis.com/data.gdeltproject.org/"
+    )
+    served = _gdelt_handler({"listing": 0, "download": 0})
+    seen = []
+
+    def handler(request):
+        seen.append(str(request.url))
+        if str(request.url) == GDELT_URL:
+            return httpx.Response(404)
+        if str(request.url) == bucket_url:
+            return served(httpx.Request("GET", GDELT_URL))
+        return served(request)
+
+    async with _client(handler) as client:
+        outcome = await poll_once(client, db, cfg, CacheValidators(), now=1783803700)
+
+    assert outcome.event == "ok"
+    assert outcome.rows_written == 3
+    assert seen[-2:] == [GDELT_URL, bucket_url]
+
+
 async def test_gdelt_listing_without_export_entry_is_isolated(db, sources):
     cfg = sources["gdelt_events"]
 

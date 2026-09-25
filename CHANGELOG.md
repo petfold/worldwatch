@@ -16,6 +16,9 @@ sibling projects, where the tag is what publishes.
 - **GDELT polling** — GDELT now 301-redirects `http://` to `https://`, and its
   `lastupdate.txt` still lists `http://` file URLs. The endpoint is `https://`
   and both requests follow redirects.
+- **GDELT behind a stale CDN edge** — some Google CDN edges serve a cached empty
+  404 for fresh export files. On a 404 the file is fetched straight from the
+  GCS bucket behind `data.gdeltproject.org`.
 
 ### Changed
 

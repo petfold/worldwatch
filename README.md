@@ -99,7 +99,7 @@ claimed yet** — the backtest substrate for making that argument doesn't exist.
 
 ```bash
 pip install -e ".[test]"
-pytest                       # 145 tests
+pytest                       # 146 tests
 
 worldwatch init          # register the configured sources
 worldwatch poll          # fetch one round
