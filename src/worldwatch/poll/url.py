@@ -7,7 +7,7 @@ Wikimedia pageviews API:
 `build_url` fills `{placeholders}` from the source's [parse] table plus computed
 `start`/`end` covering a rolling look-back window ending at the poll time. Feeds
 with a plain endpoint (no braces) are returned unchanged. Overlapping windows
-are harmless — raw_ring dedups on its primary key.
+are harmless — ingestion dedups on (stream, cell, ts) via the `seen` table.
 """
 
 from __future__ import annotations

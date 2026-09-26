@@ -7,8 +7,10 @@ from raw_ring (schema: "fine window only; pruned by consolidator").
 
 Idempotent and crash-safe (guardrail 7): fold+delete run in one transaction and
 processed rows are removed, so a re-run over the same window is a no-op.
-Commutative: Welford/t-digest merges are order-independent, and raw_ring dedups
-on its PK, so out-of-order or duplicate observations converge to the same bins.
+Commutative: Welford/t-digest merges are order-independent, and ingestion
+dedups on (stream, cell, ts) via the `seen` table — which outlives raw_ring —
+so out-of-order, duplicate or re-fetched observations converge to the same bins.
+This pass also prunes `seen` keys older than the retention window.
 
 Per-bin value moments assume a stream is consistently valued or pure-event
 (its flavor/parse is fixed): bins.n counts observations, and vmean/m2/sketch
@@ -28,12 +30,16 @@ from worldwatch.cascade.welford import Moments
 
 # Default fine-window retention for raw_ring before consolidation (48 h).
 DEFAULT_FINE_WINDOW_SECONDS = 48 * 3600
+# How long ingested keys are remembered. Must exceed the longest history any
+# poller re-requests (Cloudflare Radar: 7 d).
+DEFAULT_SEEN_RETENTION_SECONDS = 8 * 86400
 
 
 def consolidate(
     conn: sqlite3.Connection,
     now: int | None = None,
     fine_window_seconds: int = DEFAULT_FINE_WINDOW_SECONDS,
+    seen_retention_seconds: int = DEFAULT_SEEN_RETENTION_SECONDS,
 ) -> int:
     """Fold raw_ring rows older than the fine window into bins.
 
@@ -41,6 +47,9 @@ def consolidate(
     """
     poll_now = now if now is not None else int(time.time())
     cutoff = poll_now - fine_window_seconds
+
+    conn.execute("DELETE FROM seen WHERE first_seen < ?", (poll_now - seen_retention_seconds,))
+    conn.commit()
 
     raw = conn.execute(
         "SELECT stream_id, cell, ts, value FROM raw_ring WHERE ts < ?",

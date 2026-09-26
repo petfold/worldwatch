@@ -116,6 +116,24 @@ MIGRATIONS: list[str] = [
         version     INTEGER NOT NULL
     );
     """,
+    # v4 — observation keys already ingested, kept past consolidation.
+    # raw_ring's PK only dedups inside the fine window; pollers re-fetch
+    # overlapping history (USGS last hour, Wikipedia 3 d, Cloudflare 7 d, NWS
+    # active alerts), which was re-counted into bins once its raw rows had
+    # been folded and deleted. Pruned by first_seen, not ts, so a feed that
+    # keeps returning old-dated rows is still recognised.
+    """
+    CREATE TABLE IF NOT EXISTS seen (
+        stream_id   TEXT NOT NULL,
+        cell        TEXT NOT NULL,
+        ts          INTEGER NOT NULL,
+        first_seen  INTEGER NOT NULL,
+        PRIMARY KEY (stream_id, cell, ts)
+    ) WITHOUT ROWID;
+    CREATE INDEX IF NOT EXISTS seen_first_seen ON seen (first_seen);
+    INSERT OR IGNORE INTO seen (stream_id, cell, ts, first_seen)
+        SELECT stream_id, cell, ts, CAST(strftime('%s', 'now') AS INTEGER) FROM raw_ring;
+    """,
 ]
 
 

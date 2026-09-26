@@ -13,6 +13,16 @@ sibling projects, where the tag is what publishes.
 
 ### Fixed
 
+- **Re-fetched observations were counted again after consolidation** — raw_ring's
+  primary key only deduplicated inside the fine window, but pollers re-request
+  overlapping history (USGS: the last hour, Wikipedia: 3 days, Cloudflare:
+  7 days, NWS: every still-active alert). Once the first copy was folded into
+  bins and deleted, each re-fetch landed again — on the first VPS day, 429
+  quakes were binned where USGS lists 55. A new `seen` table (schema v4)
+  remembers ingested (stream, cell, ts) keys for `WW_SEEN_RETENTION_SECONDS`
+  (default 8 days, pruned by first sighting) and repeats are dropped at
+  ingestion. Bins, surprise and Layer-0 state built before this are inflated
+  and should be reset.
 - **GDELT polling** — GDELT now 301-redirects `http://` to `https://`, and its
   `lastupdate.txt` still lists `http://` file URLs. The endpoint is `https://`
   and both requests follow redirects.

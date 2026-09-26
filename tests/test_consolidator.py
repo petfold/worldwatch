@@ -161,3 +161,74 @@ def test_sketch_is_queryable_after_fold(db):
     b = _all_bins(db)[0]
     digest = TDigest.from_bytes(b["sketch"])
     assert digest.quantile(0.5) == pytest.approx(49.5, abs=5.0)
+
+
+# --- re-fetch after consolidation (the `seen` table) --------------------------
+
+
+def test_refetch_after_consolidation_is_not_recounted(db):
+    # A poller re-requests overlapping history (USGS: the last hour; Cloudflare:
+    # 7 days). Once the first copy has been folded out of raw_ring, the repeat
+    # must not land in the bins a second time.
+    t0 = 1_000_000
+    quakes = [Observation("usgs_seismic", "c", t0 + i, 4.0 + i / 10) for i in range(5)]
+    assert write_observations(db, quakes, now=t0 + 10) == 5
+    consolidate(db, now=t0 + 3600, fine_window_seconds=900)
+    snapshot = db.execute("SELECT * FROM bins ORDER BY scale, bin_start").fetchall()
+    assert sum(r["n"] for r in snapshot) == 5
+
+    for k in range(1, 4):  # three more polls return the same quakes
+        assert write_observations(db, quakes, now=t0 + 3600 * k) == 0
+        consolidate(db, now=t0 + 3600 * (k + 1), fine_window_seconds=900)
+
+    after = db.execute("SELECT * FROM bins ORDER BY scale, bin_start").fetchall()
+    assert sum(r["n"] for r in after) == 5
+    assert db.execute("SELECT COUNT(*) FROM raw_ring").fetchone()[0] == 0
+
+
+def test_new_observations_among_refetched_ones_still_land(db):
+    t0 = 1_000_000
+    first = [Observation("s", "c", t0 + i, 1.0) for i in range(3)]
+    write_observations(db, first, now=t0)
+    consolidate(db, now=t0 + 3600, fine_window_seconds=900)
+    batch = first + [Observation("s", "c", t0 + 100, 2.0)]
+    assert write_observations(db, batch, now=t0 + 3700) == 1
+
+
+def test_seen_keys_pruned_after_retention(db):
+    t0 = 1_000_000
+    write_observations(db, [Observation("s", "c", t0, 1.0)], now=t0)
+    consolidate(db, now=t0 + 3600, fine_window_seconds=900, seen_retention_seconds=86400)
+    assert db.execute("SELECT COUNT(*) FROM seen").fetchone()[0] == 1
+    consolidate(db, now=t0 + 86400 + 1, fine_window_seconds=900, seen_retention_seconds=86400)
+    assert db.execute("SELECT COUNT(*) FROM seen").fetchone()[0] == 0
+
+
+def test_seen_pruned_by_first_seen_not_observation_time(db):
+    # A feed returning old-dated rows (Safecast measurements from years ago)
+    # is still recognised while its first sighting is recent.
+    now = 2_000_000_000
+    old = Observation("safecast_radiation", "c", now - 5 * 365 * 86400, 38.0)
+    assert write_observations(db, [old], now=now) == 1
+    consolidate(db, now=now + 3600, fine_window_seconds=900)
+    assert write_observations(db, [old], now=now + 7200) == 0
+
+
+def test_migration_backfills_seen_from_raw_ring(tmp_path):
+    import sqlite3
+
+    from worldwatch.db import MIGRATIONS, open_db
+
+    path = tmp_path / "v3.db"
+    conn = sqlite3.connect(path)
+    conn.execute("CREATE TABLE schema_version (version INTEGER PRIMARY KEY, applied_at INTEGER NOT NULL)")
+    for i, sql in enumerate(MIGRATIONS[:3], start=1):
+        conn.executescript(sql)
+        conn.execute("INSERT INTO schema_version VALUES (?, 0)", (i,))
+    conn.execute("INSERT INTO raw_ring VALUES ('s', 'c', 123, 1.0, NULL)")
+    conn.commit()
+    conn.close()
+
+    db = open_db(path)  # applies v4
+    assert [tuple(r) for r in db.execute("SELECT stream_id, cell, ts FROM seen")] == [("s", "c", 123)]
+    assert write_observations(db, [Observation("s", "c", 123, 1.0)]) == 0

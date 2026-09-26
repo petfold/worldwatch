@@ -1,38 +1,48 @@
-"""Writes normalized observations into raw_ring. Idempotent on the PK."""
+"""Writes normalized observations into raw_ring, once per observation key.
+
+Idempotent across re-fetches: a key (stream_id, cell, ts) already recorded in
+`seen` is dropped, even after its raw row has been consolidated away."""
 
 from __future__ import annotations
 
 import json
 import sqlite3
+import time
 from collections.abc import Iterable
 from typing import Any
 
 from worldwatch.ingest.models import Observation
 
 
-def write_observations(conn: sqlite3.Connection, obs: Iterable[Observation]) -> int:
-    """Insert observations into raw_ring, ignoring duplicates on
-    (stream_id, cell, ts). Returns the number of rows actually inserted.
+def write_observations(
+    conn: sqlite3.Connection, obs: Iterable[Observation], now: int | None = None
+) -> int:
+    """Insert observations never seen before into raw_ring. Returns the number
+    of rows actually inserted (re-fetched observations count as 0).
     """
-    rows = [
-        (
-            o.stream_id,
-            o.cell,
-            o.ts,
-            o.value,
-            json.dumps(o.meta, separators=(",", ":")) if o.meta else None,
+    first_seen = now if now is not None else int(time.time())
+    written = 0
+    for o in obs:
+        cur = conn.execute(
+            "INSERT OR IGNORE INTO seen (stream_id, cell, ts, first_seen) VALUES (?, ?, ?, ?)",
+            (o.stream_id, o.cell, o.ts, first_seen),
         )
-        for o in obs
-    ]
-    if not rows:
-        return 0
-    before = conn.total_changes
-    conn.executemany(
-        "INSERT OR IGNORE INTO raw_ring (stream_id, cell, ts, value, meta) VALUES (?, ?, ?, ?, ?)",
-        rows,
-    )
+        if cur.rowcount != 1:
+            continue  # already ingested (possibly already folded into bins)
+        conn.execute(
+            "INSERT OR IGNORE INTO raw_ring (stream_id, cell, ts, value, meta) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (
+                o.stream_id,
+                o.cell,
+                o.ts,
+                o.value,
+                json.dumps(o.meta, separators=(",", ":")) if o.meta else None,
+            ),
+        )
+        written += 1
     conn.commit()
-    return conn.total_changes - before
+    return written
 
 
 def upsert_source(conn: sqlite3.Connection, stream_id: str, cfg_dict: dict[str, Any]) -> None:

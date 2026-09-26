@@ -52,8 +52,11 @@ def cmd_init(conn: sqlite3.Connection, sources: dict[str, SourceConfig]) -> int:
     return len(sources)
 
 
-def cmd_consolidate(conn: sqlite3.Connection, fine_window_seconds: int) -> int:
-    return consolidate(conn, fine_window_seconds=fine_window_seconds)
+def cmd_consolidate(
+    conn: sqlite3.Connection, fine_window_seconds: int, seen_retention_seconds: int | None = None
+) -> int:
+    kwargs = {} if seen_retention_seconds is None else {"seen_retention_seconds": seen_retention_seconds}
+    return consolidate(conn, fine_window_seconds=fine_window_seconds, **kwargs)
 
 
 def cmd_presence(conn: sqlite3.Connection, sources: dict[str, SourceConfig]) -> int:
@@ -100,14 +103,14 @@ def main(argv: list[str] | None = None) -> int:
         cmd_api()
         return 0
 
-    from worldwatch.runtime import fine_window_seconds, load
+    from worldwatch.runtime import fine_window_seconds, load, seen_retention_seconds
 
     conn, sources = load()
     if args.command == "init":
         n = cmd_init(conn, sources)
         print(f"registered {n} sources")
     elif args.command == "consolidate":
-        print(f"consolidated {cmd_consolidate(conn, fine_window_seconds())} rows")
+        print(f"consolidated {cmd_consolidate(conn, fine_window_seconds(), seen_retention_seconds())} rows")
     elif args.command == "presence":
         print(f"silence rows: {cmd_presence(conn, sources)}")
     elif args.command == "detect":
