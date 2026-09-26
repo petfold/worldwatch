@@ -3,6 +3,7 @@
 This file orients Claude Code (or any developer) on the Worldwatch project.
 Read together with:
 - `doc/worldwatch-architecture-v0.1.md` — the authoritative converged design spec
+- `doc/adr/`                           — decisions that amend the spec
 - `doc/global-anomaly-sources.md`       — data source catalog (tiers, principles)
 - `doc/p0-implementation-plan.md`       — concrete first milestone
 The spec is the source of truth. This file adds context, conventions, and guardrails.
@@ -35,6 +36,9 @@ primary scientific output ("the digital twin condenses out of the residuals").
   cheaply on the VPS.
 - **Corroboration**: alerts require persistence × geographic coherence × ≥2 independent
   modalities agreeing on (place, time). Valid only because q_values are calibrated.
+  Per-source exceptions via a stanza's `[alerts]` table (doc/adr/0001): news is
+  context, never evidence; unique sensor networks (radiation) may alert alone when
+  ≥N of their own independent sensors agree; authoritative feeds alert on every item.
 - **Nursery**: new sources run in shadow mode until their rolling PIT-uniformity test
   passes; then auto-promoted to alert-eligible.
 - **Attention allocator**: per-source cadence tier {baseline|elevated|focus}; promotion

@@ -175,9 +175,10 @@ def _gdelt_zip(rows: list[list[str]]) -> bytes:
     return buf.getvalue()
 
 
-def _gdelt_row(event_id: str, lat: str, lon: str) -> list[str]:
+def _gdelt_row(event_id: str, lat: str, lon: str, url: str | None = None) -> list[str]:
     row = ["0"] * 61
     row[0], row[56], row[57], row[59] = event_id, lat, lon, "20260711210000"
+    row[60] = url or f"https://example.org/story-{event_id}"
     return row
 
 
@@ -196,6 +197,20 @@ def test_gdelt_same_cell_events_get_distinct_deterministic_ts(sources):
 
     # deterministic: re-parsing the same batch yields identical rows (PK dedup)
     assert parsers.parse(_gdelt_payload(_gdelt_zip(rows)), cfg) == obs
+
+
+def test_gdelt_counts_articles_not_coded_events(sources):
+    """GDELT codes one article as several events; the unit is the article."""
+    cfg = sources["gdelt_events"]
+    same = "https://example.org/one-concert-many-codes"
+    rows = [_gdelt_row(str(eid), "40.0", "-111.7", url=same) for eid in (1, 2, 3)]
+    rows[1][31] = "9"  # the second coding is the most-mentioned
+    rows.append(_gdelt_row("4", "40.0", "-111.7", url="https://example.org/another-story"))
+    obs = parsers.parse(_gdelt_payload(_gdelt_zip(rows)), cfg)
+    assert len(obs) == 2  # two articles, four coded events
+    assert {o.context["url"] for o in obs} == {same, "https://example.org/another-story"}
+    kept = next(o for o in obs if o.context["url"] == same)
+    assert kept.context["mentions"] == 9
 
 
 def test_gdelt_tolerates_malformed_lines(sources):

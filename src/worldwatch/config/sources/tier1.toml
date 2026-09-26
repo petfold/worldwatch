@@ -212,6 +212,11 @@ h3_resolution    = 3
 label            = "News events (GDELT)"
 unit             = "events"
 
+# News is what the sensors race to beat, not independent confirmation of them:
+# it never counts toward corroboration; pushes show it as context.
+[gdelt_events.alerts]
+role             = "context"
+
 # Kept per event for the evidence store (never detection): the GDELT 2.0
 # export columns below, plus `action` (EventRootCode in words) and `actors`.
 [gdelt_events.context]
@@ -452,3 +457,176 @@ label            = "Night lights, Japan"
 unit             = " nW/cm²/sr"
 inverse          = "expm1"
 digits           = 1
+
+
+# --- Radiation: EURDEP + German ODL (BfS open data, WFS GeoJSON) ------------
+# EURDEP: ~17,000 official gamma dose-rate stations in ~40 countries, hourly,
+# republished openly by Germany's BfS (no access constraints or fees declared;
+# ~240 KB gzipped per poll). Germany's own ~1,700 stations are a separate BfS
+# layer. Each station sits in its own fine cell (H3 res 8), so it is its own
+# series; the alert engine groups stations into regions. Countries report at
+# their own pace, so a poll carries each station's latest hour — dedup by
+# (station cell, hour) keeps every measurement once.
+# Radiation may alert on its own (no other source sees it), confirmed within
+# the network: >= min_sensors stations in one region, each past q_tail for
+# persist_n bins. Known confounder: rain washes radon progeny down and raises
+# dose rates regionally — kept strict until precipitation explains it away (P1).
+
+[eurdep_gamma]
+class            = "radiation_network"
+modality         = "physical"
+topic_tags       = ["radiation", "nuclear"]
+flavor           = "continuous"
+endpoint         = "https://www.imis.bfs.de/ogc/opendata/ows?service=WFS&version=1.1.0&request=GetFeature&typeName=opendata:eurdep_latestValue&outputFormat=application/json"
+cadence_seconds  = 1800
+status           = "nursery"
+notes            = "EURDEP gamma ambient dose rate (µSv/h, 1 h), via BfS open data; value = log(dose rate)"
+
+[eurdep_gamma.parse]
+format           = "geojson_events"
+time_fields      = ["end_measure"]
+value_field      = "value"
+transform        = "log"
+where            = { site_status = [1] }
+
+[eurdep_gamma.geocode]
+strategy         = "feature_coords"
+h3_resolution    = 8
+
+[eurdep_gamma.model]
+obs_scale        = 0.05     # ~5% hour-to-hour on log dose rate; learned online
+level_var        = 1e-4
+time_scale       = 3600.0
+
+[eurdep_gamma.display]
+label            = "Radiation, Europe (EURDEP)"
+unit             = " µSv/h"
+inverse          = "exp"
+digits           = 3
+
+[eurdep_gamma.context]
+fields           = ["id", "name", "value", "unit", "validated"]
+rank             = "value"
+text             = "{name}| ({id})|: {value} {unit}"
+
+[eurdep_gamma.alerts]
+single_source    = true
+min_sensors      = 3
+q_tail           = 1e-6
+persist_n        = 2
+region_resolution = 3
+
+
+[bfs_odl_gamma]
+class            = "radiation_network"
+modality         = "physical"
+topic_tags       = ["radiation", "nuclear"]
+flavor           = "continuous"
+endpoint         = "https://www.imis.bfs.de/ogc/opendata/ows?service=WFS&version=1.1.0&request=GetFeature&typeName=opendata:odlinfo_odl_1h_latest&outputFormat=application/json"
+cadence_seconds  = 1800
+status           = "nursery"
+notes            = "German ODL network (BfS, ~1,700 stations), gamma dose rate µSv/h, 1 h; defective stations filtered"
+
+[bfs_odl_gamma.parse]
+format           = "geojson_events"
+time_fields      = ["end_measure"]
+value_field      = "value"
+transform        = "log"
+where            = { site_status = [1] }
+
+[bfs_odl_gamma.geocode]
+strategy         = "feature_coords"
+h3_resolution    = 8
+
+[bfs_odl_gamma.model]
+obs_scale        = 0.05
+level_var        = 1e-4
+time_scale       = 3600.0
+
+[bfs_odl_gamma.display]
+label            = "Radiation, Germany (BfS)"
+unit             = " µSv/h"
+inverse          = "exp"
+digits           = 3
+
+[bfs_odl_gamma.context]
+fields           = ["id", "name", "value", "unit", "validated"]
+rank             = "value"
+text             = "{name}| ({id})|: {value} {unit}"
+
+[bfs_odl_gamma.alerts]
+single_source    = true
+min_sensors      = 3
+q_tail           = 1e-6
+persist_n        = 2
+region_resolution = 3
+
+
+# --- Authoritative alerts: the source has already judged significance -------
+# Every item is an alert (every_event): no model threshold, no waiting for
+# bins to close — fires within one detect pass of the poll.
+
+[usgs_significant]
+class            = "seismic_feed"
+modality         = "physical"
+topic_tags       = ["seismic", "hazard", "significant"]
+flavor           = "count"
+endpoint         = "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/significant_day.geojson"
+cadence_seconds  = 300
+status           = "nursery"
+notes            = "USGS curated significant earthquakes (magnitude, PAGER, felt reports), last day"
+
+[usgs_significant.parse]
+format           = "geojson_features"
+value_field      = "mag"
+time_field       = "time"
+
+[usgs_significant.geocode]
+strategy         = "feature_coords"
+h3_resolution    = 3
+
+[usgs_significant.display]
+label            = "Significant earthquakes (USGS)"
+unit             = "quakes"
+max_prefix       = "M"
+
+[usgs_significant.context]
+fields           = ["title", "place", "mag", "magType", "depth_km", "url", "tsunami", "alert", "felt", "sig"]
+rank             = "mag"
+text             = "M{mag}| {place}|, depth {depth_km:.0f} km|, PAGER {alert}|, tsunami flag {tsunami}"
+link             = "url"
+
+[usgs_significant.alerts]
+every_event      = true
+severity         = 0.95
+
+
+[nws_extreme]
+class            = "weather_alert_feed"
+modality         = "physical"
+topic_tags       = ["weather", "hazard", "extreme"]
+flavor           = "count"
+endpoint         = "https://api.weather.gov/alerts/active?severity=Extreme"
+cadence_seconds  = 300
+status           = "nursery"
+notes            = "NWS active alerts with severity Extreme (US)"
+
+[nws_extreme.parse]
+format           = "geojson_events"
+time_field       = "onset"
+
+[nws_extreme.geocode]
+strategy         = "feature_coords"
+h3_resolution    = 3
+
+[nws_extreme.display]
+label            = "Extreme weather alerts (NWS)"
+unit             = "alerts"
+
+[nws_extreme.context]
+fields           = ["event", "headline", "severity", "urgency", "certainty", "areaDesc"]
+text             = "{event}| ({severity})|: {areaDesc}"
+
+[nws_extreme.alerts]
+every_event      = true
+severity         = 0.8   # priority 4: shown, but doesn't wake you

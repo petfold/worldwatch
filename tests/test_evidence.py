@@ -158,3 +158,26 @@ def test_dashboard_shows_stories(tmp_path, sources):
     assert [p["text"] for p in s["peak_stories"]] == [story["text"]]  # behind the peak itself
     feats = client.get("/api/activity.geojson").json()["features"]
     assert feats[0]["properties"]["story"].startswith("M6.6")
+
+
+def test_source_alert_push_names_the_event_and_the_news_around_it(db, sources):
+    from worldwatch.alerts.engine import run_alerts
+
+    quake_cell = h3.latlng_to_cell(-21.3, 168.6, 3)
+    now = 2_000_000_000
+    sig = Observation("usgs_significant", quake_cell, now - 600, 6.6,
+                      context={"place": "80 km ENE of Tadine, New Caledonia", "mag": 6.6, "depth_km": 10.0,
+                               "url": "https://earthquake.usgs.gov/e/us6000txrf", "_rank": 6.6})
+    news = Observation("gdelt_events", quake_cell, now - 300, None,
+                       context={"headline": "Strong quake shakes new caledonia", "action": "Public statement",
+                                "place": "Noumea, New Caledonia", "mentions": 12,
+                                "url": "https://www.rnz.co.nz/quake", "_rank": 12})
+    write_observations(db, [sig, news], now=now - 300)
+    (aid,) = run_alerts(db, sources, now=now)
+    row = db.execute("SELECT * FROM alerts WHERE alert_id = ?", (aid,)).fetchone()
+    title, message, priority, _ = format_alert(row, db, sources)
+    assert "source alert" in message and priority == 5
+    assert "Significant earthquakes (USGS) [physical] issued by the source" in message
+    assert "> M6.6 80 km ENE of Tadine, New Caledonia, depth 10 km [earthquake.usgs.gov]" in message
+    assert "news in the area (context, not evidence):" in message
+    assert "Strong quake shakes new caledonia - Public statement, Noumea, New Caledonia [rnz.co.nz]" in message

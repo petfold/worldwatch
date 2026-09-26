@@ -79,7 +79,7 @@ named entity, so "the same place" is a well-defined join across modalities.
 Layer 0 (continuous, count and presence flavours) → the surprise field →
 alerting → a read-only API with push notifications, driven by a
 `worldwatch` CLI and deployable with the systemd units under `ops/`. There are
-**15 source stanzas covering the 8 Tier-1 modalities**, and the test suite runs
+**19 source stanzas covering the 8 Tier-1 modalities plus radiation networks and authoritative alert feeds**, and the test suite runs
 in CI on every push.
 
 **Not started** — these are empty packages, not partial implementations:
@@ -99,7 +99,7 @@ claimed yet** — the backtest substrate for making that argument doesn't exist.
 
 ```bash
 pip install -e ".[test]"
-pytest                       # 184 tests
+pytest                       # 192 tests
 
 worldwatch init          # register the configured sources
 worldwatch poll          # fetch one round

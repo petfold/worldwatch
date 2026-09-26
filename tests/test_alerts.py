@@ -164,3 +164,79 @@ def test_retired_source_excluded(db, sources):
     _anomalous_series(db, "quake", _cellA())
     _anomalous_series(db, "news", _cell_near_A())
     assert run_alerts(db, src, now=NOW) == []  # retired news can't corroborate
+
+
+# --- per-source policies (doc/adr/0001-per-source-alert-policy.md) -----------
+
+
+def _with_policy(sources, stream_id, modality, alerts, base="usgs_seismic", status="nursery"):
+    cfg = _src(sources, stream_id, modality, base=base)
+    return dataclasses.replace(cfg, status=status, extra={**cfg.extra, "alerts": alerts})
+
+
+def _station(i):
+    # distinct fine cells, all inside one res-3 region
+    return h3.cell_to_children(h3.latlng_to_cell(48.2, 16.4, 3), 8)[i]
+
+
+def test_context_role_never_corroborates(db, sources):
+    src = {
+        "quake": _src(sources, "quake", "physical"),
+        "news": _with_policy(sources, "news", "informational", {"role": "context"}),
+    }
+    _anomalous_series(db, "quake", _cellA())
+    _anomalous_series(db, "news", _cell_near_A())
+    assert run_alerts(db, src, now=NOW) == []
+
+
+RAD = {"single_source": True, "min_sensors": 3, "q_tail": 1e-6, "persist_n": 2, "region_resolution": 3}
+
+
+def test_single_source_alerts_when_independent_sensors_agree(db, sources):
+    src = {"rad": _with_policy(sources, "rad", "physical", RAD, status="active")}
+    for i in range(3):
+        _anomalous_series(db, "rad", _station(i), scale=2, k=2, q=1 - 1e-8)
+    (aid,) = run_alerts(db, src, now=NOW)
+    ev = json.loads(db.execute("SELECT evidence FROM alerts WHERE alert_id = ?", (aid,)).fetchone()[0])
+    assert len({e["cell"] for e in ev}) == 3
+    assert db.execute("SELECT severity FROM alerts").fetchone()[0] > 0.99
+    assert run_alerts(db, src, now=NOW) == []  # idempotent
+
+
+def test_single_faulty_sensor_does_not_alert(db, sources):
+    src = {"rad": _with_policy(sources, "rad", "physical", RAD, status="active")}
+    _anomalous_series(db, "rad", _station(0), scale=2, k=5, q=1 - 1e-12)
+    _anomalous_series(db, "rad", _station(1), scale=2, k=5, q=0.5)
+    assert run_alerts(db, src, now=NOW) == []
+
+
+def test_single_source_needs_the_stricter_tail(db, sources):
+    src = {"rad": _with_policy(sources, "rad", "physical", RAD, status="active")}
+    for i in range(3):
+        _anomalous_series(db, "rad", _station(i), scale=2, k=2, q=0.9999)  # 1-in-10k: not enough
+    assert run_alerts(db, src, now=NOW) == []
+
+
+def test_nursery_single_source_is_capped_below_waking(db, sources):
+    src = {"rad": _with_policy(sources, "rad", "physical", RAD, status="nursery")}
+    for i in range(3):
+        _anomalous_series(db, "rad", _station(i), scale=2, k=2, q=1 - 1e-8)
+    run_alerts(db, src, now=NOW)
+    assert db.execute("SELECT severity FROM alerts").fetchone()[0] <= 0.85  # priority 4
+
+
+def test_every_event_alerts_from_fresh_ingestion(db, sources):
+    from worldwatch.ingest.models import Observation
+    from worldwatch.store import write_observations
+
+    pol = {"every_event": True, "severity": 0.95}
+    src = {"sig": _with_policy(sources, "sig", "physical", pol)}
+    quake_cell = h3.latlng_to_cell(-21.3, 168.6, 3)
+    write_observations(db, [Observation("sig", quake_cell, NOW - 600, 6.6)], now=NOW - 300)
+    (aid,) = run_alerts(db, src, now=NOW)  # no bins, no surprise rows needed
+    row = db.execute("SELECT severity, evidence FROM alerts WHERE alert_id = ?", (aid,)).fetchone()
+    assert row["severity"] == 0.95
+    assert json.loads(row["evidence"])[0]["kind"] == "source_alert"
+    assert run_alerts(db, src, now=NOW + 300) == []  # one alert per observation
+    write_observations(db, [Observation("sig", quake_cell, NOW, 5.9)], now=NOW + 400)
+    assert len(run_alerts(db, src, now=NOW + 600)) == 1  # a new item alerts again

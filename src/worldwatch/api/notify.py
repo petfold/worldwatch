@@ -68,8 +68,20 @@ def format_alert(
     level = "SEVERE" if severity >= 0.9 else "HIGH" if severity >= 0.7 else "notable"
     # ASCII only (HTTP header)
     title = f"Worldwatch {level} {severity:.2f} - {context.where(alert['cell'])}"
-    is_silence = all(e.get("q_value") is None for e in evidence) and bool(evidence)
-    kind = "multi-source silence" if is_silence else "corroborated surprise"
+    is_source_alert = any(e.get("kind") == "source_alert" for e in evidence)
+    is_silence = (
+        not is_source_alert and all(e.get("q_value") is None for e in evidence) and bool(evidence)
+    )
+    from worldwatch.alerts.engine import policy
+
+    single = {e["stream_id"] for e in evidence}
+    if is_source_alert:
+        kind = "source alert"
+    elif len(single) == 1 and policy(sources.get(next(iter(single)))).get("single_source"):
+        n = len({e.get("cell") for e in evidence})
+        kind = f"single-network surprise ({n} independent sensor{'s' if n != 1 else ''})"
+    else:
+        kind = "multi-source silence" if is_silence else "corroborated surprise"
 
     lines = [
         f"{kind} (severity {severity:.2f})",
@@ -88,6 +100,13 @@ def format_alert(
             lines.append(f"    > {evstore.summary(cfg, rec)}" + (f" [{evstore.domain(url)}]" if url else ""))
     if len(evidence) > MAX_EVIDENCE_LINES:
         lines.append(f"+{len(evidence) - MAX_EVIDENCE_LINES} more signals")
+    news = _news_in_area(alert, conn, sources)
+    if news:
+        lines.append("")
+        lines.append("news in the area (context, not evidence):")
+        for cfg, rec in news:
+            url = evstore.link(cfg, rec)
+            lines.append(f"  > {evstore.summary(cfg, rec)}" + (f" [{evstore.domain(url)}]" if url else ""))
     lines.append("")
     lines.append(f"streams: {', '.join(streams[:6])}")
     message = "\n".join(lines)
@@ -96,7 +115,7 @@ def format_alert(
         message = "\n".join(lines[:-2] + ["(truncated)"] + lines[-2:])
 
     priority = 5 if severity >= 0.9 else 4 if severity >= 0.7 else 3
-    tags = ["rotating_light"] if not is_silence else ["mute"]
+    tags = ["mute"] if is_silence else ["rotating_light"]
     return title, message, priority, tags
 
 
@@ -111,8 +130,39 @@ def _stories(
     if cfg is None or evstore.spec(cfg) is None:
         return []
     t0 = int(e["bin_start"])
-    t1 = t0 + bin_width(int(e.get("scale") or 0))
+    t1 = t0 + 1 if e.get("kind") == "source_alert" else t0 + bin_width(int(e.get("scale") or 0))
     return evstore.top(conn, e["stream_id"], e["cell"], t0, t1, STORIES_PER_SIGNAL)
+
+
+NEWS_WINDOW_SECONDS = 3 * 3600
+
+
+def _news_in_area(
+    alert: sqlite3.Row, conn: sqlite3.Connection | None, sources: dict[str, SourceConfig]
+) -> list[tuple[SourceConfig, dict[str, object]]]:
+    """Stories from context-role streams (news) in the alert's region over the
+    last few hours — what people are already saying there, if anything."""
+    import h3
+
+    from worldwatch.alerts.engine import policy
+
+    region = alert["cell"]
+    if conn is None or not h3.is_valid_cell(region):
+        return []
+    out: list[tuple[SourceConfig, dict[str, object]]] = []
+    t1 = int(alert["opened_at"]) + 1
+    for sid, cfg in sources.items():
+        if policy(cfg).get("role") != "context" or evstore.spec(cfg) is None:
+            continue
+        res = int(cfg.geocode.get("h3_resolution", 3))
+        base = h3.get_resolution(region)
+        cells = [region] if res <= base else list(h3.cell_to_children(region, res))
+        recs = []
+        for c in cells:
+            recs += evstore.top(conn, sid, c, t1 - NEWS_WINDOW_SECONDS, t1, limit=3)
+        recs.sort(key=lambda r: -float(r.get("mentions") or 0))
+        out += [(cfg, r) for r in recs[:STORIES_PER_SIGNAL + 1]]
+    return out
 
 
 def story_links(
@@ -137,6 +187,10 @@ def _evidence_line(
     cfg = sources.get(e["stream_id"])
     label = context.display_for(e["stream_id"], cfg).label
     head = f"- {label} [{e['modality']}]"
+    if e.get("kind") == "source_alert":
+        return f"{head} issued by the source" + (
+            f" @ {context.where(e['cell'])}" if e.get("cell") and context.cell_center(e["cell"]) else ""
+        )
     if e.get("q_value") is None:
         return f"{head} silent (presence {e['presence_q']:.2f})"
     odds, direction = context.rarity(e["q_value"])

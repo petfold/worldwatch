@@ -25,7 +25,7 @@ class Display:
     unit: str = ""
     prefix: str = ""
     digits: int = 0
-    inverse: str = ""  # "expm1" undoes the parser's log1p transform
+    inverse: str = ""  # "expm1" / "exp" undo the parser's log1p / log transform
     percent: bool = False  # value is a 0..1 fraction; show as %
     max_prefix: str = ""  # count streams: also show the bin max (e.g. "M" magnitude)
 
@@ -49,6 +49,8 @@ def natural_value(v: float | None, disp: Display) -> float | None:
         return None
     if disp.inverse == "expm1":
         v = math.expm1(v)
+    elif disp.inverse == "exp":
+        v = math.exp(v)
     if disp.percent:
         v *= 100.0
     return v

@@ -18,6 +18,19 @@ silence rows participate identically: multi-source silence is a loud alarm.
 Naive vs P1: persistence is a simple count (not a run test), corroboration is a
 modality count (not precision-weighted evidence combination), and there is no
 explained-away discount yet. All deferred to Layer 1 / P1.
+
+Per-source policy, from the stanza's optional [alerts] table
+(doc/adr/0001-per-source-alert-policy.md):
+
+  role = "context"     never counts as corroboration (news: it reports what
+                       sensors are racing to beat; shown in pushes as context)
+  single_source = true may alert alone, confirmed within its own network:
+                       min_sensors distinct cells in one region, each past the
+                       stricter q_tail for persist_n bins (radiation networks)
+  every_event = true   authoritative feeds whose every item is already an alert
+                       (USGS significant quakes, NWS Extreme): alert on fresh
+                       observations from the `seen` keys, without waiting for
+                       bins to close, one alert per region per observation
 """
 
 from __future__ import annotations
@@ -77,7 +90,11 @@ def run_alerts(
         (cutoff,),
     ).fetchall()
 
-    persistent = _persistent_anomalies(rows, sources, q_tail, presence_tail, persist_n)
+    persistent = [
+        a
+        for a in _persistent_anomalies(rows, sources, q_tail, presence_tail, persist_n)
+        if policy(sources.get(a.stream_id)).get("role") != "context"
+    ]
 
     # Group by coarse region for corroboration.
     regions: dict[str, list[_Anomaly]] = defaultdict(list)
@@ -93,8 +110,99 @@ def run_alerts(
             continue
         created.append(_open_alert(conn, region, members, modalities, min_modalities, run_now))
 
+    created += _single_source_alerts(conn, sources, rows, presence_tail, corr_resolution, run_now)
+    created += _every_event_alerts(conn, sources, corr_resolution, run_now)
+
     record_health(conn, "alerts", "ok", f"opened={len(created)}", ts=run_now)
     return created
+
+
+def policy(cfg: SourceConfig | None) -> dict:
+    """The stanza's [alerts] table (empty = corroborate like everything else)."""
+    return dict(cfg.extra.get("alerts", {})) if cfg is not None else {}
+
+
+def _single_source_alerts(
+    conn: sqlite3.Connection,
+    sources: dict[str, SourceConfig],
+    rows: list[sqlite3.Row],
+    presence_tail: float,
+    corr_resolution: int,
+    now: int,
+) -> list[int]:
+    """Streams allowed to alert alone, confirmed by independent sensors of
+    their own network: a lone faulty detector never passes min_sensors."""
+    created: list[int] = []
+    for sid, cfg in sorted(sources.items()):
+        pol = policy(cfg)
+        if not pol.get("single_source") or cfg.status == "retired":
+            continue
+        tail = float(pol.get("q_tail", 1e-5))
+        own = [r for r in rows if r["stream_id"] == sid]
+        anomalies = _persistent_anomalies(
+            own, {sid: cfg}, 1.0 - tail, presence_tail, int(pol.get("persist_n", 2))
+        )
+        anomalies = [a for a in anomalies if a.q_value is not None]  # silence isn't radiation
+        by_region: dict[str, list[_Anomaly]] = defaultdict(list)
+        for a in anomalies:
+            by_region[coarsen(a.cell, int(pol.get("region_resolution", corr_resolution)))].append(a)
+        for region, members in sorted(by_region.items()):
+            if len({m.cell for m in members}) < int(pol.get("min_sensors", 2)):
+                continue
+            since = min(m.bin_start for m in members)
+            if _alert_since_exists(conn, region, since):
+                continue
+            severity = sum(m.extremity for m in members) / len(members)
+            if cfg.status == "nursery":
+                # not yet proven calibrated: visible, but never priority 5
+                severity = min(severity, float(pol.get("nursery_severity_cap", 0.85)))
+            created.append(_insert_alert(conn, region, members, severity, now))
+    return created
+
+
+def _every_event_alerts(
+    conn: sqlite3.Connection,
+    sources: dict[str, SourceConfig],
+    corr_resolution: int,
+    now: int,
+) -> list[int]:
+    """Authoritative feeds: each newly ingested item is an alert. Reads the
+    ingestion keys (`seen`), not values, so it fires within one detect pass
+    of the poll instead of after bins close."""
+    created: list[int] = []
+    for sid, cfg in sorted(sources.items()):
+        pol = policy(cfg)
+        if not pol.get("every_event") or cfg.status == "retired":
+            continue
+        fresh_window = int(pol.get("fresh_seconds", 6 * 3600))
+        for r in conn.execute(
+            "SELECT cell, ts, first_seen FROM seen WHERE stream_id = ? AND first_seen >= ? "
+            "AND ts >= ? ORDER BY ts",
+            (sid, now - fresh_window, now - fresh_window),
+        ).fetchall():
+            region = coarsen(r["cell"], corr_resolution)
+            if _alert_since_exists(conn, region, r["first_seen"], stream_id=sid):
+                continue
+            member = _Anomaly(
+                stream_id=sid, cell=r["cell"], scale=0, bin_start=r["ts"], q_value=None,
+                presence_q=1.0, precision=1.0, modality=cfg.modality, extremity=1.0,
+            )
+            created.append(
+                _insert_alert(conn, region, [member], float(pol.get("severity", 0.9)), now,
+                              kind="source_alert")
+            )
+    return created
+
+
+def _alert_since_exists(
+    conn: sqlite3.Connection, region: str, since: int, stream_id: str | None = None
+) -> bool:
+    rows = conn.execute(
+        "SELECT evidence FROM alerts WHERE cell = ? AND opened_at >= ?", (region, since)
+    ).fetchall()
+    if stream_id is None:
+        return bool(rows)
+    return any(e.get("stream_id") == stream_id for r in rows for e in json.loads(r["evidence"]))
 
 
 def _persistent_anomalies(
@@ -174,6 +282,17 @@ def _open_alert(
 ) -> int:
     mean_ext = sum(m.extremity for m in members) / len(members)
     severity = min(1.0, mean_ext * len(modalities) / min_modalities)
+    return _insert_alert(conn, region, members, severity, now)
+
+
+def _insert_alert(
+    conn: sqlite3.Connection,
+    region: str,
+    members: list[_Anomaly],
+    severity: float,
+    now: int,
+    kind: str | None = None,
+) -> int:
     scale = min(m.scale for m in members)
     evidence = json.dumps(
         [
@@ -186,6 +305,7 @@ def _open_alert(
                 "presence_q": m.presence_q,
                 "precision": m.precision,
                 "modality": m.modality,
+                **({"kind": kind} if kind else {}),
             }
             for m in sorted(members, key=lambda m: m.extremity, reverse=True)
         ],
@@ -194,7 +314,7 @@ def _open_alert(
     cur = conn.execute(
         "INSERT INTO alerts (opened_at, status, severity, cell, scale, evidence) "
         "VALUES (?, 'open', ?, ?, ?, ?)",
-        (now, severity, region, scale, evidence),
+        (now, min(1.0, severity), region, scale, evidence),
     )
     conn.commit()
     return int(cur.lastrowid)  # type: ignore[arg-type]

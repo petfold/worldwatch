@@ -95,6 +95,8 @@ def parse_geojson_events(payload: Any, cfg: SourceConfig) -> list[Observation]:
     MultiPolygon (reduced to a centroid) or null (skipped); time may be ISO-8601
     or epoch ms; value is optional (pure-event → count flavor). time_field falls
     back through a list so alert feeds with onset/effective/sent all work.
+    `where` keeps only features whose property takes one of the listed values
+    (e.g. stations in operation); transform = "log" stores log(value).
     """
     time_fields = cfg.parse.get("time_fields") or [
         cfg.parse.get("time_field", "onset"),
@@ -102,16 +104,21 @@ def parse_geojson_events(payload: Any, cfg: SourceConfig) -> list[Observation]:
         "sent",
     ]
     value_field = cfg.parse.get("value_field")  # optional
+    transform = str(cfg.parse.get("transform", ""))
+    # where = { site_status = [1] }: keep features whose property is one of the values
+    where = {str(k): list(v) for k, v in (cfg.parse.get("where") or {}).items()}
     resolution = int(cfg.geocode.get("h3_resolution", 3))
 
     obs: list[Observation] = []
     for feat in payload.get("features", []):
+        props = feat.get("properties") or {}
+        if any(props.get(k) not in allowed for k, allowed in where.items()):
+            continue
         centroid = _feature_centroid(feat.get("geometry"))
         if centroid is None:
             continue
         lon, lat = centroid
 
-        props = feat.get("properties") or {}
         raw_time = next((props[f] for f in time_fields if props.get(f) is not None), None)
         if raw_time is None:
             continue
@@ -122,6 +129,10 @@ def parse_geojson_events(payload: Any, cfg: SourceConfig) -> list[Observation]:
         val = None
         if value_field is not None and props.get(value_field) is not None:
             val = float(props[value_field])
+            if transform == "log":  # multiplicative quantities (dose rates)
+                import math
+
+                val = math.log(max(val, 1e-9))
 
         obs.append(
             Observation(
@@ -357,9 +368,9 @@ def parse_vnp46a2_grid(payload: Any, cfg: SourceConfig) -> list[Observation]:
 
 @register("gdelt_export_events")
 def parse_gdelt_export_events(payload: Any, cfg: SourceConfig) -> list[Observation]:
-    """GDELT 2.0 export batch (zipped TSV, one row per event) → pure-event
-    count observations for geocoded events (ActionGeo lat/lon; ungeocoded rows
-    are dropped).
+    """GDELT 2.0 export batch (zipped TSV, one row per coded event) → one
+    pure-event observation per distinct article per cell (ActionGeo lat/lon;
+    ungeocoded rows are dropped).
 
     Every row in a batch shares one DATEADDED stamp (the batch end), but
     raw_ring's PK is (stream, cell, ts), so same-cell events would collapse to
@@ -379,6 +390,7 @@ def parse_gdelt_export_events(payload: Any, cfg: SourceConfig) -> list[Observati
     lat_col = int(cfg.parse.get("lat_col", 56))
     lon_col = int(cfg.parse.get("lon_col", 57))
     window = int(cfg.parse.get("batch_window_seconds", 900))
+    url_col = int(cfg.parse.get("url_col", 60))
     resolution = int(cfg.geocode.get("h3_resolution", 3))
     batch_end = int(payload["batch_epoch"])
 
@@ -402,6 +414,7 @@ def parse_gdelt_export_events(payload: Any, cfg: SourceConfig) -> list[Observati
             continue
         if not (-90.0 <= lat <= 90.0 and -180.0 <= lon <= 180.0):
             continue
+        url = cols[url_col].strip() if url_col < len(cols) else ""
         ctx = None
         if ctx_cols:
             raw = {name: cols[i].strip() for name, i in ctx_cols.items() if i < len(cols)}
@@ -419,11 +432,20 @@ def parse_gdelt_export_events(payload: Any, cfg: SourceConfig) -> list[Observati
                 a.title() for a in (raw.get("actor1"), raw.get("actor2")) if isinstance(a, str) and a
             )
             ctx = evidence.with_rank(cfg, evidence.pick(cfg, raw))
-        by_cell.setdefault(h3_cell(lat, lon, resolution), []).append((event_id, ctx))
+        by_cell.setdefault(h3_cell(lat, lon, resolution), []).append((event_id, url, ctx))
 
     obs: list[Observation] = []
-    for cell, events in sorted(by_cell.items()):
-        events.sort(key=lambda e: e[0])
+    for cell, coded in sorted(by_cell.items()):
+        # GDELT codes one article as ~3 events; the independent unit is the
+        # article (distinct SOURCEURL), which brings a cell's counts close to
+        # Poisson. Keep the most-mentioned coding of each article as its context.
+        best: dict[str, tuple[int, dict[str, object] | None]] = {}
+        for event_id, url, ctx in sorted(coded, key=lambda e: e[0]):
+            key = url or str(event_id)
+            rank = int((ctx or {}).get("_rank") or 0)
+            if key not in best or rank > int((best[key][1] or {}).get("_rank") or 0):
+                best[key] = (event_id, ctx)
+        events = sorted(best.values(), key=lambda e: e[0])
         count = len(events)
         for i, (_, ctx) in enumerate(events):
             obs.append(

@@ -42,6 +42,17 @@ sibling projects, where the tag is what publishes.
 
 ### Added
 
+- **Per-source alert policy** (doc/adr/0001) — a stanza's `[alerts]` table:
+  `role = "context"` (never corroborates; shown as news in the area),
+  `single_source` (alert alone when ≥ `min_sensors` of the network's own
+  stations agree past a stricter `q_tail`; nursery-capped at priority 4),
+  `every_event` (authoritative feeds alert on each new item within one detect
+  pass, without waiting for bins to close).
+- **Radiation: EURDEP (~3,600 stations, ~40 countries) and German ODL (~1,600)**
+  via BfS open data, hourly gamma dose rate, one station per fine cell;
+  single-source. Parser support: `where` property filter, `transform = "log"`.
+- **Authoritative alerts: USGS significant earthquakes, NWS Extreme** —
+  `every_event`.
 - **Evidence store — alerts say what happened.** Parsers keep a slim record per
   observation (per-stanza `[context]` fields): a quake's place, depth and USGS
   page; an NWS alert's type, severity and areas; a GDELT event's action,
@@ -59,6 +70,10 @@ sibling projects, where the tag is what publishes.
 
 ### Changed
 
+- **GDELT is context, not evidence, and counts articles.** News reports what
+  sensors race to beat; it no longer corroborates alerts. It counts distinct
+  articles per cell instead of coded events (~3.2 per article), which takes
+  its dispersion from var/mean ≈ 7.9 to ≈ 1.3.
 - **Layer 0 carries its own uncertainty (model v2, both flavors).** The count
   model was a plug-in EWMA negative binomial: after seeing 1 and 2 events it
   scored a 5 as 1-in-275 against Poisson(1.05), where the Bayesian predictive
