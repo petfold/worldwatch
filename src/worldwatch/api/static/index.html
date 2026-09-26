@@ -59,6 +59,7 @@
                                        padding: 7px 9px; border: 1px solid var(--line); box-shadow: 0 2px 8px #0008; }
     .hover .maplibregl-popup-tip { border-top-color: #151c25; border-bottom-color: #151c25; }
     .tipmuted { color: var(--faint); }
+    .story { color: #e6edf5; }
     #legend { position: absolute; left: 10px; bottom: 28px; background: rgba(17,22,29,.92); border: 1px solid var(--line);
               border-radius: 6px; padding: 8px 10px; font-size: 11px; color: var(--muted); max-width: 250px; }
     #legend b { color: var(--text); font-weight: 600; display: block; margin: 4px 0 2px; }
@@ -159,6 +160,7 @@
       const tip = {
         activity: (p) =>
           `<b style="color:${MODALITY_COLORS[p.modality] || "#ccc"}">${esc(p.label)}</b><br>` +
+          (p.story ? `<span class="story">${esc(p.story)}</span><br>` : "") +
           `latest: ${esc(p.latest)}<br>${p.n} observation${p.n === 1 ? "" : "s"} in 24 h · last ${ago(p.last)}<br>` +
           `<span class="tipmuted">${esc(p.where)} · click for everything here</span>`,
         "surprise-fill": (p) =>
@@ -178,6 +180,17 @@
     });
     refreshPanel();
     setInterval(() => { refreshPanel(); refreshMap(); }, REFRESH_MS);
+
+    // Deep links from pushes: ?alert=<id> or ?cell=<h3 cell>
+    (async () => {
+      const q = new URLSearchParams(location.search);
+      if (q.get("alert")) {
+        const r = await fetch(`/api/alerts/${encodeURIComponent(q.get("alert"))}`);
+        if (r.ok) showAlert(await r.json());
+      } else if (q.get("cell")) {
+        showCell(q.get("cell"));
+      }
+    })();
 
     let layerData = { activity: [], surprise: [] };
     // The panel does not wait for the basemap: its "load" event needs every
@@ -277,12 +290,13 @@
     function showDetail(html) {
       const d = document.getElementById("detail");
       d.innerHTML = html; d.style.display = "block";
+      d.scrollIntoView({ block: "nearest", behavior: "smooth" });
     }
 
     function showAlert(a) {
       showDetail(`<b>${esc(a.title)}</b>\n\n${esc(a.text)}` +
         (a.map_url ? `\n\n<a href="${esc(a.map_url)}" target="_blank" rel="noopener">open region on map ↗</a>` : ""));
-      flyToCell(a.evidence.find((e) => e.cell)?.cell);
+      flyTo(a.center, 5);
     }
 
     function showSource(s) {
@@ -307,11 +321,18 @@
       const rows = c.streams.map((s) =>
         `<span style="color:${MODALITY_COLORS[s.modality] || "#888"}">●</span> <b>${esc(s.label)}</b>\n` +
         `   ${esc(s.latest || "—")}${s.latest_at ? " · " + ago(s.latest_at) : ""} · ${s.observations} obs in 24 h` +
-        (s.peak ? `\n   24 h peak surprise: <span class="chip ${chipClass(s.peak)}">${esc(s.peak)}</span>` : ""));
+        (s.peak ? `\n   24 h peak surprise: <span class="chip ${chipClass(s.peak)}">${esc(s.peak)}</span>` : "") +
+        (s.stories || []).map((st) =>
+          `\n   › ${esc(st.text)}` + (st.url ? ` <a href="${esc(st.url)}" target="_blank" rel="noopener">${esc(st.domain || "link")} ↗</a>` : "") +
+          ` <span class="tipmuted">${ago(st.ts)}</span>`).join(""));
+      flyTo(c.center, 5);
       showDetail(`<b>${esc(c.where)}</b>  <span class="sub">${esc(c.cell)}</span>\n\n${rows.join("\n") || "nothing observed here in 24 h"}` +
         (c.map_url ? `\n\n<a href="${esc(c.map_url)}" target="_blank" rel="noopener">open on OpenStreetMap ↗</a>` : ""));
     }
 
+    function flyTo(center, zoom) {  // center = [lat, lng] from the API
+      if (center) map.flyTo({ center: [center[1], center[0]], zoom: Math.max(map.getZoom(), zoom) });
+    }
     function flyToCell(cell) {
       const f = [...layerData.activity, ...layerData.surprise].find((f) => f.properties.cell === cell);
       if (!f) return;

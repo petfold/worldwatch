@@ -91,8 +91,14 @@ worldwatch/
    never stored ambiguously.
 7. **Idempotency**: consolidator and detector must be safely re-runnable over the same
    window (crash-restart is the normal case).
-8. **Field-drop at ingestion**: parse, keep the minimal record, discard the rest before
-   it touches disk. Bandwidth/storage budget: 1–3 GB/day down, MB/day retained.
+8. **Detection sees only the contract; people see what happened.** The detection path
+   keeps the minimal record (stream, cell, ts, value). What an observation *was* — a
+   quake's place and USGS page, an alert headline, a news event's article link — goes
+   to the evidence store (`worldwatch.evidence`, per-stanza `[context]` fields) so a
+   push can say what happened without its reader searching the web. The evidence
+   store has a fixed byte budget, oldest evicted first (`WW_CONTEXT_BUDGET_MB`), and is
+   never read by Layer 0/1 or the alert engine. Everything a stanza doesn't name is
+   dropped at the door; never keep personal data. Bandwidth: 1–3 GB/day down.
 9. **Respect API terms**: honor rate limits, set a descriptive User-Agent, use
    conditional requests where supported. No scraping around auth walls; the operator
    registers any accounts personally.

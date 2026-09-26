@@ -5,7 +5,8 @@ registered in PARSERS.  Adding a source with an existing format needs no code
 (guardrail 2); a genuinely new payload shape adds one function here.
 
 All parsers field-drop at the door (guardrail 8): keep stream_id, cell, ts,
-value, and a minimal meta dict; discard everything else.
+value, a minimal meta dict, and — where the stanza names [context] fields —
+the slim human-readable record for the evidence store; discard everything else.
 """
 
 from __future__ import annotations
@@ -13,6 +14,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
+from worldwatch import evidence
 from worldwatch.config.loader import SourceConfig
 from worldwatch.ingest.geocode import fixed_cell, h3_cell, resolve_fixed
 from worldwatch.ingest.models import Observation
@@ -77,6 +79,9 @@ def parse_geojson_features(payload: Any, cfg: SourceConfig) -> list[Observation]
                 ts=ts,
                 value=val,
                 meta={"depth_km": coords[2]} if len(coords) > 2 else None,
+                context=evidence.with_rank(
+                    cfg, evidence.pick(cfg, {**props, "depth_km": coords[2] if len(coords) > 2 else None})
+                ),
             )
         )
     return obs
@@ -124,6 +129,7 @@ def parse_geojson_events(payload: Any, cfg: SourceConfig) -> list[Observation]:
                 cell=h3_cell(lat, lon, resolution),
                 ts=ts,
                 value=val,
+                context=evidence.with_rank(cfg, evidence.pick(cfg, props)),
             )
         )
     return obs
@@ -362,8 +368,10 @@ def parse_gdelt_export_events(payload: Any, cfg: SourceConfig) -> list[Observati
     by event id — which is collision-free while a cell has ≤ window events.
     Same file → same rows, so re-ingest stays idempotent.
 
-    Event *content* fields (actors, CAMEO codes, tone) are dropped at the door
-    (guardrail 8): the P0 signal is geocoded news-event counts per cell.
+    The detection signal is geocoded news-event counts per cell. With a
+    [context] table, each event also keeps its named columns (actors, place,
+    mentions, tone, article URL…) plus `action`, the CAMEO root code in words,
+    for the evidence store; the rest of the row is dropped at the door.
     """
     import io
     import zipfile
@@ -377,7 +385,10 @@ def parse_gdelt_export_events(payload: Any, cfg: SourceConfig) -> list[Observati
     with zipfile.ZipFile(io.BytesIO(payload["content"])) as z:
         text = z.read(z.namelist()[0]).decode("utf-8", errors="replace")
 
-    by_cell: dict[str, list[int]] = {}
+    ctx_cols: dict[str, int] = {
+        str(k): int(v) for k, v in ((evidence.spec(cfg) or {}).get("columns") or {}).items()
+    }
+    by_cell: dict[str, list[tuple[int, dict[str, object] | None]]] = {}
     for line in text.splitlines():
         cols = line.split("\t")
         if len(cols) <= max(lat_col, lon_col):
@@ -391,21 +402,68 @@ def parse_gdelt_export_events(payload: Any, cfg: SourceConfig) -> list[Observati
             continue
         if not (-90.0 <= lat <= 90.0 and -180.0 <= lon <= 180.0):
             continue
-        by_cell.setdefault(h3_cell(lat, lon, resolution), []).append(event_id)
+        ctx = None
+        if ctx_cols:
+            raw = {name: cols[i].strip() for name, i in ctx_cols.items() if i < len(cols)}
+            for name in ("mentions", "sources", "articles"):
+                if raw.get(name, "").isdigit():
+                    raw[name] = int(raw[name])  # type: ignore[assignment]
+            if raw.get("tone"):
+                try:
+                    raw["tone"] = round(float(raw["tone"]), 1)  # type: ignore[assignment]
+                except ValueError:
+                    pass
+            raw["action"] = CAMEO_ROOTS.get(str(raw.get("root", "")), "")
+            raw["headline"] = headline_from_url(str(raw.get("url", "")))
+            raw["actors"] = " / ".join(
+                a.title() for a in (raw.get("actor1"), raw.get("actor2")) if isinstance(a, str) and a
+            )
+            ctx = evidence.with_rank(cfg, evidence.pick(cfg, raw))
+        by_cell.setdefault(h3_cell(lat, lon, resolution), []).append((event_id, ctx))
 
     obs: list[Observation] = []
-    for cell, event_ids in sorted(by_cell.items()):
-        event_ids.sort()
-        count = len(event_ids)
-        for i in range(count):
+    for cell, events in sorted(by_cell.items()):
+        events.sort(key=lambda e: e[0])
+        count = len(events)
+        for i, (_, ctx) in enumerate(events):
             obs.append(
                 Observation(
                     stream_id=cfg.stream_id,
                     cell=cell,
                     ts=batch_end - window + (i * window) // count,
+                    context=ctx,
                 )
             )
     return obs
+
+
+def headline_from_url(url: str) -> str:
+    """A readable pseudo-headline from a news URL's slug — GDELT carries no
+    title, but most sites put one in the path ('…/jay-slaters-mum-glanced-37704758'
+    → 'Jay slaters mum glanced'). Empty when the path has no wordy segment."""
+    import re
+    from urllib.parse import unquote, urlparse
+
+    segments = [s for s in unquote(urlparse(url).path).split("/") if s]
+    best = ""
+    for seg in segments:
+        seg = re.sub(r"\.(s?html?|php|aspx?)$", "", seg, flags=re.I)
+        seg = re.sub(r"^\d+[._-]", "", seg)  # '26555931.south-wales-…' ids
+        words = [w for w in re.split(r"[-_+\s]+", seg) if w and not re.fullmatch(r"[\d.]+|[0-9a-f]{8,}", w, re.I)]
+        if len(words) >= 3 and len(" ".join(words)) > len(best):
+            best = " ".join(words)
+    return (best[:1].upper() + best[1:])[:160] if best else ""
+
+
+# CAMEO event root codes (GDELT EventRootCode) in plain words.
+CAMEO_ROOTS: dict[str, str] = {
+    "01": "Public statement", "02": "Appeal", "03": "Intent to cooperate",
+    "04": "Consultation", "05": "Diplomatic cooperation", "06": "Material cooperation",
+    "07": "Aid", "08": "Concession", "09": "Investigation", "10": "Demand",
+    "11": "Disapproval", "12": "Rejection", "13": "Threat", "14": "Protest",
+    "15": "Show of force", "16": "Reduced relations", "17": "Coercion",
+    "18": "Assault", "19": "Fighting", "20": "Mass violence",
+}
 
 
 # Sentinel: parser could not derive a timestamp; the poller substitutes poll time.

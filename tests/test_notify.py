@@ -80,6 +80,24 @@ async def test_send_ntfy_click_opens_map(db):
     assert "openstreetmap.org" in seen["click"]
 
 
+async def test_send_ntfy_deep_links_dashboard_when_configured(db):
+    import h3
+
+    cell = h3.latlng_to_cell(35.7, 139.7, 2)
+    row = _alert(db, 5, cell, 0.8, [{"stream_id": "q", "modality": "physical", "q_value": 0.999, "presence_q": 1.0}])
+    seen = {}
+
+    def handler(request):
+        seen.update(request.headers)
+        return httpx.Response(200)
+
+    cfg = NtfyConfig(server="http://n", topic="t", dashboard_url="https://example.org:8001")
+    async with _client(handler) as client:
+        await send_ntfy(client, cfg, row)
+    assert seen["click"] == "https://example.org:8001/?alert=5"
+    assert seen["actions"].startswith("view, Map, https://www.openstreetmap.org/")
+
+
 def test_format_silence_alert(db):
     row = _alert(
         db,

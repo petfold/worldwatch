@@ -33,6 +33,23 @@ sibling projects, where the tag is what publishes.
   closed on a different threadpool thread than opened it (500s when the page
   fetched several endpoints at once).
 
+### Added
+
+- **Evidence store — alerts say what happened.** Parsers keep a slim record per
+  observation (per-stanza `[context]` fields): a quake's place, depth and USGS
+  page; an NWS alert's type, severity and areas; a GDELT event's action,
+  actors, place, mentions, tone, article link and a headline read from the
+  URL slug. Stored in `context` (schema v5) under a fixed byte budget
+  (`WW_CONTEXT_BUDGET_MB`, default 2 GB), oldest evicted first by the
+  consolidator; never read by detection. Pushes list the top stories behind
+  each signal with up to three tap-to-open buttons (source pages, map); the
+  dashboard shows them on hover and in cell details. Guardrail 8 rewritten
+  accordingly.
+- **Public read-only dashboard** — `ops/nginx/worldwatch-public.conf` serves it
+  at `https://categor.io:8001` (GET only, rate-limited, noindex); with
+  `WW_DASHBOARD_URL` set, tapping a push opens that alert on the dashboard
+  (`?alert=` / `?cell=` deep links).
+
 ### Changed
 
 - **Readable pushes** — each evidence line now names the source, the rarity

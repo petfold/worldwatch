@@ -1,7 +1,9 @@
 """Normalized observation record — the output of every parser.
 
-Field-drop happens here (guardrail 8): parsers keep only the minimal record
-and discard the rest before it touches disk.
+Parsers keep the minimal record for the detection path (stream, cell, ts,
+value) plus, when the stanza has a [context] table, a slim human-readable
+`context` dict (place, headline, link…) for the evidence store. Everything
+else is dropped at the door (guardrail 8).
 """
 
 from __future__ import annotations
@@ -22,3 +24,5 @@ class Observation:
     ts: int  # UTC epoch seconds
     value: float | None = None
     meta: dict[str, object] | None = None
+    # evidence store only (what happened, for people); detection never reads it
+    context: dict[str, object] | None = None

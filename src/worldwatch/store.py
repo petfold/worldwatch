@@ -11,6 +11,7 @@ import time
 from collections.abc import Iterable
 from typing import Any
 
+from worldwatch import evidence
 from worldwatch.ingest.models import Observation
 
 
@@ -40,6 +41,8 @@ def write_observations(
                 json.dumps(o.meta, separators=(",", ":")) if o.meta else None,
             ),
         )
+        if o.context:
+            evidence.put(conn, o)
         written += 1
     conn.commit()
     return written

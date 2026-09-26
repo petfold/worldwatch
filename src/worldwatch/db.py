@@ -134,6 +134,22 @@ MIGRATIONS: list[str] = [
     INSERT OR IGNORE INTO seen (stream_id, cell, ts, first_seen)
         SELECT stream_id, cell, ts, CAST(strftime('%s', 'now') AS INTEGER) FROM raw_ring;
     """,
+    # v5 — evidence store: what an observation was, for people (push text,
+    # dashboard). Never read by detection. A fixed byte budget, oldest first
+    # out (rowid order = arrival order); see worldwatch.evidence.
+    """
+    CREATE TABLE IF NOT EXISTS context (
+        stream_id   TEXT NOT NULL,
+        cell        TEXT NOT NULL,
+        ts          INTEGER NOT NULL,
+        rank        REAL,
+        size        INTEGER NOT NULL,
+        data        TEXT NOT NULL,
+        UNIQUE (stream_id, cell, ts)
+    );
+    CREATE INDEX IF NOT EXISTS context_lookup ON context (stream_id, cell, ts);
+    CREATE INDEX IF NOT EXISTS context_ts ON context (ts);
+    """,
 ]
 
 

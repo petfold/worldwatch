@@ -26,6 +26,12 @@ label            = "Earthquakes (M1+)"
 unit             = "quakes"
 max_prefix       = "M"
 
+[usgs_seismic.context]
+fields           = ["title", "place", "mag", "magType", "depth_km", "url", "tsunami", "alert", "felt", "sig"]
+rank             = "mag"
+text             = "M{mag}| {place}|, depth {depth_km:.0f} km"   # "|": optional pieces
+link             = "url"
+
 
 # Continuous, not count: the hourly `views` value is the signal — as a count
 # stream Layer 0 would score bins.n (rows per bin, a near-constant) and ignore
@@ -149,6 +155,11 @@ h3_resolution    = 3
 label            = "US weather alerts (NWS)"
 unit             = "alerts"
 
+[nws_severe_alerts.context]
+fields           = ["event", "headline", "severity", "urgency", "certainty", "areaDesc"]
+text             = "{event}| ({severity})|: {areaDesc}"
+# NWS alert ids are API URLs (JSON), not pages for people, so no link field
+
 
 [safecast_radiation]
 class            = "radiation_station"
@@ -200,6 +211,15 @@ h3_resolution    = 3
 [gdelt_events.display]
 label            = "News events (GDELT)"
 unit             = "events"
+
+# Kept per event for the evidence store (never detection): the GDELT 2.0
+# export columns below, plus `action` (EventRootCode in words) and `actors`.
+[gdelt_events.context]
+columns          = { actor1 = 6, actor2 = 16, code = 26, root = 28, goldstein = 30, mentions = 31, sources = 32, tone = 34, place = 52, url = 60 }
+fields           = ["headline", "action", "actors", "place", "mentions", "sources", "tone", "goldstein", "code", "url"]
+rank             = "mentions"
+text             = "{headline}| - {action}|, {place}"
+link             = "url"
 
 
 # --- Internet health: Cloudflare Radar netflows ------------------------------

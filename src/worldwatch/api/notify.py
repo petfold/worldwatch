@@ -17,11 +17,16 @@ from dataclasses import dataclass
 
 import httpx
 
+from worldwatch import evidence as evstore
 from worldwatch.api import context
+from worldwatch.cascade.bins import bin_width
 from worldwatch.config.loader import SourceConfig
 from worldwatch.instrument import record_health
 
 MAX_EVIDENCE_LINES = 8
+STORIES_PER_SIGNAL = 2
+MAX_MESSAGE_BYTES = 3900  # ntfy's limit is 4096; leave room for the footer
+MAX_ACTIONS = 3  # ntfy allows three buttons
 
 
 @dataclass(frozen=True)
@@ -29,6 +34,7 @@ class NtfyConfig:
     server: str
     topic: str
     token: str | None = None
+    dashboard_url: str | None = None  # public dashboard; the push deep-links into it
 
     @classmethod
     def from_env(cls) -> NtfyConfig | None:
@@ -39,6 +45,7 @@ class NtfyConfig:
             server=os.environ.get("WW_NTFY_SERVER", "https://ntfy.sh").rstrip("/"),
             topic=topic,
             token=os.environ.get("WW_NTFY_TOKEN"),
+            dashboard_url=(os.environ.get("WW_DASHBOARD_URL") or "").rstrip("/") or None,
         )
 
 
@@ -75,14 +82,52 @@ def format_alert(
     lines.append("")
     for e in evidence[:MAX_EVIDENCE_LINES]:
         lines.append(_evidence_line(e, conn, sources))
+        for rec in _stories(e, conn, sources):
+            cfg = sources.get(e["stream_id"])
+            url = evstore.link(cfg, rec)
+            lines.append(f"    > {evstore.summary(cfg, rec)}" + (f" [{evstore.domain(url)}]" if url else ""))
     if len(evidence) > MAX_EVIDENCE_LINES:
         lines.append(f"+{len(evidence) - MAX_EVIDENCE_LINES} more signals")
     lines.append("")
     lines.append(f"streams: {', '.join(streams[:6])}")
+    message = "\n".join(lines)
+    while len(message.encode()) > MAX_MESSAGE_BYTES and len(lines) > 4:
+        lines.pop(-3)  # drop the last detail line, keep header and footer
+        message = "\n".join(lines[:-2] + ["(truncated)"] + lines[-2:])
 
     priority = 5 if severity >= 0.9 else 4 if severity >= 0.7 else 3
     tags = ["rotating_light"] if not is_silence else ["mute"]
-    return title, "\n".join(lines), priority, tags
+    return title, message, priority, tags
+
+
+def _stories(
+    e: dict, conn: sqlite3.Connection | None, sources: dict[str, SourceConfig]
+) -> list[dict[str, object]]:
+    """Evidence-store records behind one signal: same stream and cell, inside
+    the scored bin — what actually happened, already downloaded."""
+    if conn is None or not e.get("cell") or e.get("bin_start") is None:
+        return []
+    cfg = sources.get(e["stream_id"])
+    if cfg is None or evstore.spec(cfg) is None:
+        return []
+    t0 = int(e["bin_start"])
+    t1 = t0 + bin_width(int(e.get("scale") or 0))
+    return evstore.top(conn, e["stream_id"], e["cell"], t0, t1, STORIES_PER_SIGNAL)
+
+
+def story_links(
+    alert: sqlite3.Row, conn: sqlite3.Connection | None, sources: dict[str, SourceConfig] | None
+) -> list[tuple[str, str]]:
+    """(button label, url) for the alert's top source pages, best first."""
+    sources = sources or {}
+    out: list[tuple[str, str]] = []
+    for e in json.loads(alert["evidence"]):
+        cfg = sources.get(e["stream_id"])
+        for rec in _stories(e, conn, sources):
+            url = evstore.link(cfg, rec)
+            if url and all(url != u for _, u in out):
+                out.append((evstore.domain(url)[:24], url))
+    return out
 
 
 def _evidence_line(
@@ -105,6 +150,11 @@ def _evidence_line(
     return line
 
 
+def _ascii(s: str) -> str:
+    """HTTP header values must be latin-1; keep button labels plain ASCII."""
+    return s.encode("ascii", "ignore").decode().replace(",", " ").replace(";", " ") or "Link"
+
+
 async def send_ntfy(
     client: httpx.AsyncClient,
     cfg: NtfyConfig,
@@ -119,8 +169,19 @@ async def send_ntfy(
         "Priority": str(priority),
         "Tags": ",".join(tags),
     }
-    if url := context.map_url(alert["cell"]):
-        headers["Click"] = url  # tapping the push opens the region on a map
+    map_url = context.map_url(alert["cell"])
+    buttons = story_links(alert, conn, sources)  # tap straight to the source pages
+    if cfg.dashboard_url:
+        # tapping the push opens this alert on the dashboard; the map is a button
+        headers["Click"] = f"{cfg.dashboard_url}/?alert={alert['alert_id']}"
+        if map_url:
+            buttons.append(("Map", map_url))
+    elif map_url:
+        headers["Click"] = map_url  # no dashboard configured: open the region on a map
+    if buttons:
+        headers["Actions"] = "; ".join(
+            f"view, {_ascii(label)}, {url}" for label, url in buttons[:MAX_ACTIONS]
+        )
     if cfg.token:
         headers["Authorization"] = f"Bearer {cfg.token}"
     resp = await client.post(

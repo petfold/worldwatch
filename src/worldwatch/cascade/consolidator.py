@@ -10,7 +10,8 @@ processed rows are removed, so a re-run over the same window is a no-op.
 Commutative: Welford/t-digest merges are order-independent, and ingestion
 dedups on (stream, cell, ts) via the `seen` table — which outlives raw_ring —
 so out-of-order, duplicate or re-fetched observations converge to the same bins.
-This pass also prunes `seen` keys older than the retention window.
+This pass also prunes `seen` keys older than the retention window and
+evicts the oldest evidence-store records beyond its byte budget.
 
 Per-bin value moments assume a stream is consistently valued or pure-event
 (its flavor/parse is fixed): bins.n counts observations, and vmean/m2/sketch
@@ -23,6 +24,7 @@ import sqlite3
 import time
 from collections import defaultdict
 
+from worldwatch import evidence
 from worldwatch.cascade import welford
 from worldwatch.cascade.bins import bin_for
 from worldwatch.cascade.tdigest import TDigest
@@ -40,6 +42,7 @@ def consolidate(
     now: int | None = None,
     fine_window_seconds: int = DEFAULT_FINE_WINDOW_SECONDS,
     seen_retention_seconds: int = DEFAULT_SEEN_RETENTION_SECONDS,
+    context_budget_bytes: int = evidence.DEFAULT_BUDGET_MB * 1024 * 1024,
 ) -> int:
     """Fold raw_ring rows older than the fine window into bins.
 
@@ -50,6 +53,7 @@ def consolidate(
 
     conn.execute("DELETE FROM seen WHERE first_seen < ?", (poll_now - seen_retention_seconds,))
     conn.commit()
+    evidence.prune(conn, context_budget_bytes)
 
     raw = conn.execute(
         "SELECT stream_id, cell, ts, value FROM raw_ring WHERE ts < ?",

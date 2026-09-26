@@ -24,6 +24,7 @@ from fastapi import Depends, FastAPI, HTTPException
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 
+from worldwatch import evidence
 from worldwatch.api import context
 from worldwatch.api.notify import format_alert
 from worldwatch.cascade.bins import bin_width
@@ -272,10 +273,20 @@ def create_app(
             key = (r["stream_id"], r["cell"])
             latest[key] = r
             totals[key] += r["n"]
+        stories: dict[tuple[str, str], dict] = {}
+        for r in conn.execute(
+            "SELECT stream_id, cell, data FROM ("
+            " SELECT stream_id, cell, data, ROW_NUMBER() OVER ("
+            "  PARTITION BY stream_id, cell ORDER BY rank DESC NULLS LAST, ts DESC) AS rn"
+            " FROM context WHERE ts >= ?) WHERE rn = 1",
+            (cutoff,),
+        ):
+            stories[(r["stream_id"], r["cell"])] = json.loads(r["data"])
         features = []
         for (sid, cell), r in latest.items():
             lat, lon = context.cell_center(cell)  # type: ignore[misc]
             cfg = cfgs.get(sid)
+            story = stories.get((sid, cell))
             features.append(
                 {
                     "type": "Feature",
@@ -289,6 +300,7 @@ def create_app(
                         "n": totals[(sid, cell)],
                         "latest": context.describe_bin(sid, cfg, r),
                         "last": context.observed_at(r, now),
+                        "story": evidence.summary(cfg, story) if story else "",
                     },
                 }
             )
@@ -334,10 +346,17 @@ def create_app(
             if sid in peak:
                 item["peak"] = context.surprise_word(peak[sid]["q_value"])
                 item["peak_at"] = peak[sid]["bin_start"]
+            recs = evidence.top(conn, sid, cell, cutoff, _now() + 1, limit=5)
+            if recs:
+                item["stories"] = [
+                    {"text": evidence.summary(cfg, rec), "url": evidence.link(cfg, rec),
+                     "domain": evidence.domain(evidence.link(cfg, rec) or "") or None, "ts": rec["ts"]}
+                    for rec in recs
+                ]
             streams.append(item)
         return JSONResponse(
-            {"cell": cell, "where": context.where(cell), "map_url": context.map_url(cell),
-             "streams": streams}
+            {"cell": cell, "where": context.where(cell), "center": context.cell_center(cell),
+             "map_url": context.map_url(cell), "streams": streams}
         )
 
     return app
@@ -350,7 +369,7 @@ def _alert_dict(
     d["evidence"] = json.loads(row["evidence"])
     title, text, _, _ = format_alert(row, conn, cfgs)
     d.update(title=title, text=text, where=context.where(row["cell"]),
-             map_url=context.map_url(row["cell"]))
+             center=context.cell_center(row["cell"]), map_url=context.map_url(row["cell"]))
     return d
 
 

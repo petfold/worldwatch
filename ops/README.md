@@ -40,6 +40,25 @@ together and half the default CPU/IO weight, so a co-hosted website keeps
 priority and an OOM stays inside worldwatch. Adjust in
 `ops/systemd/worldwatch.slice`.
 
+## Public dashboard (read-only)
+
+`ops/nginx/worldwatch-public.conf` serves the dashboard at `https://categor.io:8001`
+with the site's existing certificate: GET only (alert labelling stays behind the
+SSH tunnel), rate-limited, `noindex`. uvicorn itself keeps listening on
+127.0.0.1:8001. Set `WW_DASHBOARD_URL=https://categor.io:8001` so pushes open the
+alert on the dashboard; install steps are in the file's header.
+
+## Storage budgets
+
+| What | Kept | Setting |
+|------|------|---------|
+| bins / surprise | permanent (small) | — |
+| `seen` keys (dedup across re-fetches) | 8 days | `WW_SEEN_RETENTION_SECONDS` |
+| evidence store (what happened, for people) | fixed size, oldest out | `WW_CONTEXT_BUDGET_MB` (2048) |
+
+SQLite reuses freed pages, so the file levels off near the budgets rather than
+shrinking; `VACUUM` reclaims space if a budget is lowered.
+
 ## Manual invocation (debugging)
 
 ```bash

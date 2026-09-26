@@ -9,6 +9,8 @@ Environment (all optional, sensible defaults):
   WW_SEEN_RETENTION_SECONDS how long ingested observation keys are remembered
                          for dedup across re-fetches (default 8 days; must
                          exceed the longest window a poller re-requests)
+  WW_CONTEXT_BUDGET_MB   evidence-store size (what observations were, for
+                         pushes/dashboard); oldest evicted first (default 2048)
 """
 
 from __future__ import annotations
@@ -42,6 +44,12 @@ def seen_retention_seconds() -> int:
     from worldwatch.cascade.consolidator import DEFAULT_SEEN_RETENTION_SECONDS
 
     return int(os.environ.get("WW_SEEN_RETENTION_SECONDS", DEFAULT_SEEN_RETENTION_SECONDS))
+
+
+def context_budget_bytes() -> int:
+    from worldwatch.evidence import DEFAULT_BUDGET_MB
+
+    return int(float(os.environ.get("WW_CONTEXT_BUDGET_MB", DEFAULT_BUDGET_MB)) * 1024 * 1024)
 
 
 def load() -> tuple[sqlite3.Connection, dict[str, SourceConfig]]:
