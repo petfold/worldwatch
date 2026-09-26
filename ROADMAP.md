@@ -54,16 +54,30 @@ the repository alone; they need the deployment.
 ### Deployment — the operator's half
 
 - [x] Push channel decided (DONE 2026-07-11): self-hosted ntfy on the VPS.
-- [ ] Provision the small VPS — Python 3.12+, systemd.
+- [x] Provision the small VPS (DONE 2026-09-25) — categor.io, shared with a
+      website; see `ops/README.md`.
+- [x] Push channel working end to end (DONE 2026-09-26) — ntfy.categor.io,
+      phone subscribed, Worldwatch's own notifier verified.
 - [ ] Point the existing restic/B2 backup at the SQLite file and its WAL.
 - [ ] Register any per-source accounts that need the VPS's own IP.
-- [ ] Decide the data directory and retention — raw fine-window length, Parquet
-      export policy.
+- [x] Data directory and retention (DONE 2026-09-26) — `/var/lib/worldwatch`;
+      fixed budgets, oldest out (`ops/README.md` § Storage budgets). Parquet
+      export still open.
+
+The 14-day soak restarted 2026-09-26 after the double-counting fix; it ends
+around 2026-10-10.
 
 ## Layer 1 — after P0
 
 - [ ] Explicitly out of scope for P0 ("No Layer 1 yet"). Scope it once P0's
       definition of done is met.
+- [ ] Research first: heavy tails and dependence between sources in the
+      extremes (extremal coefficient, Cauchy combination, GPD tails, graphical
+      models for extremes) — agenda in
+      [`doc/research-tails-and-dependence.md`](doc/research-tails-and-dependence.md);
+      parked 2026-09-26.
+- [ ] Alert latency: bins are scored only once closed (≈ 40–60 min after an
+      observation); authoritative feeds already bypass this (ADR 0001).
 
 ---
 
