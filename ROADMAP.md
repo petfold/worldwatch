@@ -76,8 +76,11 @@ around 2026-10-10.
       models for extremes) — agenda in
       [`doc/research-tails-and-dependence.md`](doc/research-tails-and-dependence.md);
       parked 2026-09-26.
-- [ ] Alert latency: bins are scored only once closed (≈ 40–60 min after an
-      observation); authoritative feeds already bypass this (ADR 0001).
+- [ ] Real-time detection path, own active prober + IODA, coverage balance —
+      [`doc/adr/0002-real-time-detection-and-coverage.md`](doc/adr/0002-real-time-detection-and-coverage.md)
+      (proposed 2026-09-26; measured per-source latency in
+      [`doc/source-latency.tsv`](doc/source-latency.tsv)). Pipeline currently
+      adds 30–60 min; target seconds. Radiation deploy waits for its phase 1.
 
 ---
 

@@ -1,0 +1,14 @@
+source	event	measured_median_to_db	measured_p90_to_db	source_of_delay	pipeline_extra	typical_total_to_alert	faster_option
+coinbase btc/eth	price move	0 min	0 min	real-time spot; polled every 5 min	30-45 min (surprise path)	35-50 min	shorter detection path
+nws_extreme	alert issued	6 min	13 min	warnings often precede the hazard	<=5 min (every_event)	10-20 min	-
+nws_severe_alerts	alert issued	6 min	13 min	as above; polled every 15 min	30-45 min	40-60 min	shorter detection path
+usgs_significant	quake origin	7 min	40 min	USGS review for significant events	<=5 min (every_event)	15-45 min	-
+usgs_seismic	quake origin	7 min	40 min	US networks minutes; international M4.5+ 20-40 min	30-45 min	40-60 min	shorter detection path; EMSC as second source
+gdelt_events	article published	10 min after batch	16 min	15-min batches plus news's own delay	context only	n/a	-
+bfs_odl_gamma (Germany)	dose change	1.2 h after hour end	1.2 h	hourly mean (+0-60 min in the hour), relay	30-60 min	~2.5 h	-
+cf_radar_netflows_*	traffic drop	1.8 h	2.0 h	Radar aggregation delay	30-60 min	~2.5 h	check other Radar endpoints
+eurdep_gamma	dose change	2.2 h after hour end	5.2 h	per-country relay (CH/Baltics 1.2 h ... TR 22 h, RU 27 h)	30-60 min	~3 h (up to ~6 h)	national feeds directly
+wikipedia_pageviews	attention spike	3.5 h	3.5 h	hourly aggregates published late	30-60 min	~4 h	-
+night_lights (VNP46A2)	blackout	9.3 d	9.3 d	gap-filled science product	-	~9 d	VNP46A1 NRT via LANCE (~3 h)
+safecast_radiation	reading	years	-	endpoint serves stale data	-	-	retire (EURDEP/BfS supersede)
+reference: mainstream news (major quake)	first wire flash	5-15 min	-	based on USGS/EMSC itself	-	-	-
