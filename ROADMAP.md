@@ -78,7 +78,7 @@ around 2026-10-10.
       parked 2026-09-26.
 - [ ] Real-time detection path, own active prober + IODA, coverage balance —
       [`doc/adr/0002-real-time-detection-and-coverage.md`](doc/adr/0002-real-time-detection-and-coverage.md)
-      (proposed 2026-09-26; measured per-source latency in
+      (accepted 2026-09-26; measured per-source latency in
       [`doc/source-latency.tsv`](doc/source-latency.tsv)). Pipeline currently
       adds 30–60 min; target seconds. Radiation deploy waits for its phase 1.
 

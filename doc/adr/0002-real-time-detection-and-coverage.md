@@ -1,6 +1,6 @@
 # ADR 0002 — Real-time detection path, active probing, coverage balance
 
-Date: 2026-09-26 · Status: **proposed** (for operator review)
+Date: 2026-09-26 · Status: **accepted** (2026-09-26)
 
 ## Context
 
