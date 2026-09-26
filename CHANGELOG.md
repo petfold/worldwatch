@@ -19,9 +19,24 @@ sibling projects, where the tag is what publishes.
 - **GDELT behind a stale CDN edge** — some Google CDN edges serve a cached empty
   404 for fresh export files. On a 404 the file is fetched straight from the
   GCS bucket behind `data.gdeltproject.org`.
+- **API under concurrent requests** — a request's SQLite connection could be
+  closed on a different threadpool thread than opened it (500s when the page
+  fetched several endpoints at once).
 
 ### Changed
 
+- **Readable pushes** — each evidence line now names the source, the rarity
+  ("1-in-2,500 high") and what was observed in natural units ("3 quakes, max
+  M6.6", "$84,000", "77% of 7-day peak"), with the region as lat/lon;
+  tapping the notification opens the region on OpenStreetMap. Labels and units
+  come from a new optional `[display]` table per source stanza. Context only:
+  alerts still open on q_values alone.
+- **Dashboard shows the data on calm days too** — a quiet "World now" list
+  (per-source health, latest value, 24 h sparkline, the day's peak surprise),
+  data dots on the map by modality, a legend, hover tooltips and click-through
+  cell details; only unusual/rare hexagons are drawn. New read-only endpoints
+  `/api/overview`, `/api/activity.geojson`, `/api/cell`; alerts carry their
+  push text. Basemap is OpenFreeMap (zoomable, no key).
 - **Resource limits for co-hosting** — every systemd unit runs in
   `worldwatch.slice` (3.6 GB memory cap, half CPU/IO weight), so a website on
   the same VPS keeps priority. `deploy.sh` installs the slice and restarts

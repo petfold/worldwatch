@@ -128,10 +128,10 @@ def open_db(path: Path) -> sqlite3.Connection:
     return conn
 
 
-def connect(path: Path) -> sqlite3.Connection:
+def connect(path: Path, *, check_same_thread: bool = True) -> sqlite3.Connection:
     """Lightweight connection (row factory, WAL) without running migrations —
     for processes that attach to an already-initialized database (e.g. the API)."""
-    conn = sqlite3.connect(path)
+    conn = sqlite3.connect(path, check_same_thread=check_same_thread)
     conn.execute("PRAGMA journal_mode=WAL")
     conn.row_factory = sqlite3.Row
     return conn

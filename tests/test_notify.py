@@ -40,6 +40,46 @@ def test_format_value_alert(db):
     assert tags == ["rotating_light"]
 
 
+def test_format_alert_with_observed_context(db, sources):
+    import h3
+
+    cell = h3.latlng_to_cell(-21.3, 168.6, 3)
+    db.execute(
+        "INSERT INTO bins (stream_id, cell, scale, bin_start, n, vmin, vmax, vmean) "
+        "VALUES ('usgs_seismic', ?, 2, 5000, 3, 4.1, 6.6, 5.0)",
+        (cell,),
+    )
+    ev = [
+        {"stream_id": "usgs_seismic", "modality": "physical", "q_value": 0.9996,
+         "presence_q": 1.0, "cell": cell, "scale": 2, "bin_start": 5000},
+        {"stream_id": "gdelt_events", "modality": "informational", "q_value": 0.997,
+         "presence_q": 1.0, "cell": cell, "scale": 2, "bin_start": 5000},
+    ]
+    row = _alert(db, 3, h3.cell_to_parent(cell, 2), 0.95, ev)
+    title, message, priority, _ = format_alert(row, db, sources)
+    assert title.startswith("Worldwatch SEVERE 0.95 - 21.") and title.isascii()
+    assert "Earthquakes (M1+) [physical] 1-in-2,500 high: 3 quakes, max M6.6" in message
+    assert "News events (GDELT) [informational] 1-in-333 high" in message
+    assert "latest bin 1970-01-01 01:23 UTC" in message
+    assert priority == 5
+
+
+async def test_send_ntfy_click_opens_map(db):
+    import h3
+
+    cell = h3.latlng_to_cell(35.7, 139.7, 2)
+    row = _alert(db, 4, cell, 0.8, [{"stream_id": "q", "modality": "physical", "q_value": 0.999, "presence_q": 1.0}])
+    seen = {}
+
+    def handler(request):
+        seen.update(request.headers)
+        return httpx.Response(200)
+
+    async with _client(handler) as client:
+        await send_ntfy(client, NtfyConfig(server="http://n", topic="t"), row)
+    assert "openstreetmap.org" in seen["click"]
+
+
 def test_format_silence_alert(db):
     row = _alert(
         db,

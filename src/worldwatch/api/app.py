@@ -13,7 +13,9 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import statistics
 import time
+from collections import defaultdict
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -22,18 +24,18 @@ from fastapi import Depends, FastAPI, HTTPException
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 
+from worldwatch.api import context
+from worldwatch.api.notify import format_alert
+from worldwatch.cascade.bins import bin_width
+from worldwatch.config.loader import SourceConfig
 from worldwatch.db import connect
 
 _STATIC = Path(__file__).parent / "static"
 DEFAULT_LOOKBACK_SECONDS = 24 * 3600
-
-
-def _extremity(q_value: float | None, presence_q: float) -> float:
-    """Tail depth 0..1 (0 = unremarkable). Data rows use q_value; silence rows
-    (q_value NULL) use presence_q."""
-    if q_value is not None:
-        return max(q_value, 1.0 - q_value)
-    return presence_q
+TAIL_EXTREMITY = 0.99  # matches the alert engine's default q tail
+_OK_EVENTS = ("ok", "not_modified")
+_ERROR_EVENTS = ("timeout", "http_error", "fetch_error", "parse_error")
+_extremity = context.extremity
 
 
 def _cell_polygon(cell: str) -> list[list[float]] | None:
@@ -49,11 +51,20 @@ class Label(BaseModel):
     label: str  # true | false_positive | unclear
 
 
-def create_app(db_path: Path, now_fn: object = time.time) -> FastAPI:
+def create_app(
+    db_path: Path,
+    now_fn: object = time.time,
+    sources: dict[str, SourceConfig] | None = None,
+) -> FastAPI:
+    """`sources` (the loaded stanzas) supply labels/units for the plain-language
+    context; without them the API still works, showing raw stream ids."""
     app = FastAPI(title="Worldwatch", docs_url="/api/docs")
+    cfgs: dict[str, SourceConfig] = sources or {}
 
     def get_conn() -> Iterator[sqlite3.Connection]:
-        conn = connect(db_path)
+        # One connection per request, but FastAPI may open and close it on
+        # different threadpool threads — hence check_same_thread=False.
+        conn = connect(db_path, check_same_thread=False)
         try:
             yield conn
         finally:
@@ -96,8 +107,12 @@ def create_app(db_path: Path, now_fn: object = time.time) -> FastAPI:
                 "geometry": {"type": "Polygon", "coordinates": [poly]},
                 "properties": {
                     "cell": cell,
+                    "where": context.where(cell),
                     "surprise": round(max_surprise[cell], 4),
                     "n_streams": len(streams[cell]),
+                    "streams": ", ".join(
+                        context.display_for(sid, cfgs.get(sid)).label for sid in sorted(streams[cell])
+                    ),
                 },
             }
             for cell, poly in polys.items()
@@ -158,14 +173,14 @@ def create_app(db_path: Path, now_fn: object = time.time) -> FastAPI:
             rows = conn.execute(
                 "SELECT * FROM alerts ORDER BY opened_at DESC LIMIT ?", (limit,)
             ).fetchall()
-        return JSONResponse({"alerts": [_alert_dict(r) for r in rows]})
+        return JSONResponse({"alerts": [_alert_dict(r, conn, cfgs) for r in rows]})
 
     @app.get("/api/alerts/{alert_id}")
     def alert_detail(alert_id: int, conn: sqlite3.Connection = Depends(get_conn)) -> JSONResponse:
         row = conn.execute("SELECT * FROM alerts WHERE alert_id = ?", (alert_id,)).fetchone()
         if row is None:
             raise HTTPException(status_code=404, detail="alert not found")
-        return JSONResponse(_alert_dict(row))
+        return JSONResponse(_alert_dict(row, conn, cfgs))
 
     @app.post("/api/alerts/{alert_id}/label")
     def label_alert(
@@ -179,10 +194,286 @@ def create_app(db_path: Path, now_fn: object = time.time) -> FastAPI:
             raise HTTPException(status_code=404, detail="alert not found")
         return JSONResponse({"alert_id": alert_id, "label": body.label})
 
+
+    @app.get("/api/overview")
+    def overview(
+        lookback: int = DEFAULT_LOOKBACK_SECONDS,
+        conn: sqlite3.Connection = Depends(get_conn),
+    ) -> JSONResponse:
+        """Per-source picture of the collected data, calm or not: health,
+        latest value in natural units, a sparkline, and the day's most
+        surprising bin. Context for a human, not a detection input."""
+        now = _now()
+        cutoff = now - lookback
+        stream_ids = list(cfgs) or [
+            r[0] for r in conn.execute("SELECT stream_id FROM sources ORDER BY stream_id")
+        ]
+        health = _health_summary(conn, cutoff)
+        bins: dict[str, list[sqlite3.Row]] = defaultdict(list)
+        for r in conn.execute(
+            "SELECT stream_id, cell, scale, bin_start, n, vmin, vmax, vmean FROM bins "
+            "WHERE bin_start >= ? ORDER BY bin_start",
+            (cutoff,),
+        ):
+            bins[r["stream_id"]].append(r)
+        surprise: dict[str, list[sqlite3.Row]] = defaultdict(list)
+        for r in conn.execute(
+            "SELECT stream_id, cell, scale, bin_start, q_value, presence_q FROM surprise "
+            "WHERE bin_start >= ? AND q_value IS NOT NULL ORDER BY bin_start",
+            (cutoff,),
+        ):
+            surprise[r["stream_id"]].append(r)
+        status = {
+            r["stream_id"]: r["status"]
+            for r in conn.execute("SELECT stream_id, status FROM sources")
+        }
+        for sid in stream_ids:
+            if not bins.get(sid):  # lagging or stalled feed: show its newest data, dated
+                bins[sid] = conn.execute(
+                    "SELECT stream_id, cell, scale, bin_start, n, vmin, vmax, vmean FROM bins "
+                    "WHERE stream_id = ? AND bin_start = "
+                    "(SELECT MAX(bin_start) FROM bins WHERE stream_id = ?)",
+                    (sid, sid),
+                ).fetchall()
+        out = [
+            _source_overview(
+                sid, cfgs.get(sid), status.get(sid), health.get(sid, {}),
+                bins.get(sid, []), surprise.get(sid, []), now,
+            )
+            for sid in stream_ids
+        ]
+        n_open = conn.execute("SELECT COUNT(*) FROM alerts WHERE status = 'open'").fetchone()[0]
+        return JSONResponse(
+            {
+                "now": now,
+                "lookback": lookback,
+                "open_alerts": n_open,
+                "reporting": sum(s["state"] == "ok" for s in out),
+                "sources": out,
+            }
+        )
+
+    @app.get("/api/activity.geojson")
+    def activity_geojson(
+        lookback: int = DEFAULT_LOOKBACK_SECONDS,
+        conn: sqlite3.Connection = Depends(get_conn),
+    ) -> JSONResponse:
+        """Where the geocoded streams observed things — one point per
+        (stream, cell), sized by observation count. The calm-day map layer."""
+        now = _now()
+        cutoff = now - lookback
+        latest: dict[tuple[str, str], sqlite3.Row] = {}
+        totals: dict[tuple[str, str], int] = defaultdict(int)
+        for r in conn.execute(
+            "SELECT * FROM bins WHERE bin_start >= ? ORDER BY bin_start", (cutoff,)
+        ):
+            if context.cell_center(r["cell"]) is None:
+                continue
+            key = (r["stream_id"], r["cell"])
+            latest[key] = r
+            totals[key] += r["n"]
+        features = []
+        for (sid, cell), r in latest.items():
+            lat, lon = context.cell_center(cell)  # type: ignore[misc]
+            cfg = cfgs.get(sid)
+            features.append(
+                {
+                    "type": "Feature",
+                    "geometry": {"type": "Point", "coordinates": [lon, lat]},
+                    "properties": {
+                        "stream_id": sid,
+                        "label": context.display_for(sid, cfg).label,
+                        "modality": cfg.modality if cfg else "",
+                        "cell": cell,
+                        "where": context.fmt_latlon(lat, lon),
+                        "n": totals[(sid, cell)],
+                        "latest": context.describe_bin(sid, cfg, r),
+                        "last": context.observed_at(r, now),
+                    },
+                }
+            )
+        return JSONResponse({"type": "FeatureCollection", "features": features})
+
+    @app.get("/api/cell")
+    def cell_detail(
+        cell: str,
+        lookback: int = DEFAULT_LOOKBACK_SECONDS,
+        conn: sqlite3.Connection = Depends(get_conn),
+    ) -> JSONResponse:
+        """Everything observed in one cell over the look-back, per stream."""
+        cutoff = _now() - lookback
+        latest: dict[str, sqlite3.Row] = {}
+        totals: dict[str, int] = defaultdict(int)
+        for r in conn.execute(
+            "SELECT * FROM bins WHERE cell = ? AND bin_start >= ? ORDER BY bin_start",
+            (cell, cutoff),
+        ):
+            latest[r["stream_id"]] = r
+            totals[r["stream_id"]] += r["n"]
+        peak: dict[str, sqlite3.Row] = {}
+        for r in conn.execute(
+            "SELECT stream_id, q_value, presence_q, bin_start FROM surprise "
+            "WHERE cell = ? AND bin_start >= ? AND q_value IS NOT NULL",
+            (cell, cutoff),
+        ):
+            best = peak.get(r["stream_id"])
+            if best is None or _extremity(r["q_value"], 1.0) > _extremity(best["q_value"], 1.0):
+                peak[r["stream_id"]] = r
+        streams = []
+        for sid in sorted(set(latest) | set(peak)):
+            cfg = cfgs.get(sid)
+            item: dict[str, object] = {
+                "stream_id": sid,
+                "label": context.display_for(sid, cfg).label,
+                "modality": cfg.modality if cfg else "",
+                "observations": totals.get(sid, 0),
+            }
+            if sid in latest:
+                item["latest"] = context.describe_bin(sid, cfg, latest[sid])
+                item["latest_at"] = latest[sid]["bin_start"]
+            if sid in peak:
+                item["peak"] = context.surprise_word(peak[sid]["q_value"])
+                item["peak_at"] = peak[sid]["bin_start"]
+            streams.append(item)
+        return JSONResponse(
+            {"cell": cell, "where": context.where(cell), "map_url": context.map_url(cell),
+             "streams": streams}
+        )
+
     return app
 
 
-def _alert_dict(row: sqlite3.Row) -> dict[str, object]:
+def _alert_dict(
+    row: sqlite3.Row, conn: sqlite3.Connection, cfgs: dict[str, SourceConfig]
+) -> dict[str, object]:
     d = dict(row)
     d["evidence"] = json.loads(row["evidence"])
+    title, text, _, _ = format_alert(row, conn, cfgs)
+    d.update(title=title, text=text, where=context.where(row["cell"]),
+             map_url=context.map_url(row["cell"]))
     return d
+
+
+def _health_summary(conn: sqlite3.Connection, cutoff: int) -> dict[str, dict[str, object]]:
+    out: dict[str, dict[str, object]] = defaultdict(
+        lambda: {"ok": 0, "errors": 0, "last_ok": None, "last_error": None}
+    )
+    for r in conn.execute(
+        "SELECT component, event, COUNT(*) AS n, MAX(ts) AS last FROM health "
+        "WHERE ts >= ? GROUP BY component, event",
+        (cutoff,),
+    ):
+        h = out[r["component"]]
+        if r["event"] in _OK_EVENTS:
+            h["ok"] += r["n"]
+            h["last_ok"] = max(h["last_ok"] or 0, r["last"])
+        elif r["event"] in _ERROR_EVENTS:
+            h["errors"] += r["n"]
+    for comp, h in out.items():
+        if h["errors"]:
+            e = conn.execute(
+                "SELECT ts, event, detail FROM health WHERE component = ? AND ts >= ? "
+                "AND event IN (%s) ORDER BY ts DESC LIMIT 1" % ",".join("?" * len(_ERROR_EVENTS)),
+                (comp, cutoff, *_ERROR_EVENTS),
+            ).fetchone()
+            h["last_error"] = {"ts": e["ts"], "event": e["event"], "detail": (e["detail"] or "")[:200]}
+    return out
+
+
+def _source_overview(
+    sid: str,
+    cfg: SourceConfig | None,
+    status: str | None,
+    health: dict[str, object],
+    bins: list[sqlite3.Row],
+    surprise: list[sqlite3.Row],
+    now: int,
+) -> dict[str, object]:
+    disp = context.display_for(sid, cfg)
+    cadence = cfg.cadence_seconds if cfg else 900
+    last_ok = health.get("last_ok")
+    last_error = health.get("last_error")
+    if last_ok is None and last_error is None:
+        state = "waiting"
+    elif last_error and (last_ok is None or last_error["ts"] > last_ok):  # type: ignore[index]
+        state = "error"
+    elif last_ok is not None and now - int(last_ok) > 3 * cadence + 600:  # type: ignore[arg-type]
+        state = "stale"
+    else:
+        state = "ok"
+
+    cells = {b["cell"] for b in bins}
+    is_count = cfg is not None and cfg.flavor == "count"
+    item: dict[str, object] = {
+        "stream_id": sid,
+        "label": disp.label,
+        "modality": cfg.modality if cfg else "",
+        "status": status,
+        "cadence_seconds": cadence,
+        "state": state,
+        "polls_ok": health.get("ok", 0),
+        "polls_error": health.get("errors", 0),
+        "last_ok": last_ok,
+        "last_error": last_error,
+        "n_cells": len(cells),
+        "n_bins": len(bins),
+    }
+
+    if bins:
+        if len(cells) == 1 and not is_count:
+            latest = bins[-1]
+            item["latest"] = context.describe_bin(sid, cfg, latest)
+            item["latest_at"] = context.observed_at(latest, now)
+            item["spark"] = [
+                [b["bin_start"], context.natural_value(b["vmean"], disp)] for b in bins
+            ]
+        elif is_count:
+            total = sum(b["n"] for b in bins)
+            per_cell: dict[str, int] = defaultdict(int)
+            for b in bins:
+                per_cell[b["cell"]] += b["n"]
+            busiest, busiest_n = max(per_cell.items(), key=lambda kv: kv[1])
+            text = f"{total:,} {disp.unit}".strip() + f" in {len(cells)} cells"
+            if disp.max_prefix:
+                top = max((b for b in bins if b["vmax"] is not None), key=lambda b: b["vmax"],
+                          default=None)
+                if top is not None:
+                    text += f"; largest {disp.max_prefix}{top['vmax']:.1f} @ {context.where(top['cell'])}"
+            elif len(cells) > 1:
+                text += f"; busiest {context.where(busiest)} ({busiest_n})"
+            item["latest"] = text
+            item["latest_at"] = max(context.observed_at(b, now) for b in bins)
+            rate: dict[int, float] = defaultdict(float)
+            for b in bins:  # events/hour per bin, summed over cells
+                rate[b["bin_start"]] += b["n"] * 3600 / bin_width(b["scale"])
+            item["spark"] = sorted([t, v] for t, v in rate.items())
+        else:  # continuous, many cells (radiation stations, night-light pixels)
+            last_per_cell: dict[str, sqlite3.Row] = {}
+            for b in bins:
+                last_per_cell[b["cell"]] = b
+            vals = [
+                v for b in last_per_cell.values()
+                if (v := context.natural_value(b["vmean"], disp)) is not None
+            ]
+            if vals:
+                med = statistics.median(vals)
+                item["latest"] = (
+                    f"median {disp.prefix}{context.fmt_number(med, disp.digits)}{disp.unit} "
+                    f"over {len(vals)} cells"
+                )
+            item["latest_at"] = max(context.observed_at(b, now) for b in bins)
+
+    if surprise:
+        top = max(surprise, key=lambda r: _extremity(r["q_value"], 1.0))
+        item["peak"] = {
+            "rarity": context.surprise_word(top["q_value"]),
+            "extremity": round(_extremity(top["q_value"], 1.0), 5),
+            "where": context.where(top["cell"]),
+            "cell": top["cell"],
+            "at": top["bin_start"],
+        }
+        item["n_scored"] = len(surprise)
+        item["n_tail"] = sum(_extremity(r["q_value"], 1.0) >= TAIL_EXTREMITY for r in surprise)
+        if len(cells) <= 1:
+            item["now_rarity"] = context.surprise_word(surprise[-1]["q_value"])
+    return item

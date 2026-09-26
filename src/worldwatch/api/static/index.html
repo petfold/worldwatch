@@ -7,107 +7,316 @@
   <link href="https://unpkg.com/maplibre-gl@4.5.0/dist/maplibre-gl.css" rel="stylesheet" />
   <script src="https://unpkg.com/maplibre-gl@4.5.0/dist/maplibre-gl.js"></script>
   <style>
-    :root { color-scheme: dark; }
-    body { margin: 0; font: 14px/1.4 system-ui, sans-serif; background: #0b0f14; color: #dfe6ee; }
-    #map { position: absolute; inset: 0 340px 0 0; }
-    #panel { position: absolute; top: 0; right: 0; bottom: 0; width: 340px; overflow-y: auto;
-             background: #11161d; border-left: 1px solid #223; padding: 12px 14px; box-sizing: border-box; }
-    h1 { font-size: 16px; margin: 0 0 4px; }
-    .sub { color: #8aa; font-size: 12px; margin-bottom: 12px; }
-    .toggle { margin-bottom: 12px; }
-    .alert { border: 1px solid #2a3542; border-radius: 6px; padding: 8px 10px; margin-bottom: 8px; cursor: pointer; }
-    .alert:hover { border-color: #48607a; }
-    .sev { font-weight: 600; }
-    .sev.hi { color: #ff6b6b; } .sev.mid { color: #ffd166; } .sev.lo { color: #8ecae6; }
-    .meta { color: #8aa; font-size: 12px; }
-    .empty { color: #667; font-style: italic; }
-    .silence { color: #ffd166; font-size: 12px; margin-top: 4px; }
+    :root {
+      color-scheme: dark;
+      --bg: #0b0f14; --panel: #11161d; --line: #223040; --text: #dfe6ee; --muted: #8a99a8; --faint: #5d6b78;
+      --ok: #5cc98a; --stale: #e0b44c; --err: #ef6461;
+      --typical: #6c7a89; --unusual: #e8a33d; --rare: #ff4d4d;
+      --physical: #4fb3d9; --informational: #b58cff; --infrastructural: #f2c14e; --economic: #6fd08c;
+    }
+    body { margin: 0; font: 14px/1.4 system-ui, sans-serif; background: var(--bg); color: var(--text); }
+    #map { position: absolute; inset: 0 400px 0 0; }
+    #panel { position: absolute; top: 0; right: 0; bottom: 0; width: 400px; overflow-y: auto;
+             background: var(--panel); border-left: 1px solid var(--line); padding: 12px 14px; box-sizing: border-box; }
+    @media (max-width: 800px) {
+      #map { inset: 0 0 55% 0; } #panel { top: 45%; width: 100%; border-left: 0; border-top: 1px solid var(--line); }
+    }
+    h1 { font-size: 16px; margin: 0 0 2px; }
+    h2 { font-size: 13px; margin: 16px 0 6px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+    .sub { color: var(--muted); font-size: 12px; }
+    #status { font-size: 12px; margin: 6px 0 4px; color: var(--muted); }
+    #status b { color: var(--text); font-weight: 600; }
+    .empty { color: var(--faint); font-style: italic; font-size: 12px; }
+
+    /* alerts: the loud part */
+    .alert { border: 1px solid #3a2a2a; background: #1b1416; border-radius: 6px; padding: 8px 10px; margin-bottom: 8px; cursor: pointer; }
+    .alert:hover { border-color: #7a4848; }
+    .sev { font-weight: 700; }
+    .sev.hi { color: var(--rare); } .sev.mid { color: var(--unusual); } .sev.lo { color: #8ecae6; }
+    .meta { color: var(--muted); font-size: 12px; }
+
+    /* world now: the quiet part */
+    #world { font-size: 12px; color: var(--muted); }
+    .group { margin: 10px 0 2px; font-size: 11px; color: var(--faint); text-transform: uppercase; letter-spacing: .05em; }
+    .src { display: grid; grid-template-columns: 10px 1fr 84px; gap: 2px 8px; padding: 5px 0; border-bottom: 1px solid #18212b; cursor: pointer; }
+    .src:hover { background: #151c25; }
+    .dot { width: 8px; height: 8px; border-radius: 50%; margin-top: 4px; }
+    .dot.ok { background: var(--ok); } .dot.stale, .dot.waiting { background: var(--stale); } .dot.error { background: var(--err); }
+    .name { color: #c3ceda; }
+    .val { color: var(--muted); grid-column: 2; }
+    .spark { grid-row: 1 / span 3; grid-column: 3; align-self: center; }
+    .chip { grid-column: 2; font-size: 11px; }
+    .chip.typical { color: var(--typical); } .chip.unusual { color: var(--unusual); } .chip.rare { color: var(--rare); }
+    .errnote { grid-column: 2; color: var(--err); font-size: 11px; }
+
     #detail { white-space: pre-wrap; font-size: 12px; color: #bcd; margin-top: 8px;
-              border-top: 1px solid #223; padding-top: 8px; display: none; }
+              border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; display: none; }
+    #detail a { color: #8ecae6; }
+    .toggles { font-size: 12px; color: var(--muted); display: flex; gap: 12px; flex-wrap: wrap; margin-top: 6px; }
+    .silence { color: var(--unusual); font-size: 12px; margin-top: 4px; }
+
+    .hover .maplibregl-popup-content { background: #151c25; color: var(--text); font-size: 12px; line-height: 1.45;
+                                       padding: 7px 9px; border: 1px solid var(--line); box-shadow: 0 2px 8px #0008; }
+    .hover .maplibregl-popup-tip { border-top-color: #151c25; border-bottom-color: #151c25; }
+    .tipmuted { color: var(--faint); }
+    #legend { position: absolute; left: 10px; bottom: 28px; background: rgba(17,22,29,.92); border: 1px solid var(--line);
+              border-radius: 6px; padding: 8px 10px; font-size: 11px; color: var(--muted); max-width: 250px; }
+    #legend b { color: var(--text); font-weight: 600; display: block; margin: 4px 0 2px; }
+    #legend b:first-child { margin-top: 0; }
+    .sw { display: inline-block; width: 10px; height: 10px; margin-right: 5px; vertical-align: -1px; }
+    .sw.hex { clip-path: polygon(25% 5%, 75% 5%, 100% 50%, 75% 95%, 25% 95%, 0 50%); }
+    .sw.circle { border-radius: 50%; }
+    .lrow { display: inline-block; margin-right: 10px; white-space: nowrap; }
   </style>
 </head>
 <body>
   <div id="map"></div>
+  <div id="legend">
+    <b>Hexagons: surprise (last 24 h)</b>
+    <span class="lrow"><span class="sw hex" style="background:var(--unusual)"></span>unusual (1-in-10+)</span>
+    <span class="lrow"><span class="sw hex" style="background:var(--rare)"></span>rare (1-in-100+)</span>
+    <div class="sub" style="font-size:11px">typical cells are not drawn</div>
+    <b>Dots: collected data (last 24 h)</b>
+    <span class="lrow"><span class="sw circle" style="background:var(--physical)"></span>physical</span>
+    <span class="lrow"><span class="sw circle" style="background:var(--informational)"></span>news / attention</span>
+    <span class="lrow"><span class="sw circle" style="background:var(--infrastructural)"></span>internet</span>
+    <span class="lrow"><span class="sw circle" style="background:var(--economic)"></span>markets</span>
+    <div class="sub" style="font-size:11px">size = number of observations · hover or click for details</div>
+  </div>
   <div id="panel">
     <h1>Worldwatch</h1>
     <div class="sub">calibrated surprise across open data streams</div>
-    <label class="toggle"><input type="checkbox" id="silenceToggle" /> show silent sources</label>
+    <div id="status">loading…</div>
+    <div class="toggles">
+      <label><input type="checkbox" id="activityToggle" checked /> data dots</label>
+      <label><input type="checkbox" id="surpriseToggle" checked /> surprise hexagons</label>
+      <label><input type="checkbox" id="silenceToggle" /> silent sources</label>
+    </div>
     <div id="silence"></div>
-    <h2 style="font-size:14px;">Alerts</h2>
-    <div id="alerts"><span class="empty">loading…</span></div>
     <div id="detail"></div>
+
+    <h2>Alerts</h2>
+    <div id="alerts"><span class="empty">loading…</span></div>
+
+    <h2>World now</h2>
+    <div id="world"><span class="empty">loading…</span></div>
   </div>
 
   <script>
+    const REFRESH_MS = 60_000;
+    const MODALITY_COLORS = { physical: "#4fb3d9", informational: "#b58cff", infrastructural: "#f2c14e", economic: "#6fd08c" };
+    const MODALITY_NAMES = { physical: "Physical", informational: "News & attention", infrastructural: "Internet", economic: "Markets" };
+    const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+    const getJSON = async (url) => (await fetch(url)).json();
+
+    function ago(ts) {
+      if (!ts) return "never";
+      const s = Math.max(0, Date.now() / 1000 - ts);
+      if (s < 90) return "just now";
+      if (s < 5400) return `${Math.round(s / 60)} min ago`;
+      if (s < 172800) return `${Math.round(s / 3600)} h ago`;
+      return `${Math.round(s / 86400)} days ago`;
+    }
+    const utc = (ts) => new Date(ts * 1000).toISOString().slice(0, 16).replace("T", " ") + " UTC";
+    const chipClass = (word) => (word || "").startsWith("rare") ? "rare" : (word || "").startsWith("unusual") ? "unusual" : "typical";
+
     const map = new maplibregl.Map({
       container: "map",
-      style: "https://demotiles.maplibre.org/style.json",
-      center: [0, 20], zoom: 1.4,
+      style: "https://tiles.openfreemap.org/styles/dark",
+      center: [10, 25], zoom: 1.6, minZoom: 0.5, maxZoom: 12,
+      dragPan: true, scrollZoom: true, touchZoomRotate: true, renderWorldCopies: true,
     });
-
-    function surpriseColor() {
-      // interpolate cell fill by the `surprise` property (0.5 calm → 1 extreme)
-      return ["interpolate", ["linear"], ["get", "surprise"],
-        0.5, "#1d3b53", 0.9, "#e8a33d", 0.99, "#ff4d4d"];
-    }
+    map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
+    map.addControl(new maplibregl.ScaleControl({ unit: "metric" }), "bottom-right");
 
     map.on("load", async () => {
-      const gj = await (await fetch("/api/surprise.geojson")).json();
-      map.addSource("surprise", { type: "geojson", data: gj });
+      map.addSource("activity", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+      map.addLayer({
+        id: "activity", type: "circle", source: "activity",
+        paint: {
+          "circle-color": ["match", ["get", "modality"],
+            "physical", MODALITY_COLORS.physical, "informational", MODALITY_COLORS.informational,
+            "infrastructural", MODALITY_COLORS.infrastructural, "economic", MODALITY_COLORS.economic, "#999"],
+          "circle-radius": ["interpolate", ["linear"], ["ln", ["+", 1, ["get", "n"]]], 0, 2, 7, 11],
+          "circle-opacity": 0.45, "circle-stroke-width": 0,
+        },
+      });
+      map.addSource("surprise", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
       map.addLayer({
         id: "surprise-fill", type: "fill", source: "surprise",
-        paint: { "fill-color": surpriseColor(), "fill-opacity": 0.55 },
+        filter: [">=", ["get", "surprise"], 0.9],
+        paint: {
+          "fill-color": ["step", ["get", "surprise"], "#e8a33d", 0.99, "#ff4d4d"],
+          "fill-opacity": ["step", ["get", "surprise"], 0.35, 0.99, 0.6],
+        },
       });
       map.addLayer({
         id: "surprise-line", type: "line", source: "surprise",
-        paint: { "line-color": "#ffffff", "line-opacity": 0.15 },
+        filter: [">=", ["get", "surprise"], 0.9],
+        paint: { "line-color": "#ffffff", "line-opacity": 0.35, "line-width": 1 },
       });
-      map.on("click", "surprise-fill", (e) => {
-        const p = e.features[0].properties;
-        showDetail(`cell ${p.cell}\nsurprise ${p.surprise}\nstreams ${p.n_streams}`);
-      });
-      loadAlerts();
-      loadSilence();
+      const hover = new maplibregl.Popup({ closeButton: false, closeOnClick: false, maxWidth: "280px", className: "hover" });
+      const tip = {
+        activity: (p) =>
+          `<b style="color:${MODALITY_COLORS[p.modality] || "#ccc"}">${esc(p.label)}</b><br>` +
+          `latest: ${esc(p.latest)}<br>${p.n} observation${p.n === 1 ? "" : "s"} in 24 h · last ${ago(p.last)}<br>` +
+          `<span class="tipmuted">${esc(p.where)} · click for everything here</span>`,
+        "surprise-fill": (p) =>
+          `<b style="color:${p.surprise >= 0.99 ? "var(--rare)" : "var(--unusual)"}">` +
+          `${p.surprise >= 0.99 ? "Rare" : "Unusual"}: 1-in-${Math.round(1 / Math.max(1e-6, 1 - p.surprise)).toLocaleString()}</b><br>` +
+          `${esc(p.streams)}<br><span class="tipmuted">${esc(p.where)} · click for details</span>`,
+      };
+      for (const layer of ["activity", "surprise-fill"]) {
+        map.on("click", layer, (e) => showCell(e.features[0].properties.cell));
+        map.on("mousemove", layer, (e) => {
+          map.getCanvas().style.cursor = "pointer";
+          hover.setLngLat(e.lngLat).setHTML(tip[layer](e.features[0].properties)).addTo(map);
+        });
+        map.on("mouseleave", layer, () => { map.getCanvas().style.cursor = ""; hover.remove(); });
+      }
+      refreshMap();
     });
+    refreshPanel();
+    setInterval(() => { refreshPanel(); refreshMap(); }, REFRESH_MS);
+
+    let layerData = { activity: [], surprise: [] };
+    // The panel does not wait for the basemap: its "load" event needs every
+    // tile and font, which can take seconds on a slow link.
+    function refreshPanel() { loadOverview(); loadAlerts(); loadSilence(); }
+    async function refreshMap() {
+      if (!map.getSource("activity")) return;
+      const [activity, surprise] = await Promise.all([getJSON("/api/activity.geojson"), getJSON("/api/surprise.geojson")]);
+      layerData = { activity: activity.features, surprise: surprise.features };
+      map.getSource("activity").setData(activity);
+      map.getSource("surprise").setData(surprise);
+      map.triggerRepaint();
+    }
+
+    function toggleLayer(id, ids) {
+      document.getElementById(id).onchange = (e) =>
+        ids.forEach((l) => map.setLayoutProperty(l, "visibility", e.target.checked ? "visible" : "none"));
+    }
+    toggleLayer("activityToggle", ["activity"]);
+    toggleLayer("surpriseToggle", ["surprise-fill", "surprise-line"]);
+
+    function sparkline(points) {
+      const pts = (points || []).filter((p) => p[1] !== null && p[1] !== undefined);
+      if (pts.length < 3) return "";
+      const W = 84, H = 26, xs = pts.map((p) => p[0]), ys = pts.map((p) => p[1]);
+      const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
+      const sx = (x) => (x1 === x0 ? W / 2 : ((x - x0) / (x1 - x0)) * (W - 2) + 1);
+      const sy = (y) => (y1 === y0 ? H / 2 : H - 2 - ((y - y0) / (y1 - y0)) * (H - 4));
+      const d = pts.map((p, i) => `${i ? "L" : "M"}${sx(p[0]).toFixed(1)},${sy(p[1]).toFixed(1)}`).join("");
+      return `<svg class="spark" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}"><path d="${d}" fill="none" stroke="#7d8fa1" stroke-width="1.2"/></svg>`;
+    }
+
+    let overview = null;
+    async function loadOverview() {
+      overview = await getJSON("/api/overview");
+      const o = overview;
+      document.getElementById("status").innerHTML =
+        `<b>${o.reporting}/${o.sources.length}</b> sources reporting · ` +
+        (o.open_alerts ? `<b style="color:var(--rare)">${o.open_alerts} open alert${o.open_alerts > 1 ? "s" : ""}</b>` : "<b>no open alerts</b>") +
+        ` · updated ${new Date().toISOString().slice(11, 16)} UTC`;
+      const groups = {};
+      for (const s of o.sources) (groups[s.modality] ||= []).push(s);
+      const el = document.getElementById("world");
+      el.innerHTML = "";
+      for (const mod of ["physical", "informational", "infrastructural", "economic", ""]) {
+        if (!groups[mod]) continue;
+        el.insertAdjacentHTML("beforeend",
+          `<div class="group" style="color:${MODALITY_COLORS[mod] || "#888"}">${esc(MODALITY_NAMES[mod] || "Other")}</div>`);
+        for (const s of groups[mod]) {
+          const word = s.peak?.rarity;
+          const row = document.createElement("div");
+          row.className = "src";
+          row.title = `${s.stream_id} · ${s.status || ""} · polls ok ${s.polls_ok}, errors ${s.polls_error} (24 h)`;
+          const stale = s.latest_at && Date.now() / 1000 - s.latest_at > 2 * 86400;
+          row.innerHTML =
+            `<span class="dot ${esc(s.state)}"></span>` +
+            `<span class="name">${esc(s.label)}</span>` +
+            sparkline(s.spark) +
+            `<span class="val">${esc(s.latest || "no data yet")}${s.latest_at ? ` · ${stale ? "data from " + utc(s.latest_at).slice(0, 10) : ago(s.latest_at)}` : ""}</span>` +
+            (word ? `<span class="chip ${chipClass(word)}">24 h peak: ${esc(word)}${s.n_cells > 1 && s.peak.where ? " @ " + esc(s.peak.where) : ""}</span>` : "") +
+            (s.state === "error" && s.last_error ? `<span class="errnote">${esc(s.last_error.event)}: ${esc(s.last_error.detail.slice(0, 90))}</span>` : "");
+          row.onclick = () => showSource(s);
+          el.appendChild(row);
+        }
+      }
+    }
 
     function sevClass(s) { return s >= 0.9 ? "hi" : s >= 0.7 ? "mid" : "lo"; }
 
     async function loadAlerts() {
       const el = document.getElementById("alerts");
-      const { alerts } = await (await fetch("/api/alerts?limit=50")).json();
-      if (!alerts.length) { el.innerHTML = '<span class="empty">no alerts</span>'; return; }
+      const { alerts } = await getJSON("/api/alerts?limit=50");
+      if (!alerts.length) { el.innerHTML = '<span class="empty">no alerts — nothing corroborated across modalities</span>'; return; }
       el.innerHTML = "";
       for (const a of alerts) {
         const mods = [...new Set(a.evidence.map((e) => e.modality))].join(", ");
         const div = document.createElement("div");
         div.className = "alert";
         div.innerHTML =
-          `<span class="sev ${sevClass(a.severity)}">■ ${a.severity.toFixed(2)}</span> ` +
-          `${a.cell}<div class="meta">${a.status} · ${a.evidence.length} signals · ${mods}</div>`;
+          `<span class="sev ${sevClass(a.severity)}">■ ${a.severity.toFixed(2)}</span> ${esc(a.where)}` +
+          `<div class="meta">${esc(a.status)} · ${ago(a.opened_at)} · ${a.evidence.length} signals · ${esc(mods)}</div>`;
         div.onclick = () => showAlert(a);
         el.appendChild(div);
       }
     }
 
     async function loadSilence() {
-      const { silent_sources } = await (await fetch("/api/silence")).json();
+      const { silent_sources } = await getJSON("/api/silence");
       const el = document.getElementById("silence");
       el.style.display = document.getElementById("silenceToggle").checked ? "block" : "none";
       el.innerHTML = silent_sources.length
-        ? silent_sources.map((s) => `<div class="silence">🔇 ${s.stream_id} (${s.q.toFixed(2)})</div>`).join("")
+        ? silent_sources.map((s) => `<div class="silence">🔇 ${esc(s.stream_id)} (${s.q.toFixed(2)})</div>`).join("")
         : '<div class="silence empty">no silent sources</div>';
     }
     document.getElementById("silenceToggle").onchange = loadSilence;
 
-    function showAlert(a) {
-      const lines = a.evidence.map(
-        (e) => `  ${e.modality}/${e.stream_id} @ ${e.cell} q=${e.q_value ?? "—"} presence=${e.presence_q}`
-      );
-      showDetail(`alert #${a.alert_id} — ${a.cell}\nseverity ${a.severity.toFixed(2)} · ${a.status}\n\nevidence:\n${lines.join("\n")}`);
-    }
-    function showDetail(text) {
+    function showDetail(html) {
       const d = document.getElementById("detail");
-      d.textContent = text; d.style.display = "block";
+      d.innerHTML = html; d.style.display = "block";
+    }
+
+    function showAlert(a) {
+      showDetail(`<b>${esc(a.title)}</b>\n\n${esc(a.text)}` +
+        (a.map_url ? `\n\n<a href="${esc(a.map_url)}" target="_blank" rel="noopener">open region on map ↗</a>` : ""));
+      flyToCell(a.evidence.find((e) => e.cell)?.cell);
+    }
+
+    function showSource(s) {
+      const lines = [
+        `<b>${esc(s.label)}</b>  (${esc(s.stream_id)})`,
+        `state: ${esc(s.state)} · model: ${esc(s.status || "?")} · polls every ${Math.round(s.cadence_seconds / 60)} min`,
+        `last successful poll: ${s.last_ok ? utc(s.last_ok) + " (" + ago(s.last_ok) + ")" : "none in 24 h"}`,
+        `polls in 24 h: ${s.polls_ok} ok, ${s.polls_error} failed`,
+        `latest: ${esc(s.latest || "no data yet")}${s.latest_at ? " · " + utc(s.latest_at) : ""}`,
+      ];
+      if (s.n_cells > 1) lines.push(`cells observed: ${s.n_cells}`);
+      if (s.peak) lines.push(`24 h peak surprise: ${esc(s.peak.rarity)} @ ${esc(s.peak.where)} (${utc(s.peak.at)})`);
+      if (s.n_scored) lines.push(`bins scored: ${s.n_scored}, in the 1% tails: ${s.n_tail} (${(100 * s.n_tail / s.n_scored).toFixed(1)}%; calibrated ≈ 2%)`);
+      if (s.now_rarity) lines.push(`right now: ${esc(s.now_rarity)}`);
+      if (s.last_error) lines.push(`last error: ${esc(s.last_error.event)} ${utc(s.last_error.ts)}\n  ${esc(s.last_error.detail)}`);
+      showDetail(lines.join("\n"));
+      if (s.peak && s.n_cells > 1) flyToCell(s.peak.cell);
+    }
+
+    async function showCell(cell) {
+      const c = await getJSON(`/api/cell?cell=${encodeURIComponent(cell)}`);
+      const rows = c.streams.map((s) =>
+        `<span style="color:${MODALITY_COLORS[s.modality] || "#888"}">●</span> <b>${esc(s.label)}</b>\n` +
+        `   ${esc(s.latest || "—")}${s.latest_at ? " · " + ago(s.latest_at) : ""} · ${s.observations} obs in 24 h` +
+        (s.peak ? `\n   24 h peak surprise: <span class="chip ${chipClass(s.peak)}">${esc(s.peak)}</span>` : ""));
+      showDetail(`<b>${esc(c.where)}</b>  <span class="sub">${esc(c.cell)}</span>\n\n${rows.join("\n") || "nothing observed here in 24 h"}` +
+        (c.map_url ? `\n\n<a href="${esc(c.map_url)}" target="_blank" rel="noopener">open on OpenStreetMap ↗</a>` : ""));
+    }
+
+    function flyToCell(cell) {
+      const f = [...layerData.activity, ...layerData.surprise].find((f) => f.properties.cell === cell);
+      if (!f) return;
+      const g = f.geometry.type === "Point" ? f.geometry.coordinates : f.geometry.coordinates[0][0];
+      map.flyTo({ center: g, zoom: Math.max(map.getZoom(), 4) });
     }
   </script>
 </body>

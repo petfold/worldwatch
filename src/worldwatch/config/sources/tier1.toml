@@ -21,6 +21,11 @@ filter_min_mag   = 1.0
 strategy         = "feature_coords"
 h3_resolution    = 3
 
+[usgs_seismic.display]
+label            = "Earthquakes (M1+)"
+unit             = "quakes"
+max_prefix       = "M"
+
 
 # Continuous, not count: the hourly `views` value is the signal — as a count
 # stream Layer 0 would score bins.n (rows per bin, a near-constant) and ignore
@@ -54,6 +59,11 @@ n_harmonics      = 2
 obs_scale        = 0.05   # ~5% residual on log-views; fixed until P1
 level_var        = 1e-4
 
+[wikipedia_pageviews.display]
+label            = "English Wikipedia views"
+unit             = " views/h"
+inverse          = "expm1"
+
 
 # value = log1p(price): multiplicative moves on a fixed obs_scale (see the
 # wikipedia stanza note). ~0.4%/√h log-price diffusion → level_var; no
@@ -81,6 +91,11 @@ cell             = "GLOBAL"
 obs_scale        = 0.002   # ~0.2% five-minute log-return noise; fixed until P1
 level_var        = 2e-5
 
+[btc_usd.display]
+label            = "Bitcoin"
+prefix           = "$"
+inverse          = "expm1"
+
 
 # Adding a second market is stanza-only — reuses the coinbase_spot parser.
 [eth_usd]
@@ -106,6 +121,11 @@ cell             = "GLOBAL"
 obs_scale        = 0.003   # ETH runs a touch more volatile than BTC
 level_var        = 4e-5
 
+[eth_usd.display]
+label            = "Ether"
+prefix           = "$"
+inverse          = "expm1"
+
 
 [nws_severe_alerts]
 class            = "weather_alert_feed"
@@ -124,6 +144,10 @@ time_field       = "onset"
 [nws_severe_alerts.geocode]
 strategy         = "feature_coords"
 h3_resolution    = 3
+
+[nws_severe_alerts.display]
+label            = "US weather alerts (NWS)"
+unit             = "alerts"
 
 
 [safecast_radiation]
@@ -145,6 +169,10 @@ unit             = "cpm"
 strategy         = "feature_coords"
 h3_resolution    = 4
 
+[safecast_radiation.display]
+label            = "Radiation (Safecast)"
+unit             = " cpm"
+
 
 # --- News events: GDELT 2.0 raw 15-min export files --------------------------
 
@@ -156,7 +184,7 @@ flavor           = "count"
 endpoint         = "https://data.gdeltproject.org/gdeltv2/lastupdate.txt"
 cadence_seconds  = 900
 status           = "nursery"
-notes            = "GDELT 2.0 export batches (~1 MB zip / 15 min, no auth; plain http — the host serves no TLS). Only the newest batch is listed, so a missed poll is a skipped batch (visible to the presence channel). Geocoded events only; per-event content dropped at the door."
+notes            = "GDELT 2.0 export batches (~1 MB zip / 15 min, no auth; https, with a GCS-bucket fallback when the CDN serves a stale 404). Only the newest batch is listed, so a missed poll is a skipped batch (visible to the presence channel). Geocoded events only; per-event content dropped at the door."
 
 [gdelt_events.fetch]
 kind             = "gdelt_lastupdate"
@@ -168,6 +196,10 @@ format           = "gdelt_export_events"
 [gdelt_events.geocode]
 strategy         = "feature_coords"
 h3_resolution    = 3
+
+[gdelt_events.display]
+label            = "News events (GDELT)"
+unit             = "events"
 
 
 # --- Internet health: Cloudflare Radar netflows ------------------------------
@@ -194,6 +226,11 @@ format           = "cloudflare_radar_timeseries"
 strategy         = "global"
 cell             = "GLOBAL"
 
+[cf_radar_netflows_global.display]
+label            = "Internet traffic, world"
+unit             = "% of 7-day peak"
+percent          = true
+
 
 [cf_radar_netflows_gb]
 class            = "internet_health"
@@ -214,6 +251,11 @@ strategy         = "fixed_latlon"
 lat              = 54.0
 lon              = -2.5
 h3_resolution    = 2
+
+[cf_radar_netflows_gb.display]
+label            = "Internet traffic, UK"
+unit             = "% of 7-day peak"
+percent          = true
 
 
 [cf_radar_netflows_us]
@@ -236,6 +278,11 @@ lat              = 39.8
 lon              = -98.6
 h3_resolution    = 2
 
+[cf_radar_netflows_us.display]
+label            = "Internet traffic, US"
+unit             = "% of 7-day peak"
+percent          = true
+
 
 [cf_radar_netflows_jp]
 class            = "internet_health"
@@ -256,6 +303,11 @@ strategy         = "fixed_latlon"
 lat              = 36.2
 lon              = 138.3
 h3_resolution    = 2
+
+[cf_radar_netflows_jp.display]
+label            = "Internet traffic, Japan"
+unit             = "% of 7-day peak"
+percent          = true
 
 
 # --- Night lights: NASA Black Marble VNP46A2 ---------------------------------
@@ -294,6 +346,12 @@ format           = "vnp46a2_grid"
 strategy         = "granule_grid"
 h3_resolution    = 4
 
+[night_lights_h17v03.display]
+label            = "Night lights, UK + Ireland"
+unit             = " nW/cm²/sr"
+inverse          = "expm1"
+digits           = 1
+
 
 [night_lights_h18v04]
 class            = "night_lights"
@@ -314,6 +372,12 @@ format           = "vnp46a2_grid"
 [night_lights_h18v04.geocode]
 strategy         = "granule_grid"
 h3_resolution    = 4
+
+[night_lights_h18v04.display]
+label            = "Night lights, France to N. Italy"
+unit             = " nW/cm²/sr"
+inverse          = "expm1"
+digits           = 1
 
 
 [night_lights_h10v05]
@@ -336,6 +400,12 @@ format           = "vnp46a2_grid"
 strategy         = "granule_grid"
 h3_resolution    = 4
 
+[night_lights_h10v05.display]
+label            = "Night lights, US mid-Atlantic"
+unit             = " nW/cm²/sr"
+inverse          = "expm1"
+digits           = 1
+
 
 [night_lights_h31v05]
 class            = "night_lights"
@@ -356,3 +426,9 @@ format           = "vnp46a2_grid"
 [night_lights_h31v05.geocode]
 strategy         = "granule_grid"
 h3_resolution    = 4
+
+[night_lights_h31v05.display]
+label            = "Night lights, Japan"
+unit             = " nW/cm²/sr"
+inverse          = "expm1"
+digits           = 1

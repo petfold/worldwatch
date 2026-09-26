@@ -64,7 +64,7 @@ def cmd_detect(conn: sqlite3.Connection, sources: dict[str, SourceConfig]) -> di
     """Score new bins → open corroborated alerts → push newly opened ones."""
     n_surprise = run_layer0(conn, sources)
     opened = run_alerts(conn, sources)
-    delivered = asyncio.run(notify_alerts(conn, opened))
+    delivered = asyncio.run(notify_alerts(conn, opened, sources=sources))
     return {"surprise": n_surprise, "opened": len(opened), "notified": delivered}
 
 
@@ -80,11 +80,12 @@ def cmd_api() -> None:
     import uvicorn
 
     from worldwatch.api.app import create_app
-    from worldwatch.runtime import db_path
+    from worldwatch.config.loader import load_sources
+    from worldwatch.runtime import config_dir, db_path
 
     host = os.environ.get("WW_API_HOST", "127.0.0.1")
     port = int(os.environ.get("WW_API_PORT", "8000"))
-    uvicorn.run(create_app(db_path()), host=host, port=port)
+    uvicorn.run(create_app(db_path(), sources=load_sources(config_dir())), host=host, port=port)
 
 
 def main(argv: list[str] | None = None) -> int:
