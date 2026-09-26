@@ -35,6 +35,7 @@ from worldwatch.layer0.live import LiveScorer
 from worldwatch.layer0.models import SUPPORTED_FLAVORS
 from worldwatch.poll.poller import run_poller
 from worldwatch.poll.stream import run_stream
+from worldwatch.probe.prober import run_prober
 from worldwatch.store import upsert_source
 
 
@@ -126,9 +127,11 @@ async def cmd_poll(conn: sqlite3.Connection, sources: dict[str, SourceConfig]) -
         replayed = live.replay(now)
         if replayed:
             record_health(conn, "live", "replay", f"rows={replayed}", ts=now)
-        def runner(cfg: SourceConfig):  # push feeds stream; everything else polls
+        def runner(cfg: SourceConfig):  # push feeds stream, the prober probes, the rest poll
             if cfg.fetch.get("kind") == "websocket":
                 return run_stream(conn, cfg, on_new=on_new)
+            if cfg.fetch.get("kind") == "probe":
+                return run_prober(conn, cfg, client, on_new=on_new, register_cells=live.register_cells)
             return run_poller(client, conn, cfg, on_new=on_new)
 
         await asyncio.gather(ticker(), *(runner(cfg) for cfg in active))

@@ -216,3 +216,16 @@ async def test_scoring_fault_is_recorded_not_raised(db, sources):
     assert outcome.event == "ok"
     ev = db.execute("SELECT detail FROM health WHERE event = 'score_error'").fetchone()
     assert "model exploded" in ev[0]
+
+
+def test_registered_cells_score_zeros_before_any_report(db, sources):
+    """The prober's countries are trained on quiet rounds from the start."""
+    cfg = sources["probe_reachability"]
+    w = native_seconds(cfg)
+    cell = h3.latlng_to_cell(9.44, 7.50, 2)  # Nigeria
+    live = LiveScorer(db, sources, now=T0)
+    live.register_cells("probe_reachability", [cell], T0)
+    for k in range(1, 6):
+        live.tick(T0 + k * w + 61)
+    rows = _native_rows(db, "probe_reachability")
+    assert len(rows) == 5 and all(r["n_obs"] == 0 for r in rows)

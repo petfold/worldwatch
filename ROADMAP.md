@@ -83,7 +83,9 @@ around 2026-10-10.
       adds 30–60 min; target seconds. Phase 1 (live scoring + sequential
       evidence) DONE 2026-09-26; radiation deployed with it. Phase 2 (EMSC +
       Coinbase WebSockets, 60-s USGS/NWS Extreme polling) DONE 2026-09-26;
-      NWWS-OI push optional (operator account).
+      NWWS-OI push optional (operator account). Phase 3 (IODA events +
+      alerts, own stratified prober: 826 targets in 134 countries) DONE
+      2026-09-26; transparency page and thin-country targets open.
 - [ ] Seismic layer, alert-triggered (no continuous sampling, no phone data) —
       discrimination enrichment (event type, mb : Ms, depth flags, test-site
       distance), waveform screening of the triggered window

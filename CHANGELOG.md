@@ -47,6 +47,15 @@ sibling projects, where the tag is what publishes.
 
 ### Added
 
+- **Internet outages, fast and broad (ADR 0002 phase 3).** IODA's outage events
+  (authoritative, every new event alerts at priority 4) and per-signal alerts
+  (a count stream per country), plus our own active prober
+  (`probe_reachability`): NTP pool country-zone servers and RIPE Atlas
+  anchors, a quota per country across networks, every 2 min. Failures are a
+  per-country count scored live; mislocated targets are rejected by the speed
+  of light, and rounds where most targets fail everywhere are recorded as our
+  own network's fault. Target IPs never leave the prober's table. Country
+  points from Natural Earth (`config/countries.csv`).
 - **Push feeds (ADR 0002 phase 2).** `[fetch] kind = "websocket"` stanzas stream
   instead of polling: Coinbase ticker for BTC/ETH (thinned to one observation a
   minute, or at once on a ≥ 0.3% move) and EMSC real-time earthquakes (new

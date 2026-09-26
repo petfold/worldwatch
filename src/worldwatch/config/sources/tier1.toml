@@ -688,3 +688,121 @@ fields           = ["flynn_region", "mag", "magtype", "depth", "evtype", "auth",
 rank             = "mag"
 text             = "M{mag}| {flynn_region}|, depth {depth:.0f} km|, {auth}"
 link             = "url"
+
+
+# --- Internet outages: IODA (Georgia Tech) ----------------------------------
+# Active probing of every responsive /24 plus BGP and a network telescope,
+# per country; one request covers all countries (ADR 0002 §F). Free public
+# API; attribution: IODA, Georgia Tech Internet Intelligence Lab.
+
+# IODA's own detected outage events — authoritative: every new event alerts.
+[ioda_outage_events]
+class            = "internet_outage_feed"
+modality         = "infrastructural"
+topic_tags       = ["internet", "outage", "infrastructure"]
+flavor           = "count"
+endpoint         = "https://api.ioda.inetintel.cc.gatech.edu/v2/outages/events?from={start_epoch}&until={end_epoch}&entityType=country&format=codf"
+cadence_seconds  = 300
+status           = "nursery"
+notes            = "IODA country-level outage events (BGP / active probing / telescope), last 24 h"
+
+[ioda_outage_events.parse]
+format           = "ioda_events"
+lookback_seconds = 86400
+
+[ioda_outage_events.geocode]
+strategy         = "country"
+h3_resolution    = 3        # res 2 merged 24 small neighbouring countries into shared cells
+
+[ioda_outage_events.display]
+label            = "Internet outages (IODA events)"
+unit             = "outages"
+
+[ioda_outage_events.context]
+fields           = ["country", "cc", "datasource", "score", "duration_h", "url"]
+rank             = "score"
+text             = "{country}| internet outage ({datasource})|, score {score}|, {duration_h} h"
+link             = "url"
+
+[ioda_outage_events.alerts]
+every_event      = true
+severity         = 0.8   # priority 4: shown, doesn't wake
+fresh_seconds    = 3600  # long events are re-listed; alert only on newly started ones
+
+
+# IODA's per-signal alerts, as a count stream per country: corroborating
+# infrastructural evidence for the alert engine.
+[ioda_alerts]
+class            = "internet_outage_feed"
+modality         = "infrastructural"
+topic_tags       = ["internet", "outage", "infrastructure"]
+flavor           = "count"
+endpoint         = "https://api.ioda.inetintel.cc.gatech.edu/v2/outages/alerts?from={start_epoch}&until={end_epoch}&entityType=country"
+cadence_seconds  = 300
+status           = "nursery"
+notes            = "IODA per-datasource alerts (a signal below its history), per country"
+
+[ioda_alerts.parse]
+format           = "ioda_alerts"
+lookback_seconds = 7200
+
+[ioda_alerts.geocode]
+strategy         = "country"
+h3_resolution    = 3        # res 2 merged 24 small neighbouring countries into shared cells
+
+[ioda_alerts.model]
+native_seconds   = 600
+
+[ioda_alerts.display]
+label            = "Internet signal alerts (IODA)"
+unit             = "alerts"
+
+[ioda_alerts.context]
+fields           = ["country", "cc", "datasource", "level", "ratio"]
+text             = "{country}| {datasource} {level}|, at {ratio} of normal"
+
+
+# --- Our own active prober (ADR 0002 §E) -------------------------------------
+# Every 2 min, probe a quota of public targets per country — NTP pool
+# country-zone servers (NTP, UDP 123) and RIPE Atlas anchors (TCP connect) —
+# spread across networks. Failures are a count per country; ~12 independent
+# targets per country make a spike confirmation in space by itself. A round
+# where most targets everywhere fail is our own network (vantage_fault), not
+# an event. Target IPs never leave the probe_targets table.
+
+[probe_reachability]
+class            = "active_probe"
+modality         = "infrastructural"
+topic_tags       = ["internet", "outage", "infrastructure", "probe"]
+flavor           = "count"
+endpoint         = "probe://ntp+anchors"
+cadence_seconds  = 120
+status           = "nursery"
+notes            = "Own reachability probes of NTP pool servers and RIPE Atlas anchors, a quota per country"
+
+[probe_reachability.fetch]
+kind             = "probe"
+round_seconds    = 120      # >= 64 s per NTP server, as the pool asks
+refresh_seconds  = 86400
+ntp_quota        = 8
+anchor_quota     = 4
+vantage_lat      = 49.0     # the VPS (Karlsruhe area); for the light-speed check
+vantage_lon      = 8.4
+vantage_fault_fraction = 0.5
+
+[probe_reachability.geocode]
+strategy         = "country"
+h3_resolution    = 3        # res 2 merged 24 small neighbouring countries into shared cells
+
+[probe_reachability.model]
+native_seconds   = 120      # one window per round
+
+[probe_reachability.display]
+label            = "Reachability (own probes)"
+unit             = "unreachable"
+
+[probe_reachability.alerts]
+single_source    = true     # our own measurement; confirmation is across a country's targets
+min_sensors      = 1        # one country cell already aggregates ~12 independent targets
+q_tail           = 1e-4
+region_resolution = 3

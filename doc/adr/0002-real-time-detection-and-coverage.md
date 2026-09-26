@@ -320,3 +320,42 @@ Expected event → alert, after A–G:
 - **Not done:** NWWS-OI push (needs an operator-registered account); optional.
 - `websockets` is declared explicitly; it was already installed via
   `uvicorn[standard]`.
+
+## Implementation notes — phase 3 (2026-09-26)
+
+**IODA (§F)** — one request each covers all countries:
+- `ioda_outage_events`: IODA's detected outage events, authoritative
+  (`every_event`, priority 4). Long-running events are re-listed every poll
+  but dedup on (cell, start), and only events started in the last hour alert
+  (`fresh_seconds = 3600`).
+- `ioda_alerts`: per-datasource alerts as a count stream per country;
+  corroborating infrastructural evidence.
+- Country cells use Natural Earth label points (`config/countries.csv`,
+  public domain) at H3 res 3. At res 2, 24 small neighbouring countries shared
+  cells; at res 3, only two pairs of tiny islands do. URL templates gained
+  `{start_epoch}`/`{end_epoch}`.
+
+**Own prober (§E)** — `probe_reachability`, `[fetch] kind = "probe"`, in the
+poll process:
+- NTP pool country zones (continent-fallback addresses dropped) and RIPE Atlas
+  anchors; quota 8 + 4 per country, at most one per /24 and two per /16
+  (anchors: distinct ASNs).
+- NTP over one shared UDP socket; TCP connect for anchors, where a refused
+  connection counts as reachable. Rounds every 120 s. No ICMP, so no sysctl
+  is needed.
+- Targets must answer the first round after the daily discovery. This holds
+  only until the next refresh, so an outage during discovery can't blacklist
+  a country.
+- The light-speed check rejects mislocated targets permanently. The vantage
+  is the VPS (Karlsruhe area).
+- Rounds where more than half of all targets fail are recorded as
+  `vantage_fault`, not emitted.
+- Country cells are registered with the live scorer, so quiet rounds train
+  zeros from the start.
+- Measured from a real discovery: **826 targets in 134 countries** (520 NTP,
+  303 anchors); 72 countries have ≥ 5 targets, 47 only 1–2 (weak coverage
+  there); 4 rejected by physics. About 150 KB per round, so about 110 MB/day.
+- Open: a transparency page on the VPS describing the measurements, with a
+  contact address (needs an nginx location, operator); more targets for the
+  47 thin countries (e.g. the USC/ISI hitlist, operator registration); a
+  second vantage point.

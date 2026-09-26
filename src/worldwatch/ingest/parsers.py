@@ -561,6 +561,83 @@ def parse_emsc_ws(payload: Any, cfg: SourceConfig) -> list[Observation]:
     ]
 
 
+IODA_DASHBOARD = "https://ioda.inetintel.cc.gatech.edu/country/{cc}?from={start}&until={end}"
+
+
+@register("ioda_events")
+def parse_ioda_events(payload: Any, cfg: SourceConfig) -> list[Observation]:
+    """IODA outage events (`/v2/outages/events?entityType=country&format=codf`)
+    → one observation per (country, datasource, start); value = score.
+
+    Long-running events are re-listed every poll with the same start and
+    dedup on (cell, ts); datasources get distinct ts (start + index) so two
+    signals starting together are both kept. Context links the IODA
+    dashboard for the event's window.
+    """
+    from worldwatch.config.countries import country_cell, country_name
+
+    res = int(cfg.geocode.get("h3_resolution", 2))
+    min_score = cfg.parse.get("filter_min_score")
+    ds_order = {d: i for i, d in enumerate(("bgp", "ping-slash24", "merit-nt", "gtr"))}
+    obs: list[Observation] = []
+    for e in (payload or {}).get("data") or []:
+        loc = str(e.get("location") or "")
+        if not loc.startswith("country/"):
+            continue
+        cc = loc.split("/", 1)[1]
+        cell = country_cell(cc, res)
+        if cell is None or e.get("start") is None:
+            continue
+        score = e.get("score")
+        if min_score is not None and (score is None or float(score) < float(min_score)):
+            continue
+        start, duration = int(e["start"]), int(e.get("duration") or 0)
+        ds = str(e.get("datasource") or "")
+        source = {
+            "country": e.get("location_name") or country_name(cc), "cc": cc, "datasource": ds,
+            "score": round(float(score), 1) if score is not None else None,
+            "duration_h": round(duration / 3600, 1),
+            "url": IODA_DASHBOARD.format(cc=cc, start=start - 3600, end=start + max(duration, 3600)),
+        }
+        obs.append(Observation(
+            cfg.stream_id, cell, start + ds_order.get(ds, 9),
+            float(score) if score is not None else None,
+            context=evidence.with_rank(cfg, evidence.pick(cfg, source)),
+        ))
+    return obs
+
+
+@register("ioda_alerts")
+def parse_ioda_alerts(payload: Any, cfg: SourceConfig) -> list[Observation]:
+    """IODA per-datasource alerts (`/v2/outages/alerts?entityType=country`) →
+    one pure-event observation per (country, datasource, time): a count stream
+    of how many of IODA's signals dropped below their history in a country."""
+    from worldwatch.config.countries import country_cell
+
+    res = int(cfg.geocode.get("h3_resolution", 2))
+    ds_order = {d: i for i, d in enumerate(("bgp", "ping-slash24", "merit-nt", "gtr"))}
+    obs: list[Observation] = []
+    for a in (payload or {}).get("data") or []:
+        ent = a.get("entity") or {}
+        if ent.get("type") != "country" or a.get("time") is None:
+            continue
+        cell = country_cell(str(ent.get("code") or ""), res)
+        if cell is None:
+            continue
+        ds = str(a.get("datasource") or "")
+        value, hist = a.get("value"), a.get("historyValue")
+        source = {
+            "country": ent.get("name"), "cc": ent.get("code"), "datasource": ds,
+            "level": a.get("level"),
+            "ratio": round(float(value) / float(hist), 3) if value is not None and hist else None,
+        }
+        obs.append(Observation(
+            cfg.stream_id, cell, int(a["time"]) + ds_order.get(ds, 9), None,
+            context=evidence.with_rank(cfg, evidence.pick(cfg, source)),
+        ))
+    return obs
+
+
 # Sentinel: parser could not derive a timestamp; the poller substitutes poll time.
 _NOW_SENTINEL = -1
 

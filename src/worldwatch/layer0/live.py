@@ -168,6 +168,18 @@ class LiveScorer:
         self.conn.commit()
         return 0  # counts are scored when their window closes (tick)
 
+    def register_cells(self, stream_id: str, cells: list[str], now: int) -> None:
+        """Declare cells a count stream always covers (the prober's countries),
+        so their quiet windows are scored as zeros from the start — a first
+        outage then meets an informed model, not a blank one."""
+        self.conn.executemany(
+            "INSERT INTO live_cells (stream_id, cell, last_event_ts) VALUES (?, ?, ?) "
+            "ON CONFLICT (stream_id, cell) DO UPDATE SET "
+            "last_event_ts = max(last_event_ts, excluded.last_event_ts)",
+            [(stream_id, c, now) for c in cells],
+        )
+        self.conn.commit()
+
     # --- closing count windows ------------------------------------------------
 
     def tick(self, now: int) -> int:
@@ -198,15 +210,18 @@ class LiveScorer:
         version = models.MODEL_VERSION[cfg.flavor]
         floor = last_due - (self.max_catchup // w) * w
         rows, touched = [], set()
-        first_window: dict[str, int] = {}
-        for cell, ws in counts:
-            first_window[cell] = min(first_window.get(cell, ws), ws)
+        # a cell's first window: its earliest pending one, closed or not (a cell
+        # registered without any report yet starts at the newest closed window)
+        first_window = {
+            r["cell"]: r["w"] for r in self.conn.execute(
+                "SELECT cell, MIN(win_start) AS w FROM live_windows WHERE stream_id = ? GROUP BY cell",
+                (sid,),
+            )
+        }
         for cell in cells:
             m = self._model(cfg, cell)
             last = getattr(m, "_last_ts", None)
-            start = last + w if last is not None else first_window.get(cell)
-            if start is None:
-                continue
+            start = last + w if last is not None else first_window.get(cell, last_due)
             for ws in range(max(start, floor), last_due + 1, w):
                 q = m.update(ws, counts.get((cell, ws), 0))
                 rows.append((sid, cell, NATIVE_SCALE, ws, q, 1.0, 1.0,

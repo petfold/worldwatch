@@ -171,6 +171,18 @@ MIGRATIONS: list[str] = [
         PRIMARY KEY (stream_id, cell)
     ) WITHOUT ROWID;
     """,
+    # v7 — active prober targets (ADR 0002 §E). Operational only: target IPs
+    # never reach the evidence store, the API or pushes.
+    """
+    CREATE TABLE IF NOT EXISTS probe_targets (
+        ip            TEXT PRIMARY KEY,
+        cc            TEXT NOT NULL,
+        kind          TEXT NOT NULL CHECK (kind IN ('ntp', 'anchor')),
+        asn           INTEGER,
+        discovered_at INTEGER NOT NULL,
+        rejected      TEXT
+    );
+    """,
 ]
 
 

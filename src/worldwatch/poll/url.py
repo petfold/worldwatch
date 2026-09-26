@@ -40,6 +40,8 @@ def build_url(cfg: SourceConfig, now: int) -> str:
     start_dt = end_dt - timedelta(seconds=lookback)
     fields.setdefault("start", start_dt.strftime(fmt))
     fields.setdefault("end", end_dt.strftime(fmt))
+    fields.setdefault("start_epoch", now - lookback)  # APIs taking epoch seconds (IODA)
+    fields.setdefault("end_epoch", now)
 
     try:
         return endpoint.format(**fields)
