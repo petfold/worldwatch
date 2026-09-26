@@ -16,7 +16,7 @@ from typing import Protocol
 from worldwatch.config.loader import SourceConfig
 from worldwatch.layer0 import continuous, count
 from worldwatch.layer0.continuous import ContinuousSSM, make_harmonics
-from worldwatch.layer0.count import BayesianCount
+from worldwatch.layer0.count import LEGACY_SEED, BayesianCount, cell_seed
 
 SUPPORTED_FLAVORS = ("continuous", "count")
 
@@ -31,8 +31,9 @@ class Layer0Model(Protocol):
     def to_bytes(self) -> bytes: ...
 
 
-def make_model(cfg: SourceConfig) -> Layer0Model:
-    """Cold-start a model for a source from its config."""
+def make_model(cfg: SourceConfig, cell: str | None = None) -> Layer0Model:
+    """Cold-start a model for a source from its config (and, for counts, a
+    PIT randomization seed of its own per cell)."""
     mp = dict(cfg.extra.get("model", {}))
     if cfg.flavor == "continuous":
         harmonics = make_harmonics(
@@ -57,14 +58,22 @@ def make_model(cfg: SourceConfig) -> Layer0Model:
             memory_seconds=float(mp.get("memory_seconds", 3 * 86400)),
             prior_shape=float(mp.get("prior_shape", 0.5)),
             prior_rate=float(mp.get("prior_rate", 1e-3)),
+            **({"seed": cell_seed(cfg.stream_id, cell)} if cell is not None else {}),
         )
     raise ValueError(f"Unsupported flavor {cfg.flavor!r} for source {cfg.stream_id}")
 
 
-def load_model(flavor: str, blob: bytes) -> Layer0Model:
-    """Warm-start a model from a serialized model_state BLOB."""
+def load_model(
+    flavor: str, blob: bytes, key: tuple[str, str] | None = None
+) -> Layer0Model:
+    """Warm-start a model from a serialized model_state BLOB. `key` is its
+    (stream, cell): a count state still on the shared legacy seed is given
+    its own."""
     if flavor == "continuous":
         return ContinuousSSM.from_bytes(blob)
     if flavor == "count":
-        return BayesianCount.from_bytes(blob)
+        m = BayesianCount.from_bytes(blob)
+        if key is not None and m.seed == LEGACY_SEED:
+            m.reseed(cell_seed(*key))
+        return m
     raise ValueError(f"Unsupported flavor {flavor!r}")

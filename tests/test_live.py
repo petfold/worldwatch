@@ -79,6 +79,35 @@ def test_count_windows_close_after_grace_and_score_zeros(db, sources):
     assert db.execute("SELECT COUNT(*) FROM live_windows").fetchone()[0] == 0
 
 
+def test_quiet_cells_draw_independent_pit_values(db, sources):
+    # the randomized PIT's u was once one shared sequence: every country with
+    # zero unreachable targets got the same q in the same window, so a small
+    # draw lit up the whole map at once
+    cfg = sources["usgs_seismic"]
+    w = native_seconds(cfg)
+    cells = [h3.latlng_to_cell(lat, 10.0, 3) for lat in (40.0, 45.0, 50.0, 55.0)]
+    live = LiveScorer(db, sources, now=T0, grace_seconds=60)
+    live.register_cells("usgs_seismic", cells, T0)
+    for k in range(1, 21):  # registered cells start at the newest closed window
+        live.tick(T0 + k * w + 61)
+    by_window: dict[int, set[float]] = {}
+    for r in _native_rows(db, "usgs_seismic"):
+        by_window.setdefault(r["bin_start"], set()).add(round(r["q_value"], 9))
+    assert len(by_window) > 5
+    assert all(len(qs) == len(cells) for ws, qs in by_window.items() if ws > T0)
+
+
+def test_legacy_shared_seed_is_replaced_on_load(db, sources):
+    from worldwatch.layer0 import models
+    from worldwatch.layer0.count import LEGACY_SEED, BayesianCount
+
+    blob = BayesianCount().to_bytes()  # a state saved before per-cell seeds
+    a = models.load_model("count", blob, ("probe_reachability", "a"))
+    b = models.load_model("count", blob, ("probe_reachability", "b"))
+    assert a.seed != LEGACY_SEED and a.seed != b.seed
+    assert models.load_model("count", a.to_bytes(), ("probe_reachability", "a")).seed == a.seed
+
+
 def test_counts_bucket_by_arrival_not_origin(db, sources):
     """USGS publishes international quakes 20–40 min after origin; counting by
     arrival lets a window close right after it ends."""

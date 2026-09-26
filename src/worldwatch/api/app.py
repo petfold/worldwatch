@@ -50,6 +50,10 @@ def _cell_polygon(cell: str) -> list[list[float]] | None:
     if not h3.is_valid_cell(cell):
         return None
     ring = [[lng, lat] for lat, lng in h3.cell_to_boundary(cell)]
+    # a cell straddling ±180° has corners at both edges of the map; unwrap them
+    # to one side, or the polygon is drawn as a band around the whole world
+    if max(p[0] for p in ring) - min(p[0] for p in ring) > 180:
+        ring = [[lng + 360 if lng < 0 else lng, lat] for lng, lat in ring]
     ring.append(ring[0])  # close the ring
     return ring
 

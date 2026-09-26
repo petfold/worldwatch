@@ -254,6 +254,14 @@ def test_view_filter_locates_within_the_view(rich_client):
     assert -126 < w <= e < -118 and 34 < s_ <= n < 42
 
 
+def test_hexagon_across_the_antimeridian_stays_small():
+    from worldwatch.api.app import _cell_polygon
+
+    fiji = h3.latlng_to_cell(-17.8, 180.0, 3)  # straddles ±180°
+    lons = [p[0] for p in _cell_polygon(fiji)]
+    assert max(lons) - min(lons) < 10  # not a band around the whole world
+
+
 def test_parse_bbox_normalizes_world_copies():
     from worldwatch.api.app import in_view, parse_bbox
 

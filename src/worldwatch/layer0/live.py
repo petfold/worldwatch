@@ -279,10 +279,10 @@ class LiveScorer:
             m = None
             if row is not None:
                 try:
-                    m = models.load_model(cfg.flavor, row["state"])
+                    m = models.load_model(cfg.flavor, row["state"], key)
                 except Exception as e:  # states are caches; the archive is the record
                     record_health(self.conn, cfg.stream_id, "model_reset", f"{cell}: {e}")
-            self._models[key] = m if m is not None else models.make_model(cfg)
+            self._models[key] = m if m is not None else models.make_model(cfg, cell)
         return self._models[key]
 
     def _commit(

@@ -97,7 +97,7 @@ def _score_group(
             "ORDER BY bin_start",
             (cfg.stream_id, cell, scale, closed_before),
         ).fetchall()
-        model = models.make_model(cfg)
+        model = models.make_model(cfg, cell)
     else:
         new_bins = conn.execute(
             "SELECT bin_start, n, vmean FROM bins "
@@ -166,9 +166,9 @@ def _load_group_model(
         (cfg.stream_id, cell, scale),
     ).fetchone()
     if row is None:
-        return models.make_model(cfg)
+        return models.make_model(cfg, cell)
     try:
-        return models.load_model(cfg.flavor, row["state"])
+        return models.load_model(cfg.flavor, row["state"], (cfg.stream_id, cell))
     except Exception as e:
         # Saved state predates a flavor/format change for this source. States
         # are caches — the surprise archive is the record — so cold-start and
@@ -179,7 +179,7 @@ def _load_group_model(
             "model_reset",
             f"{cell}/{scale}: {type(e).__name__}: {e}",
         )
-        return models.make_model(cfg)
+        return models.make_model(cfg, cell)
 
 
 def _observation(flavor: str, n: int, vmean: float | None) -> float | None:

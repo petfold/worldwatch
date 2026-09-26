@@ -40,6 +40,7 @@ from __future__ import annotations
 
 import json
 import math
+import zlib
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -48,6 +49,14 @@ from scipy.stats import gamma as gamma_dist
 from scipy.stats import nbinom
 
 MODEL_VERSION = 2
+LEGACY_SEED = 12345  # once shared by every model: all cells drew the same u
+
+
+def cell_seed(stream_id: str, cell: str) -> int:
+    """A stable seed per (stream, cell). The randomized PIT's u must be
+    independent across cells — with one shared sequence, every cell reporting
+    zero got the same q in the same window, a fake coherent anomaly."""
+    return zlib.crc32(f"{stream_id}|{cell}".encode())
 
 # Dispersion hypotheses: NB size k (smaller = burstier); inf = Poisson.
 K_GRID: tuple[float, ...] = (0.25, 0.5, 1.0, 2.0, 4.0, 8.0, 16.0, 32.0, 64.0, math.inf)
@@ -76,7 +85,7 @@ class BayesianCount:
     prior_shape: float = 0.5  # a₀ — Jeffreys-like, vague
     prior_rate: float = 1e-3  # b₀ — per unit exposure; vague
     seasonal_lr: float = 0.05
-    seed: int = 12345
+    seed: int = LEGACY_SEED
     k_grid: tuple[float, ...] = K_GRID  # dispersion hypotheses (tests pin this)
 
     # state
@@ -254,3 +263,7 @@ class BayesianCount:
             assert m._rng is not None
             m._rng.bit_generator.state = p["rng"]
         return m
+
+    def reseed(self, seed: int) -> None:
+        self.seed = seed
+        self._rng = np.random.default_rng(seed)
