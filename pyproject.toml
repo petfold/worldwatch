@@ -24,6 +24,7 @@ dependencies = [
     "scipy>=1.13",
     "fastapi>=0.111",
     "uvicorn[standard]>=0.30",
+    "websockets>=13",  # push feeds (EMSC, Coinbase); already pulled in by uvicorn[standard]
 ]
 
 [project.scripts]

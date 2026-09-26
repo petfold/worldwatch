@@ -298,3 +298,25 @@ Expected event → alert, after A–G:
 - Known cost: scoring runs on the poll event loop; a full EURDEP poll
   (3,369 stations) takes ~14 s including the download. Acceptable at 30-min
   cadence; move scoring to a worker thread if it grows.
+
+## Implementation notes — phase 2 (2026-09-26)
+
+- **Push feeds:** `[fetch] kind = "websocket"` stanzas run in
+  `worldwatch.poll.stream.run_stream` instead of the polling loop, feeding
+  the same parsers, dedup, evidence store and live scorer. Messages are stored
+  and scored in 1-s batches; faults are recorded as data, with reconnects
+  backing off exponentially up to 5 min. While connected, the stream writes an
+  "ok" heartbeat once per `cadence_seconds`, so a quiet-but-alive feed reads as
+  reporting to the presence channel.
+- **Coinbase (BTC, ETH):** ticker channel, about 280 BTC ticks a minute,
+  thinned per cell to one observation a minute, or at once on a log-price move
+  of ≥ 0.3% (`emit_every_seconds`, `emit_delta`).
+- **EMSC:** seismicportal create/update messages (`emsc_seismic`), with the
+  region, authority, event type and event page kept as context. Updates to
+  already-seen events dedup on (cell, origin time).
+- **Faster polling:** USGS all-hour and significant feeds, and NWS Extreme,
+  every 60 s. USGS keeps 5-min native report windows. NWS severe stays at
+  15 min until §G thins its ~2 MB payload.
+- **Not done:** NWWS-OI push (needs an operator-registered account); optional.
+- `websockets` is declared explicitly; it was already installed via
+  `uvicorn[standard]`.

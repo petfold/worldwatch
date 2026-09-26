@@ -47,10 +47,10 @@ def test_wikimedia_pageviews_raw_without_transform(sources):
     assert obs[0].value == 8123456.0
 
 
-def test_coinbase_spot_uses_now_sentinel(sources):
+def test_coinbase_spot_uses_now_sentinel(rest_spot):
     import math
 
-    cfg = sources["btc_usd"]
+    cfg = rest_spot
     payload = {"data": {"amount": "63000.42", "currency": "USD"}}
     obs = parsers.parse(payload, cfg)
     assert len(obs) == 1
@@ -59,10 +59,10 @@ def test_coinbase_spot_uses_now_sentinel(sources):
     assert obs[0].ts == parsers._NOW_SENTINEL
 
 
-def test_coinbase_spot_raw_without_transform(sources):
+def test_coinbase_spot_raw_without_transform(rest_spot):
     import dataclasses
 
-    base = sources["btc_usd"]
+    base = rest_spot
     cfg = dataclasses.replace(base, parse={k: v for k, v in base.parse.items() if k != "transform"})
     obs = parsers.parse({"data": {"amount": "63000.42"}}, cfg)
     assert obs[0].value == 63000.42

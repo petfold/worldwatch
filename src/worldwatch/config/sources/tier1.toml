@@ -7,7 +7,7 @@ modality         = "physical"
 topic_tags       = ["seismic", "hazard"]
 flavor           = "count"
 endpoint         = "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_hour.geojson"
-cadence_seconds  = 300
+cadence_seconds  = 60      # USGS updates its feeds every minute (ADR 0002 §D)
 status           = "nursery"
 notes            = "USGS all-hour summary feed (GeoJSON); dedup by PK across overlapping polls"
 
@@ -20,6 +20,9 @@ filter_min_mag   = 1.0
 [usgs_seismic.geocode]
 strategy         = "feature_coords"
 h3_resolution    = 3
+
+[usgs_seismic.model]
+native_seconds   = 300     # 5-min report windows; polled every minute
 
 [usgs_seismic.display]
 label            = "Earthquakes (M1+)"
@@ -79,14 +82,20 @@ class            = "crypto_market"
 modality         = "economic"
 topic_tags       = ["markets", "crypto"]
 flavor           = "continuous"
-endpoint         = "https://api.coinbase.com/v2/prices/BTC-USD/spot"
-cadence_seconds  = 300
+endpoint         = "wss://ws-feed.exchange.coinbase.com"
+cadence_seconds  = 60
 status           = "nursery"
-notes            = "BTC/USD spot price — continuous flavor reference; value = log1p(price)"
+notes            = "BTC/USD from the Coinbase WebSocket ticker (push, ADR 0002 §D); value = log1p(price)"
+
+[btc_usd.fetch]
+kind             = "websocket"
+subscribe        = { type = "subscribe", product_ids = ["BTC-USD"], channels = ["ticker"] }
+emit_every_seconds = 60      # ~8 ticks/s thinned to one a minute...
+emit_delta       = 0.003     # ...but a 0.3% move (log price) goes out at once
 
 [btc_usd.parse]
-format           = "coinbase_spot"
-value_path       = "data.amount"
+format           = "coinbase_ticker"
+product_id       = "BTC-USD"
 transform        = "log1p"
 
 [btc_usd.geocode]
@@ -94,7 +103,7 @@ strategy         = "global"
 cell             = "GLOBAL"
 
 [btc_usd.model]
-obs_scale        = 0.002   # ~0.2% five-minute log-return noise; fixed until P1
+obs_scale        = 0.001   # prior guess, ~0.1% per minute; the scale is learned
 level_var        = 2e-5
 
 [btc_usd.display]
@@ -103,20 +112,26 @@ prefix           = "$"
 inverse          = "expm1"
 
 
-# Adding a second market is stanza-only — reuses the coinbase_spot parser.
+# Adding a second market is stanza-only — reuses the coinbase_ticker parser.
 [eth_usd]
 class            = "crypto_market"
 modality         = "economic"
 topic_tags       = ["markets", "crypto"]
 flavor           = "continuous"
-endpoint         = "https://api.coinbase.com/v2/prices/ETH-USD/spot"
-cadence_seconds  = 300
+endpoint         = "wss://ws-feed.exchange.coinbase.com"
+cadence_seconds  = 60
 status           = "nursery"
-notes            = "ETH/USD spot price; value = log1p(price)"
+notes            = "ETH/USD from the Coinbase WebSocket ticker (push, ADR 0002 §D); value = log1p(price)"
+
+[eth_usd.fetch]
+kind             = "websocket"
+subscribe        = { type = "subscribe", product_ids = ["ETH-USD"], channels = ["ticker"] }
+emit_every_seconds = 60      # ~8 ticks/s thinned to one a minute...
+emit_delta       = 0.003     # ...but a 0.3% move (log price) goes out at once
 
 [eth_usd.parse]
-format           = "coinbase_spot"
-value_path       = "data.amount"
+format           = "coinbase_ticker"
+product_id       = "ETH-USD"
 transform        = "log1p"
 
 [eth_usd.geocode]
@@ -124,7 +139,7 @@ strategy         = "global"
 cell             = "GLOBAL"
 
 [eth_usd.model]
-obs_scale        = 0.003   # ETH runs a touch more volatile than BTC
+obs_scale        = 0.0015  # prior guess; ETH runs a touch more volatile than BTC
 level_var        = 4e-5
 
 [eth_usd.display]
@@ -574,7 +589,7 @@ modality         = "physical"
 topic_tags       = ["seismic", "hazard", "significant"]
 flavor           = "count"
 endpoint         = "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/significant_day.geojson"
-cadence_seconds  = 300
+cadence_seconds  = 60
 status           = "nursery"
 notes            = "USGS curated significant earthquakes (magnitude, PAGER, felt reports), last day"
 
@@ -609,7 +624,7 @@ modality         = "physical"
 topic_tags       = ["weather", "hazard", "extreme"]
 flavor           = "count"
 endpoint         = "https://api.weather.gov/alerts/active?severity=Extreme"
-cadence_seconds  = 300
+cadence_seconds  = 60      # tiny payload; NWS severe stays at 15 min until thinned (ADR 0002 §G)
 status           = "nursery"
 notes            = "NWS active alerts with severity Extreme (US)"
 
@@ -632,3 +647,44 @@ text             = "{event}| ({severity})|: {areaDesc}"
 [nws_extreme.alerts]
 every_event      = true
 severity         = 0.8   # priority 4: shown, but doesn't wake you
+
+
+# --- Earthquakes, pushed: EMSC seismicportal WebSocket ----------------------
+# Events arrive seconds after EMSC publishes (ADR 0002 §D) and include small
+# European/Mediterranean events that the USGS global catalogue lacks.
+# Same modality as USGS (physical), so the two never corroborate each other.
+
+[emsc_seismic]
+class            = "seismic_feed"
+modality         = "physical"
+topic_tags       = ["seismic", "hazard"]
+flavor           = "count"
+endpoint         = "wss://www.seismicportal.eu/standing_order/websocket"
+cadence_seconds  = 300     # heartbeat period while connected (presence)
+status           = "nursery"
+notes            = "EMSC real-time events (create/update) over WebSocket; value = magnitude"
+
+[emsc_seismic.fetch]
+kind             = "websocket"
+
+[emsc_seismic.parse]
+format           = "emsc_ws"
+filter_min_mag   = 1.0
+
+[emsc_seismic.geocode]
+strategy         = "feature_coords"
+h3_resolution    = 3
+
+[emsc_seismic.model]
+native_seconds   = 300
+
+[emsc_seismic.display]
+label            = "Earthquakes (EMSC)"
+unit             = "quakes"
+max_prefix       = "M"
+
+[emsc_seismic.context]
+fields           = ["flynn_region", "mag", "magtype", "depth", "evtype", "auth", "unid", "url"]
+rank             = "mag"
+text             = "M{mag}| {flynn_region}|, depth {depth:.0f} km|, {auth}"
+link             = "url"

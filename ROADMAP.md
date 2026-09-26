@@ -81,7 +81,9 @@ around 2026-10-10.
       (accepted 2026-09-26; measured per-source latency in
       [`doc/source-latency.tsv`](doc/source-latency.tsv)). Pipeline currently
       adds 30–60 min; target seconds. Phase 1 (live scoring + sequential
-      evidence) DONE 2026-09-26; radiation deployed with it.
+      evidence) DONE 2026-09-26; radiation deployed with it. Phase 2 (EMSC +
+      Coinbase WebSockets, 60-s USGS/NWS Extreme polling) DONE 2026-09-26;
+      NWWS-OI push optional (operator account).
 - [ ] Seismic layer, alert-triggered (no continuous sampling, no phone data) —
       discrimination enrichment (event type, mb : Ms, depth flags, test-site
       distance), waveform screening of the triggered window

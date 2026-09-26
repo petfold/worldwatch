@@ -506,6 +506,61 @@ CAMEO_ROOTS: dict[str, str] = {
 }
 
 
+@register("coinbase_ticker")
+def parse_coinbase_ticker(payload: Any, cfg: SourceConfig) -> list[Observation]:
+    """One Coinbase WebSocket `ticker` message → one price observation.
+
+    payload = {"message": <decoded JSON>, "received": epoch}. Messages for
+    other products or of other types (subscriptions, heartbeats) yield nothing;
+    the stream runner's throttle thins the ~8 ticks/s to what the model needs.
+    transform = "log1p" as for the REST spot price.
+    """
+    import math
+
+    m = payload.get("message") or {}
+    if m.get("type") != "ticker" or m.get("product_id") != cfg.parse.get("product_id"):
+        return []
+    price = float(m["price"])
+    value = math.log1p(price) if str(cfg.parse.get("transform", "")) == "log1p" else price
+    ts = _parse_event_time(m["time"]) if m.get("time") else _NOW_SENTINEL
+    return [Observation(cfg.stream_id, str(cfg.geocode.get("cell", "GLOBAL")), ts, value)]
+
+
+@register("emsc_ws")
+def parse_emsc_ws(payload: Any, cfg: SourceConfig) -> list[Observation]:
+    """One EMSC seismicportal WebSocket message ({"action": create|update,
+    "data": GeoJSON feature}) → one quake observation (value = magnitude).
+
+    Updates to already-seen events dedup on (cell, origin time); a revised
+    location or origin time counts as a new key, which is rare and accepted.
+    Context adds the EMSC event page as `url`.
+    """
+    m = payload.get("message") or {}
+    feat = m.get("data") or {}
+    props = feat.get("properties") or {}
+    if props.get("lat") is None or props.get("lon") is None or not props.get("time"):
+        return []
+    ts = _parse_event_time(props["time"])
+    if ts is None:
+        return []
+    mag = props.get("mag")
+    min_mag = cfg.parse.get("filter_min_mag")
+    if min_mag is not None and mag is not None and float(mag) < float(min_mag):
+        return []
+    unid = props.get("unid") or feat.get("id")
+    source = {**props, "url": f"https://www.seismicportal.eu/eventdetails.html?unid={unid}" if unid else None}
+    return [
+        Observation(
+            stream_id=cfg.stream_id,
+            cell=h3_cell(float(props["lat"]), float(props["lon"]), int(cfg.geocode.get("h3_resolution", 3))),
+            ts=ts,
+            value=float(mag) if mag is not None else None,
+            meta={"depth_km": props.get("depth")} if props.get("depth") is not None else None,
+            context=evidence.with_rank(cfg, evidence.pick(cfg, source)),
+        )
+    ]
+
+
 # Sentinel: parser could not derive a timestamp; the poller substitutes poll time.
 _NOW_SENTINEL = -1
 

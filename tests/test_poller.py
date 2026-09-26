@@ -126,8 +126,8 @@ async def test_templated_endpoint_is_fetched(db, sources):
     assert "/hourly/" in requested[0] and requested[0].endswith("2026071000")
 
 
-async def test_spot_price_stamped_with_poll_time(db, sources):
-    cfg = sources["btc_usd"]
+async def test_spot_price_stamped_with_poll_time(db, rest_spot):
+    cfg = rest_spot
 
     def handler(request):
         return httpx.Response(200, json={"data": {"amount": "63000.42"}})
@@ -155,7 +155,7 @@ def test_jitter_is_deterministic_and_bounded(sources):
     [
         ("usgs_seismic", load_fixture("usgs_sample.json")),
         ("wikipedia_pageviews", load_fixture("wikimedia_sample.json")),
-        ("btc_usd", {"data": {"amount": "100.0"}}),
+        ("rest_spot", {"data": {"amount": "100.0"}}),
         (
             "safecast_radiation",
             [
@@ -169,9 +169,9 @@ def test_jitter_is_deterministic_and_bounded(sources):
         ),
     ],
 )
-async def test_idempotent_reingest(db, sources, sid, payload):
+async def test_idempotent_reingest(db, sources, rest_spot, sid, payload):
     """Re-polling the same payload writes no duplicate rows (crash-restart safe)."""
-    cfg = sources[sid]
+    cfg = rest_spot if sid == "rest_spot" else sources[sid]
 
     def handler(request):
         return httpx.Response(200, json=payload)

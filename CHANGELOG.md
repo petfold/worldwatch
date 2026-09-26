@@ -47,6 +47,12 @@ sibling projects, where the tag is what publishes.
 
 ### Added
 
+- **Push feeds (ADR 0002 phase 2).** `[fetch] kind = "websocket"` stanzas stream
+  instead of polling: Coinbase ticker for BTC/ETH (thinned to one observation a
+  minute, or at once on a ≥ 0.3% move) and EMSC real-time earthquakes (new
+  `emsc_seismic`, with the region and event page as context). Presence
+  heartbeats while connected, reconnect with backoff. USGS feeds and NWS
+  Extreme are polled every 60 s.
 - **Real-time detection path, phase 1 (ADR 0002).** Scoring moved into the poll
   process: each new observation is scored on arrival at its stream's native
   resolution (continuous: per observation; counts: windows bucketed by arrival,
