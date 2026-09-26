@@ -5,12 +5,17 @@ P0 runs as a few systemd units talking only through one SQLite file
 three timer-driven passes (**consolidate**, **detect**, **presence**).
 
 ```
-poll (service)  ── writes ──▶  raw_ring
-consolidate (timer, 5m) ─────▶  bins
-detect (timer, 5m) ──────────▶  surprise + alerts ──▶ push
+poll (service) ── fetch → raw_ring → live score → surprise → alerts → push   (seconds)
+consolidate (timer, 5m) ─────▶  bins (archive cascade; folds only scored rows)
+detect (timer, 5m) ──────────▶  alerts ──▶ push   (safety-net sweep, idempotent)
 presence (timer, 15m) ───────▶  silence rows
 api (service) ── reads ───────  dashboard + /api
 ```
+
+Scoring happens in the poll process as observations arrive (ADR 0002): each
+stream at its native resolution, CUSUM evidence in memory, the alert policy and
+the push in the same event loop. The detect timer re-applies the alert policy
+to the surprise archive in case the live path missed anything.
 
 ## Quick start
 
@@ -26,9 +31,9 @@ sudo systemctl restart 'worldwatch-*'
 
 | Unit | Type | Cadence | Does |
 |------|------|---------|------|
-| `worldwatch-poll.service` | service | continuous | one async poller per source → `raw_ring` |
-| `worldwatch-consolidate.timer` | timer | 5 min | fold aged rows → `bins` |
-| `worldwatch-detect.timer` | timer | 5 min | Layer-0 score → alerts → push |
+| `worldwatch-poll.service` | service | continuous | one async poller per source → `raw_ring`; live Layer-0 scoring, alerts and push on arrival; closes count windows every 30 s |
+| `worldwatch-consolidate.timer` | timer | 5 min | fold aged, scored rows → `bins` (archive) |
+| `worldwatch-detect.timer` | timer | 5 min | alert sweep over the surprise archive → push |
 | `worldwatch-presence.timer` | timer | 15 min | silence detection |
 | `worldwatch-api.service` | service | continuous | dashboard + read API (+ label write) |
 

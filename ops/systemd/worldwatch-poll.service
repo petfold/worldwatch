@@ -1,5 +1,5 @@
 [Unit]
-Description=Worldwatch pollers (one async task per source)
+Description=Worldwatch pollers + live scoring and alerts (one async task per source)
 After=network-online.target
 Wants=network-online.target
 

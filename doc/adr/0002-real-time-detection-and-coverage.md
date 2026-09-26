@@ -265,3 +265,36 @@ Expected event → alert, after A–G:
 3. **E + F:** own prober (NTP + anchors, stratified); IODA signals and events.
 4. **G + H:** coverage balance, MeteoAlarm, GDACS, Safecast retired, night
    lights NRT, then the radiation deploy.
+
+## Implementation notes — phase 1 (2026-09-26)
+
+- `worldwatch.layer0.live.LiveScorer` runs in the poll process; surprise rows
+  it writes carry scale −1 (`worldwatch.layer0.native.NATIVE_SCALE`), apart
+  from the archive cascade's scales. The cascade is no longer scored.
+- **Counts are bucketed by arrival time** (first seen), in windows of
+  `[model] native_seconds` (default max(300, cadence)). They measure "reports
+  per window", so a window can close 60 s after it ends instead of waiting for
+  sources that publish late (USGS international quakes: 20–40 min). Windows
+  with zero reports are scored for every cell active in the last 30 days, so
+  count models finally see zeros.
+- **Continuous streams** are scored per observation, by observation time; an
+  observation older than its model's last is recorded (`out_of_order`), not
+  scored.
+- **CUSUM parameters:** k = 2, h = 4 (one reading at p ≤ 0.0025, or two at
+  p ≤ ~0.018); single-source streams need h = −ln(q_tail) − k. Candidates must
+  be at most 3 h old.
+- **Exactly-once:** `raw_ring.scored` (schema v6) is set in the same
+  transaction as the surprise rows and model states. The consolidator folds
+  only scored rows of live streams (or rows older than 6 h, if the scorer has
+  been down that long), and `LiveScorer.replay` scores what a crash left
+  behind. CUSUM state is rebuilt from the last 24 h of native rows on
+  startup.
+- **Co-located detectors:** EURDEP has 3,630 stations at 3,369 distinct
+  coordinates. Radiation stanzas geocode at H3 res 10 (~120 m) and keep one
+  detector per site (`site_field`, lowest id), so detectors are never mixed
+  into one model and never count as two confirmations.
+- **Radiation policy updated** to the §C numbers: `min_sensors = 2`,
+  `q_tail = 1e-4`, no persistence.
+- Known cost: scoring runs on the poll event loop; a full EURDEP poll
+  (3,369 stations) takes ~14 s including the download. Acceptable at 30-min
+  cadence; move scoring to a worker thread if it grows.

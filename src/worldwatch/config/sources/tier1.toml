@@ -463,14 +463,16 @@ digits           = 1
 # EURDEP: ~17,000 official gamma dose-rate stations in ~40 countries, hourly,
 # republished openly by Germany's BfS (no access constraints or fees declared;
 # ~240 KB gzipped per poll). Germany's own ~1,700 stations are a separate BfS
-# layer. Each station sits in its own fine cell (H3 res 8), so it is its own
-# series; the alert engine groups stations into regions. Countries report at
+# layer. Each station sits in its own fine cell (H3 res 10, ~120 m; co-located
+# detectors collapse to the lowest station id), so it is its own series; the
+# alert engine groups stations into regions. Countries report at
 # their own pace, so a poll carries each station's latest hour — dedup by
 # (station cell, hour) keeps every measurement once.
 # Radiation may alert on its own (no other source sees it), confirmed within
-# the network: >= min_sensors stations in one region, each past q_tail for
-# persist_n bins. Known confounder: rain washes radon progeny down and raises
-# dose rates regionally — kept strict until precipitation explains it away (P1).
+# the network in space rather than time: >= min_sensors stations in one region,
+# each with one reading at p <= q_tail (ADR 0002 "confirm in space before
+# time"). Known confounder: rain washes radon progeny down and raises dose
+# rates regionally — guarded by size and, later, precipitation (research agenda).
 
 [eurdep_gamma]
 class            = "radiation_network"
@@ -488,10 +490,11 @@ time_fields      = ["end_measure"]
 value_field      = "value"
 transform        = "log"
 where            = { site_status = [1] }
+site_field       = "id"   # co-located detectors: one series per site
 
 [eurdep_gamma.geocode]
 strategy         = "feature_coords"
-h3_resolution    = 8
+h3_resolution    = 10     # ~120 m: only truly co-located detectors share a cell
 
 [eurdep_gamma.model]
 obs_scale        = 0.05     # ~5% hour-to-hour on log dose rate; learned online
@@ -511,9 +514,8 @@ text             = "{name}| ({id})|: {value} {unit}"
 
 [eurdep_gamma.alerts]
 single_source    = true
-min_sensors      = 3
-q_tail           = 1e-6
-persist_n        = 2
+min_sensors      = 2      # independent stations agreeing at once (ADR 0002 §C)
+q_tail           = 1e-4   # per reading; ~25k neighbour pairs x p^2 ≈ one false alarm / 6 months
 region_resolution = 3
 
 
@@ -533,10 +535,11 @@ time_fields      = ["end_measure"]
 value_field      = "value"
 transform        = "log"
 where            = { site_status = [1] }
+site_field       = "id"   # co-located detectors: one series per site
 
 [bfs_odl_gamma.geocode]
 strategy         = "feature_coords"
-h3_resolution    = 8
+h3_resolution    = 10     # ~120 m: only truly co-located detectors share a cell
 
 [bfs_odl_gamma.model]
 obs_scale        = 0.05
@@ -556,9 +559,8 @@ text             = "{name}| ({id})|: {value} {unit}"
 
 [bfs_odl_gamma.alerts]
 single_source    = true
-min_sensors      = 3
-q_tail           = 1e-6
-persist_n        = 2
+min_sensors      = 2      # independent stations agreeing at once (ADR 0002 §C)
+q_tail           = 1e-4   # per reading; ~25k neighbour pairs x p^2 ≈ one false alarm / 6 months
 region_resolution = 3
 
 

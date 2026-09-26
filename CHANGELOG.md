@@ -13,6 +13,11 @@ sibling projects, where the tag is what publishes.
 
 ### Fixed
 
+- **Co-located radiation detectors were mixed into one series** (EURDEP: 3,630
+  stations at 3,369 coordinates). Radiation stanzas now geocode at H3 res 10
+  and keep one detector per site (`site_field`).
+- **API alert checks raced across processes** — check-then-insert now runs
+  under BEGIN IMMEDIATE.
 - **Bins were scored before they were complete.** Layer 0 scored each bin once,
   as soon as it appeared, while later raw rows could still fold into it (a
   GDELT bin scored at 5 events ended with 6; another at 1 ended with 8). Only
@@ -42,6 +47,18 @@ sibling projects, where the tag is what publishes.
 
 ### Added
 
+- **Real-time detection path, phase 1 (ADR 0002).** Scoring moved into the poll
+  process: each new observation is scored on arrival at its stream's native
+  resolution (continuous: per observation; counts: windows bucketed by arrival,
+  closed 60 s after they end, zeros included), the alert policy runs and the
+  push goes out in the same event loop — seconds instead of 30–60 min. The
+  detect timer is now an idempotent alert sweep; the cascade is archive only.
+  Exactly-once via `raw_ring.scored` (schema v6), crash replay, and a
+  consolidator that folds only scored rows.
+- **Sequential evidence** replaces "≥ 2 anomalous bins": a CUSUM on each
+  series' surprisal (k = 2, h = 4) — one reading at p ≤ 0.0025 alerts at once,
+  weaker ones accumulate. Single-source streams need one reading at p ≤ q_tail;
+  radiation now alerts on the first reading when 2 independent stations agree.
 - **Per-source alert policy** (doc/adr/0001) — a stanza's `[alerts]` table:
   `role = "context"` (never corroborates; shown as news in the area),
   `single_source` (alert alone when ≥ `min_sensors` of the network's own

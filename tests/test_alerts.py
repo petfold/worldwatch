@@ -69,26 +69,50 @@ def test_two_modalities_same_region_corroborate(db, sources):
     assert {e["modality"] for e in evidence} == {"physical", "informational"}
 
 
-def test_persistence_required(db, sources):
+def test_weak_single_reading_needs_accumulation(db, sources):
+    """Sequential evidence (ADR 0002 §C): one 1-in-60 reading is not enough,
+    two in a row are (break-even ≈ p 0.018 per reading at h = 4, k = 2)."""
     src = {
         "quake": _src(sources, "quake", "physical"),
         "news": _src(sources, "news", "informational"),
     }
     _anomalous_series(db, "quake", _cellA(), k=3)
-    # news anomalous only once (< persist_n) → not persistent → no corroboration
-    _surprise(db, "news", _cell_near_A(), 3, NOW, q=0.999)
-    assert run_alerts(db, src, now=NOW, persist_n=2) == []
+    _surprise(db, "news", _cell_near_A(), 3, NOW, q=0.992)  # p = 0.016: S ≈ 2.1 < h
+    assert run_alerts(db, src, now=NOW) == []
+    _surprise(db, "news", _cell_near_A(), 3, NOW - BW, q=0.992)  # S ≈ 4.3 ≥ h
+    assert len(run_alerts(db, src, now=NOW)) == 1
 
 
-def test_latest_bin_must_be_anomalous(db, sources):
+def test_strong_single_reading_needs_no_waiting(db, sources):
     src = {
         "quake": _src(sources, "quake", "physical"),
         "news": _src(sources, "news", "informational"),
     }
-    # quake: two old anomalies then a normal latest bin → not currently anomalous
-    _surprise(db, "quake", _cellA(), 3, NOW - 2 * BW, q=0.999)
-    _surprise(db, "quake", _cellA(), 3, NOW - BW, q=0.999)
-    _surprise(db, "quake", _cellA(), 3, NOW, q=0.5)  # back to normal
+    _surprise(db, "quake", _cellA(), 3, NOW, q=0.9995)  # p = 0.001: one reading suffices
+    _surprise(db, "news", _cell_near_A(), 3, NOW, q=0.9995)
+    assert len(run_alerts(db, src, now=NOW)) == 1
+
+
+def test_evidence_decays_after_return_to_normal(db, sources):
+    src = {
+        "quake": _src(sources, "quake", "physical"),
+        "news": _src(sources, "news", "informational"),
+    }
+    _surprise(db, "quake", _cellA(), 3, NOW - 4 * BW, q=0.999)
+    _surprise(db, "quake", _cellA(), 3, NOW - 3 * BW, q=0.999)
+    for i in (2, 1, 0):  # three normal readings drain the CUSUM (drift k = 2 each)
+        _surprise(db, "quake", _cellA(), 3, NOW - i * BW, q=0.5)
+    _anomalous_series(db, "news", _cell_near_A())
+    assert run_alerts(db, src, now=NOW) == []
+
+
+def test_stale_series_is_not_a_candidate(db, sources):
+    src = {
+        "quake": _src(sources, "quake", "physical"),
+        "news": _src(sources, "news", "informational"),
+    }
+    for i in range(3):
+        _surprise(db, "quake", _cellA(), 3, NOW - 5 * 3600 - i * BW, q=0.9999)  # 5 h old
     _anomalous_series(db, "news", _cell_near_A())
     assert run_alerts(db, src, now=NOW) == []
 
@@ -213,8 +237,18 @@ def test_single_faulty_sensor_does_not_alert(db, sources):
 def test_single_source_needs_the_stricter_tail(db, sources):
     src = {"rad": _with_policy(sources, "rad", "physical", RAD, status="active")}
     for i in range(3):
-        _anomalous_series(db, "rad", _station(i), scale=2, k=2, q=0.9999)  # 1-in-10k: not enough
+        _anomalous_series(db, "rad", _station(i), scale=2, k=1, q=0.99995)  # 1-in-10k: not enough
     assert run_alerts(db, src, now=NOW) == []
+
+
+def test_single_source_alerts_on_first_reading_when_sensors_agree(db, sources):
+    """Confirm in space before time: two stations, one reading each."""
+    pol = {"single_source": True, "min_sensors": 2, "q_tail": 1e-4, "region_resolution": 3}
+    src = {"rad": _with_policy(sources, "rad", "physical", pol, status="active")}
+    _surprise(db, "rad", _station(0), -1, NOW, q=1 - 2e-5)
+    assert run_alerts(db, src, now=NOW) == []  # one station alone
+    _surprise(db, "rad", _station(1), -1, NOW, q=1 - 3e-5)
+    assert len(run_alerts(db, src, now=NOW)) == 1
 
 
 def test_nursery_single_source_is_capped_below_waking(db, sources):

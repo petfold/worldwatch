@@ -1,5 +1,5 @@
 [Unit]
-Description=Worldwatch detect pass (Layer-0 scoring -> alerts -> push)
+Description=Worldwatch alert sweep (surprise archive -> alerts -> push; scoring is live in poll)
 
 [Service]
 Slice=worldwatch.slice

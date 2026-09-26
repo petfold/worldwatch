@@ -96,7 +96,8 @@ def parse_geojson_events(payload: Any, cfg: SourceConfig) -> list[Observation]:
     or epoch ms; value is optional (pure-event → count flavor). time_field falls
     back through a list so alert feeds with onset/effective/sent all work.
     `where` keeps only features whose property takes one of the listed values
-    (e.g. stations in operation); transform = "log" stores log(value).
+    (e.g. stations in operation); transform = "log" stores log(value);
+    `site_field` names the sensor id, keeping one sensor per cell.
     """
     time_fields = cfg.parse.get("time_fields") or [
         cfg.parse.get("time_field", "onset"),
@@ -107,6 +108,7 @@ def parse_geojson_events(payload: Any, cfg: SourceConfig) -> list[Observation]:
     transform = str(cfg.parse.get("transform", ""))
     # where = { site_status = [1] }: keep features whose property is one of the values
     where = {str(k): list(v) for k, v in (cfg.parse.get("where") or {}).items()}
+    site_field = cfg.parse.get("site_field")  # sensor networks: one site per cell
     resolution = int(cfg.geocode.get("h3_resolution", 3))
 
     obs: list[Observation] = []
@@ -141,9 +143,25 @@ def parse_geojson_events(payload: Any, cfg: SourceConfig) -> list[Observation]:
                 ts=ts,
                 value=val,
                 context=evidence.with_rank(cfg, evidence.pick(cfg, props)),
+                meta={"site": str(props.get(site_field))} if site_field else None,
             )
         )
+    if site_field:
+        obs = _one_site_per_cell(obs)
     return obs
+
+
+def _one_site_per_cell(obs: list[Observation]) -> list[Observation]:
+    """Co-located sensors (same fine cell) are one series, not several: keep
+    the lowest site id in each cell, so the same detector is chosen every poll
+    and two detectors are never mixed into one model. They are not independent
+    confirmations either."""
+    keep: dict[str, str] = {}
+    for o in obs:
+        site = str((o.meta or {}).get("site"))
+        if o.cell not in keep or site < keep[o.cell]:
+            keep[o.cell] = site
+    return [o for o in obs if str((o.meta or {}).get("site")) == keep[o.cell]]
 
 
 def _feature_centroid(geometry: Any) -> tuple[float, float] | None:

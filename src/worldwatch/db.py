@@ -150,6 +150,27 @@ MIGRATIONS: list[str] = [
     CREATE INDEX IF NOT EXISTS context_lookup ON context (stream_id, cell, ts);
     CREATE INDEX IF NOT EXISTS context_ts ON context (ts);
     """,
+    # v6 — real-time path (ADR 0002). raw_ring.scored marks observations the
+    # live scorer has consumed (the consolidator folds only those, so a crash
+    # never loses one); live_windows holds open count windows (bucketed by
+    # arrival); live_cells lists the cells a count stream scores, zeros included.
+    """
+    ALTER TABLE raw_ring ADD COLUMN scored INTEGER NOT NULL DEFAULT 0;
+    UPDATE raw_ring SET scored = 1;
+    CREATE TABLE IF NOT EXISTS live_windows (
+        stream_id   TEXT NOT NULL,
+        cell        TEXT NOT NULL,
+        win_start   INTEGER NOT NULL,
+        n           INTEGER NOT NULL,
+        PRIMARY KEY (stream_id, cell, win_start)
+    ) WITHOUT ROWID;
+    CREATE TABLE IF NOT EXISTS live_cells (
+        stream_id     TEXT NOT NULL,
+        cell          TEXT NOT NULL,
+        last_event_ts INTEGER NOT NULL,
+        PRIMARY KEY (stream_id, cell)
+    ) WITHOUT ROWID;
+    """,
 ]
 
 

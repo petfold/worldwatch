@@ -28,6 +28,7 @@ from worldwatch import evidence
 from worldwatch.api import context
 from worldwatch.api.notify import format_alert
 from worldwatch.cascade.bins import bin_width
+from worldwatch.layer0.native import NATIVE_SCALE, row_seconds
 from worldwatch.config.loader import SourceConfig
 from worldwatch.db import connect
 
@@ -347,10 +348,13 @@ def create_app(
                 pk = peak[sid]
                 item["peak"] = context.surprise_word(pk["q_value"])
                 item["peak_at"] = pk["bin_start"]
-                item["peak_until"] = pk["bin_start"] + bin_width(pk["scale"])
+                item["peak_until"] = pk["bin_start"] + row_seconds(cfg, pk["scale"])
                 # the records behind the peak itself — not just the day's top story
+                arrival = pk["scale"] == NATIVE_SCALE and cfg is not None and cfg.flavor == "count"
                 item["peak_stories"] = _story_dicts(
-                    cfg, evidence.top(conn, sid, cell, pk["bin_start"], item["peak_until"], limit=3)
+                    cfg, evidence.top(conn, sid, cell, pk["bin_start"],
+                                      max(item["peak_until"], pk["bin_start"] + 1), limit=3,
+                                      arrival=arrival)
                 )
             recs = evidence.top(conn, sid, cell, cutoff, _now() + 1, limit=5)
             if recs:

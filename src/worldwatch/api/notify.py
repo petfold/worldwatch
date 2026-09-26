@@ -19,7 +19,7 @@ import httpx
 
 from worldwatch import evidence as evstore
 from worldwatch.api import context
-from worldwatch.cascade.bins import bin_width
+from worldwatch.layer0.native import NATIVE_SCALE, row_seconds
 from worldwatch.config.loader import SourceConfig
 from worldwatch.instrument import record_health
 
@@ -130,8 +130,15 @@ def _stories(
     if cfg is None or evstore.spec(cfg) is None:
         return []
     t0 = int(e["bin_start"])
-    t1 = t0 + 1 if e.get("kind") == "source_alert" else t0 + bin_width(int(e.get("scale") or 0))
-    return evstore.top(conn, e["stream_id"], e["cell"], t0, t1, STORIES_PER_SIGNAL)
+    scale = int(e.get("scale") or 0)
+    width = e.get("bin_seconds")
+    if width is None:
+        width = row_seconds(cfg, scale)
+    if e.get("kind") == "source_alert":
+        width = 0
+    arrival = scale == NATIVE_SCALE and cfg.flavor == "count"
+    return evstore.top(conn, e["stream_id"], e["cell"], t0, t0 + max(int(width), 1),
+                       STORIES_PER_SIGNAL, arrival=arrival)
 
 
 NEWS_WINDOW_SECONDS = 3 * 3600

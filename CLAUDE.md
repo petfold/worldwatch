@@ -22,6 +22,8 @@ primary scientific output ("the digital twin condenses out of the residuals").
 - **Layer 0**: one online Bayesian state-space model per source stream (level+trend+
   seasonal harmonics, Student-t noise; count flavor = negative binomial; categorical =
   Dirichlet–Markov). Fitted by Kalman-style recursions — NO training runs, NO GPU.
+  Scored live in the poll process on arrival, at each stream's native resolution
+  (ADR 0002); the geometric cascade is the archive, not the detection clock.
 - **q_value / PIT**: the tail quantile of an observation under its Layer-0 predictive
   distribution. The ONLY interchange currency between layers. Never z-scores.
 - **Presence channel**: per-source model of "did it report when expected". Missingness

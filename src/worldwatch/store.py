@@ -21,8 +21,16 @@ def write_observations(
     """Insert observations never seen before into raw_ring. Returns the number
     of rows actually inserted (re-fetched observations count as 0).
     """
+    return len(write_new_observations(conn, obs, now))
+
+
+def write_new_observations(
+    conn: sqlite3.Connection, obs: Iterable[Observation], now: int | None = None
+) -> list[Observation]:
+    """As write_observations, returning the observations that were new — the
+    ones the live scorer must see (first seen at `now`)."""
     first_seen = now if now is not None else int(time.time())
-    written = 0
+    written: list[Observation] = []
     for o in obs:
         cur = conn.execute(
             "INSERT OR IGNORE INTO seen (stream_id, cell, ts, first_seen) VALUES (?, ?, ?, ?)",
@@ -43,7 +51,7 @@ def write_observations(
         )
         if o.context:
             evidence.put(conn, o)
-        written += 1
+        written.append(o)
     conn.commit()
     return written
 

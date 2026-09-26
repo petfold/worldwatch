@@ -43,8 +43,14 @@ def consolidate(
     fine_window_seconds: int = DEFAULT_FINE_WINDOW_SECONDS,
     seen_retention_seconds: int = DEFAULT_SEEN_RETENTION_SECONDS,
     context_budget_bytes: int = evidence.DEFAULT_BUDGET_MB * 1024 * 1024,
+    live_streams: set[str] | None = None,
+    unscored_grace_seconds: int = 6 * 3600,
 ) -> int:
     """Fold raw_ring rows older than the fine window into bins.
+
+    With `live_streams`, rows of those streams are folded only once the live
+    scorer has consumed them (raw_ring.scored), or once they are older than
+    `unscored_grace_seconds` (scorer down for hours: keep the archive moving).
 
     Returns the number of raw rows consolidated (0 if none were due).
     """
@@ -56,9 +62,15 @@ def consolidate(
     evidence.prune(conn, context_budget_bytes)
 
     raw = conn.execute(
-        "SELECT stream_id, cell, ts, value FROM raw_ring WHERE ts < ?",
+        "SELECT stream_id, cell, ts, value, scored FROM raw_ring WHERE ts < ?",
         (cutoff,),
     ).fetchall()
+    if live_streams:
+        stale = poll_now - unscored_grace_seconds
+        raw = [
+            r for r in raw
+            if r["stream_id"] not in live_streams or r["scored"] or r["ts"] < stale
+        ]
     if not raw:
         return 0
 

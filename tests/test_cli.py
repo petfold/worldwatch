@@ -29,25 +29,27 @@ def test_cmd_consolidate(db, sources):
     assert db.execute("SELECT COUNT(*) FROM bins").fetchone()[0] >= 1
 
 
-def test_cmd_detect_scores_and_returns_summary(db, sources):
-    # one clean multi-bin group, closed by the wall clock cmd_detect uses
+def test_cmd_detect_sweeps_alerts_and_returns_summary(db, sources):
+    """detect is the safety-net sweep: scoring happens live in poll (ADR 0002);
+    detect applies the alert policy to the archive and pushes what it opens."""
     import time
 
-    w = bin_width(3)
+    import h3
+
     now = int(time.time())
-    base = (now // w) * w - 10 * w
-    for i in range(5):
+    uk = h3.latlng_to_cell(54.0, -2.5, 2)  # cf_radar_netflows_gb's cell
+    quake = h3.cell_to_children(uk, 3)[0]
+    for sid, cell in (("usgs_seismic", quake), ("cf_radar_netflows_gb", uk)):
         db.execute(
-            "INSERT INTO bins (stream_id, cell, scale, bin_start, n, vmin, vmax, vmean, m2) "
-            "VALUES ('usgs_seismic','cellX',3,?,3,2.0,2.0,2.0,0.0)",
-            (base + i * w,),
+            "INSERT INTO surprise (stream_id, cell, scale, bin_start, q_value, presence_q, "
+            "precision, n_obs, tail_index, model_version) "
+            "VALUES (?, ?, -1, ?, 0.9999, 1, 1, 3, NULL, 2)",
+            (sid, cell, now - 60),
         )
     db.commit()
-
-    result = cli.cmd_detect(db, sources)
-    assert set(result) == {"surprise", "opened", "notified"}
-    assert result["surprise"] == 5
-    assert result["notified"] == 0  # no push channel configured in tests
+    # physical + infrastructural in one region → one alert; no push channel configured
+    assert cli.cmd_detect(db, sources) == {"opened": 1, "notified": 0}
+    assert cli.cmd_detect(db, sources) == {"opened": 0, "notified": 0}  # idempotent
 
 
 def test_cmd_presence(db, sources):

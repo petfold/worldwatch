@@ -112,13 +112,26 @@ def top(
     t0: int,
     t1: int,
     limit: int = 3,
+    *,
+    arrival: bool = False,
 ) -> list[dict[str, object]]:
-    """Highest-ranked records for (stream, cell) in [t0, t1), one per link."""
-    rows = conn.execute(
-        "SELECT ts, data FROM context WHERE stream_id = ? AND cell = ? AND ts >= ? AND ts < ? "
-        "ORDER BY rank DESC NULLS LAST, ts DESC LIMIT ?",
-        (stream_id, cell, t0, t1, limit * 8),
-    ).fetchall()
+    """Highest-ranked records for (stream, cell) in [t0, t1), one per link.
+    With `arrival`, the window is on first-seen time (count streams' native
+    windows are bucketed by arrival), matched through the `seen` keys."""
+    if arrival:
+        rows = conn.execute(
+            "SELECT c.ts, c.data FROM context c JOIN seen s ON s.stream_id = c.stream_id "
+            "AND s.cell = c.cell AND s.ts = c.ts WHERE c.stream_id = ? AND c.cell = ? "
+            "AND s.first_seen >= ? AND s.first_seen < ? "
+            "ORDER BY c.rank DESC NULLS LAST, c.ts DESC LIMIT ?",
+            (stream_id, cell, t0, t1, limit * 8),
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            "SELECT ts, data FROM context WHERE stream_id = ? AND cell = ? AND ts >= ? AND ts < ? "
+            "ORDER BY rank DESC NULLS LAST, ts DESC LIMIT ?",
+            (stream_id, cell, t0, t1, limit * 8),
+        ).fetchall()
     out, links = [], set()
     for r in rows:
         d = json.loads(r[1])

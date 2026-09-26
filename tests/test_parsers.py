@@ -309,3 +309,17 @@ def test_vnp46a2_groups_blocks_into_h3_cells(sources):
     assert math.isclose(values[0], math.log1p(1.0))
     assert math.isclose(values[1], math.log1p(4.0))
     assert len({o.cell for o in obs}) == 2
+
+
+def test_colocated_detectors_are_one_series(sources):
+    """Two detectors at one site must not be mixed into one model."""
+    cfg = sources["eurdep_gamma"]
+    feat = lambda sid, v, lon=16.39: {  # noqa: E731
+        "type": "Feature",
+        "geometry": {"type": "Point", "coordinates": [lon, 48.73]},
+        "properties": {"id": sid, "site_status": 1, "end_measure": "2026-09-26T06:00:00Z",
+                       "value": v, "unit": "µSv/h", "name": sid},
+    }
+    payload = {"features": [feat("AT0002", 0.2), feat("AT0001", 0.1), feat("AT0009", 0.3, lon=16.5)]}
+    obs = parsers.parse(payload, cfg)
+    assert sorted((o.meta or {})["site"] for o in obs) == ["AT0001", "AT0009"]

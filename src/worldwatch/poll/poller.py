@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 import sqlite3
 import time
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 
 import httpx
@@ -22,7 +23,7 @@ from worldwatch.ingest.models import Observation
 from worldwatch.instrument import record_health
 from worldwatch.poll.fetch import get_fetcher
 from worldwatch.poll.http import CacheValidators
-from worldwatch.store import write_observations
+from worldwatch.store import write_new_observations
 
 # Deterministic per-source jitter fraction of the cadence (no Date/random needed):
 # hash the stream_id to a stable [0, 0.25) offset.
@@ -43,6 +44,9 @@ class PollOutcome:
     detail: str | None = None
 
 
+OnNew = Callable[[SourceConfig, list[Observation], int], Awaitable[None]]
+
+
 async def poll_once(
     client: httpx.AsyncClient,
     conn: sqlite3.Connection,
@@ -50,9 +54,12 @@ async def poll_once(
     validators: CacheValidators,
     *,
     now: int | None = None,
+    on_new: OnNew | None = None,
 ) -> PollOutcome:
     """One fetch → parse → store cycle for a single source. Never raises;
-    classifies failures into a PollOutcome and instruments them."""
+    classifies failures into a PollOutcome and instruments them. `on_new`
+    receives the newly stored observations (the live scorer, ADR 0002); its
+    faults are recorded as data and never fail the poll."""
     poll_time = now if now is not None else int(time.time())
     try:
         fetcher = get_fetcher(cfg)
@@ -82,9 +89,14 @@ async def poll_once(
         record_health(conn, cfg.stream_id, "parse_error", f"{type(e).__name__}: {e}", ts=poll_time)
         return PollOutcome("parse_error", detail=str(e))
 
-    written = write_observations(conn, obs)
-    record_health(conn, cfg.stream_id, "ok", f"rows={written}", ts=poll_time)
-    return PollOutcome("ok", rows_written=written)
+    new = write_new_observations(conn, obs, now=poll_time)
+    record_health(conn, cfg.stream_id, "ok", f"rows={len(new)}", ts=poll_time)
+    if on_new is not None and new:
+        try:
+            await on_new(cfg, new, poll_time)
+        except Exception as e:  # isolation boundary: scoring fault → data, not a stalled poller
+            record_health(conn, cfg.stream_id, "score_error", f"{type(e).__name__}: {e}", ts=poll_time)
+    return PollOutcome("ok", rows_written=len(new))
 
 
 def _stamp_now(obs: list[Observation], poll_time: int) -> list[Observation]:
@@ -106,6 +118,7 @@ async def run_poller(
     cfg: SourceConfig,
     *,
     stop: asyncio.Event | None = None,
+    on_new: OnNew | None = None,
 ) -> None:
     """Long-running loop for one source: jittered cadence, exponential backoff
     on transient failure (capped at the cadence)."""
@@ -115,7 +128,7 @@ async def run_poller(
     await asyncio.sleep(jitter_seconds(cfg.stream_id, cfg.cadence_seconds))
 
     while stop is None or not stop.is_set():
-        outcome = await poll_once(client, conn, cfg, validators)
+        outcome = await poll_once(client, conn, cfg, validators, on_new=on_new)
         if outcome.event in ("timeout", "http_error", "fetch_error"):
             backoff = min(cfg.cadence_seconds, max(1.0, backoff * 2 or 1.0))
             sleep_for = backoff
