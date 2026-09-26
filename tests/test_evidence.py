@@ -148,7 +148,7 @@ def test_dashboard_shows_stories(tmp_path, sources):
     conn.commit()
     client = TestClient(create_app(tmp_path / "d.db", sources=sources))
     conn.execute(
-        "INSERT INTO surprise VALUES ('usgs_seismic', ?, 2, ?, 0.9996, 1.0, 1.0, 1, NULL, 2)",
+        "INSERT INTO surprise (stream_id, cell, scale, bin_start, q_value, presence_q, precision, n_obs, tail_index, model_version) VALUES ('usgs_seismic', ?, 2, ?, 0.9996, 1.0, 1.0, 1, NULL, 2)",
         (CELL, now - 1200),
     )
     conn.commit()

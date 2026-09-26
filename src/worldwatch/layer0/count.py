@@ -34,6 +34,12 @@ Emits the PIT q_value via the RANDOMIZED PIT (Czado et al.): for discrete y,
 q = F(y-1) + u·P(Y=y), u ~ U(0,1), which is exactly uniform under a correct
 model. The first bin has no informative predictive (the prior is vague by
 design) and returns 0.5.
+
+The randomized draw is right for calibration, but not for deciding whether
+an observation is surprising: a zero when zero is the likeliest outcome can
+land at q = 0.001 by the luck of u. Detection uses `last_detect_q`, the
+value in the attainable interval [F(y-1), F(y)] closest to 0.5 — "at least
+this many" for the upper tail, "at most this many" for the lower.
 """
 
 from __future__ import annotations
@@ -50,6 +56,16 @@ from scipy.stats import nbinom
 
 MODEL_VERSION = 2
 LEGACY_SEED = 12345  # once shared by every model: all cells drew the same u
+
+
+def conservative_q(q_lo: float, q_hi: float) -> float:
+    """The least extreme PIT consistent with a discrete observation whose
+    attainable PIT interval is [q_lo, q_hi]."""
+    if q_lo > 0.5:
+        return q_lo
+    if q_hi < 0.5:
+        return q_hi
+    return 0.5
 
 
 def cell_seed(stream_id: str, cell: str) -> int:
@@ -96,6 +112,7 @@ class BayesianCount:
     _f_hour: np.ndarray = field(default_factory=lambda: np.ones(24), repr=False)
     _f_dow: np.ndarray = field(default_factory=lambda: np.ones(7), repr=False)
     _rng: np.random.Generator | None = field(default=None, repr=False)
+    last_detect_q: float | None = field(default=None, repr=False)  # of the last update
 
     def __post_init__(self) -> None:
         if self._rng is None:
@@ -131,6 +148,7 @@ class BayesianCount:
             self._a = np.full(n, self.prior_shape + y, dtype=float)
             self._b = np.full(n, self.prior_rate + e, dtype=float)
             self._last_ts = ts
+            self.last_detect_q = 0.5
             return 0.5  # vague prior: no informative predictive for the first bin
 
         delta = math.exp(-max(0, ts - self._last_ts) / self.memory_seconds)
@@ -143,6 +161,7 @@ class BayesianCount:
         f_below = float(np.sum(w * below))
         assert self._rng is not None
         q = min(1.0, max(0.0, f_below + float(self._rng.random()) * p_y))
+        self.last_detect_q = conservative_q(f_below, min(1.0, f_below + p_y))
 
         # weights: forget a little, then weigh the evidence
         self._logw = delta * self._logw + np.log(np.clip(pmf, _EPS, None))

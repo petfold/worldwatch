@@ -111,3 +111,37 @@ def test_first_observation_returns_half():
     m = BayesianCount()
     assert m.update(T0, 10) == 0.5
     assert m.rate > 0
+
+
+def test_quiet_zeros_never_look_surprising_to_detection():
+    # a rare event stream: mostly zeros. The randomized PIT of a zero is
+    # u·P(0) and lands in the low 1% tail about 1% of the time; the detection
+    # q of a zero is F(0) or 0.5 — never extreme when zero is the likeliest
+    rng = np.random.default_rng(10)
+    m = BayesianCount()
+    pits, detect = [], []
+    for i, y in enumerate(rng.poisson(0.05, 3000)):
+        pits.append(m.update(T0 + i * HOUR, y))
+        if y == 0:
+            detect.append(m.last_detect_q)
+    assert min(pits[200:]) < 0.01  # the random draw does reach the tail
+    assert min(detect[200:]) >= 0.5
+
+
+def test_detection_q_keeps_a_burst_extreme():
+    rng = np.random.default_rng(8)
+    ys = list(rng.poisson(10.0, 600))
+    ys[500] = 100
+    m = BayesianCount()
+    for i, y in enumerate(ys):
+        m.update(T0 + i * HOUR, y)
+        if i == 500:
+            assert m.last_detect_q > 0.999
+
+
+def test_conservative_q_is_the_attainable_value_nearest_one_half():
+    from worldwatch.layer0.count import conservative_q
+
+    assert conservative_q(0.0, 0.97) == 0.5  # interval straddles the middle
+    assert conservative_q(0.999, 1.0) == 0.999  # "at least this many"
+    assert conservative_q(0.0, 0.002) == 0.002  # "at most this many"

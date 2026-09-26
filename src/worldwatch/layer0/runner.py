@@ -117,6 +117,7 @@ def _score_group(
         if value is None:
             continue  # continuous bin with no numeric value — cannot score
         q = model.update(b["bin_start"], value)
+        d = models.detection_q(model, q)
         surprise_rows.append(
             (
                 cfg.stream_id,
@@ -129,6 +130,7 @@ def _score_group(
                 b["n"],
                 None,  # tail_index (GPD) — deferred to P1
                 version,
+                d,
             )
         )
 
@@ -140,8 +142,8 @@ def _score_group(
         conn.executemany(
             "INSERT OR REPLACE INTO surprise "
             "(stream_id, cell, scale, bin_start, q_value, presence_q, precision, "
-            " n_obs, tail_index, model_version) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            " n_obs, tail_index, model_version, q_detect) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             surprise_rows,
         )
         conn.execute(

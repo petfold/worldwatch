@@ -183,6 +183,13 @@ MIGRATIONS: list[str] = [
         rejected      TEXT
     );
     """,
+    # v8 — surprise.q_detect: for a discrete observation, the least extreme
+    # PIT it is consistent with; NULL = q_value. q_value stays the randomized
+    # PIT (uniform under a correct model: calibration, Layer 1); every tail
+    # decision and display reads COALESCE(q_detect, q_value).
+    """
+    ALTER TABLE surprise ADD COLUMN q_detect REAL;
+    """,
 ]
 
 

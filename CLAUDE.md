@@ -26,6 +26,9 @@ primary scientific output ("the digital twin condenses out of the residuals").
   (ADR 0002); the geometric cascade is the archive, not the detection clock.
 - **q_value / PIT**: the tail quantile of an observation under its Layer-0 predictive
   distribution. The ONLY interchange currency between layers. Never z-scores.
+  For a discrete (count) observation q_value is the randomized PIT (uniform:
+  calibration, Layer 1) and `q_detect` the least extreme PIT consistent with it;
+  every tail decision and display reads COALESCE(q_detect, q_value) (ADR 0003).
 - **Presence channel**: per-source model of "did it report when expected". Missingness
   is data (missing-not-at-random). Never impute.
 - **Geometric cascade**: multi-scale time bins, width ∝ age (~8 bins per octave),
@@ -84,7 +87,7 @@ worldwatch/
 ## Conventions & guardrails
 
 1. **The interchange contract is sacred.** Layer 1 and above see only
-   (stream, cell, scale, bin, q_value, presence_q, precision, tail_index,
+   (stream, cell, scale, bin, q_value, q_detect, presence_q, precision, tail_index,
    model_version). If a feature needs raw values upstream, the design is wrong.
 2. **Every source is a ~10-line config stanza, not code.** If adding a source requires
    touching Python beyond a parser function, refactor.

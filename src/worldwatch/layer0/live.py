@@ -129,9 +129,10 @@ class LiveScorer:
                 out_of_order += 1  # frozen archive: never re-scored
                 continue
             q = m.update(o.ts, float(o.value))
-            rows.append((sid, o.cell, NATIVE_SCALE, o.ts, q, 1.0, 1.0, 1, None, version))
+            d = models.detection_q(m, q)
+            rows.append((sid, o.cell, NATIVE_SCALE, o.ts, q, 1.0, 1.0, 1, None, version, d))
             touched.add(o.cell)
-            self._observe(sid, o.cell, o.ts, q)
+            self._observe(sid, o.cell, o.ts, q if d is None else d)
         self._commit(cfg, rows, touched, consumed, now=max(fs for _, fs in items))
         if out_of_order:
             record_health(self.conn, sid, "out_of_order", f"skipped={out_of_order}")
@@ -224,10 +225,11 @@ class LiveScorer:
             start = last + w if last is not None else first_window.get(cell, last_due)
             for ws in range(max(start, floor), last_due + 1, w):
                 q = m.update(ws, counts.get((cell, ws), 0))
+                d = models.detection_q(m, q)
                 rows.append((sid, cell, NATIVE_SCALE, ws, q, 1.0, 1.0,
-                             counts.get((cell, ws), 0), None, version))
+                             counts.get((cell, ws), 0), None, version, d))
                 touched.add(cell)
-                self._observe(sid, cell, ws, q)
+                self._observe(sid, cell, ws, q if d is None else d)
         if not rows and not counts:
             return 0
         self._commit(cfg, rows, touched, [], now=now,
@@ -260,7 +262,7 @@ class LiveScorer:
 
     def _restore_cusum(self, now: int) -> None:
         for r in self.conn.execute(
-            "SELECT stream_id, cell, bin_start, q_value FROM surprise "
+            "SELECT stream_id, cell, bin_start, COALESCE(q_detect, q_value) AS q_value FROM surprise "
             "WHERE scale = ? AND bin_start >= ? AND q_value IS NOT NULL "
             "ORDER BY stream_id, cell, bin_start",
             (NATIVE_SCALE, now - DEFAULT_LOOKBACK_SECONDS),
@@ -301,8 +303,8 @@ class LiveScorer:
         try:
             self.conn.executemany(
                 "INSERT OR IGNORE INTO surprise (stream_id, cell, scale, bin_start, q_value, "
-                "presence_q, precision, n_obs, tail_index, model_version) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "presence_q, precision, n_obs, tail_index, model_version, q_detect) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 rows,
             )
             self.conn.executemany(

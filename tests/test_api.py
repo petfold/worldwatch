@@ -19,20 +19,20 @@ def client(tmp_path):
     conn = open_db(path)
     # geographic surprise rows (one calm, one extreme) + a non-geographic row
     conn.execute(
-        "INSERT INTO surprise VALUES (?,?,?,?,?,?,?,?,?,?)",
+        "INSERT INTO surprise (stream_id, cell, scale, bin_start, q_value, presence_q, precision, n_obs, tail_index, model_version) VALUES (?,?,?,?,?,?,?,?,?,?)",
         ("quake", CELL, 3, NOW - 300, 0.999, 1.0, 1.0, 5, None, 1),
     )
     conn.execute(
-        "INSERT INTO surprise VALUES (?,?,?,?,?,?,?,?,?,?)",
+        "INSERT INTO surprise (stream_id, cell, scale, bin_start, q_value, presence_q, precision, n_obs, tail_index, model_version) VALUES (?,?,?,?,?,?,?,?,?,?)",
         ("quake", CELL, 3, NOW - 600, 0.6, 1.0, 1.0, 2, None, 1),
     )
     conn.execute(
-        "INSERT INTO surprise VALUES (?,?,?,?,?,?,?,?,?,?)",
+        "INSERT INTO surprise (stream_id, cell, scale, bin_start, q_value, presence_q, precision, n_obs, tail_index, model_version) VALUES (?,?,?,?,?,?,?,?,?,?)",
         ("btc", "GLOBAL", 0, NOW - 300, 0.97, 1.0, 1.0, 1, None, 1),
     )
     # a silence row
     conn.execute(
-        "INSERT INTO surprise VALUES (?,?,?,?,?,?,?,?,?,?)",
+        "INSERT INTO surprise (stream_id, cell, scale, bin_start, q_value, presence_q, precision, n_obs, tail_index, model_version) VALUES (?,?,?,?,?,?,?,?,?,?)",
         ("rad", "_PRESENCE_", 0, NOW - 300, None, 0.98, 1.0, 0, None, 1),
     )
     conn.execute(
@@ -149,11 +149,11 @@ def rich_client(tmp_path, sources):
         rows,
     )
     conn.execute(
-        "INSERT INTO surprise VALUES (?,?,?,?,?,?,?,?,?,?)",
+        "INSERT INTO surprise (stream_id, cell, scale, bin_start, q_value, presence_q, precision, n_obs, tail_index, model_version) VALUES (?,?,?,?,?,?,?,?,?,?)",
         ("usgs_seismic", quake_cell, 2, NOW - 3600, 0.999, 1.0, 1.0, 3, None, 1),
     )
     conn.execute(
-        "INSERT INTO surprise VALUES (?,?,?,?,?,?,?,?,?,?)",
+        "INSERT INTO surprise (stream_id, cell, scale, bin_start, q_value, presence_q, precision, n_obs, tail_index, model_version) VALUES (?,?,?,?,?,?,?,?,?,?)",
         ("btc_usd", "GLOBAL", 2, NOW - 1200, 0.6, 1.0, 1.0, 5, None, 1),
     )
     conn.executemany(

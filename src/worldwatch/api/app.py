@@ -100,7 +100,7 @@ def create_app(
     ) -> JSONResponse:
         cutoff = _now() - lookback
         rows = conn.execute(
-            "SELECT stream_id, cell, q_value, presence_q FROM surprise "
+            "SELECT stream_id, cell, COALESCE(q_detect, q_value) AS q_value, presence_q FROM surprise "
             "WHERE bin_start >= ? AND q_value IS NOT NULL",
             (cutoff,),
         ).fetchall()
@@ -161,7 +161,8 @@ def create_app(
         conn: sqlite3.Connection = Depends(get_conn),
     ) -> JSONResponse:
         rows = conn.execute(
-            "SELECT bin_start, q_value, presence_q, n_obs FROM surprise "
+            "SELECT bin_start, COALESCE(q_detect, q_value) AS q_value, q_value AS pit, "
+            "presence_q, n_obs FROM surprise "
             "WHERE stream_id = ? AND cell = ? AND scale = ? ORDER BY bin_start DESC LIMIT ?",
             (stream, cell, scale, limit),
         ).fetchall()
@@ -239,7 +240,8 @@ def create_app(
             bins[r["stream_id"]].append(r)
         surprise: dict[str, list[sqlite3.Row]] = defaultdict(list)
         for r in conn.execute(
-            "SELECT stream_id, cell, scale, bin_start, q_value, presence_q FROM surprise "
+            "SELECT stream_id, cell, scale, bin_start, COALESCE(q_detect, q_value) AS q_value, "
+            "q_value AS pit, presence_q FROM surprise "
             "WHERE bin_start >= ? AND q_value IS NOT NULL ORDER BY bin_start",
             (cutoff,),
         ):
@@ -393,7 +395,8 @@ def create_app(
             totals[r["stream_id"]] += r["n"]
         peak: dict[str, sqlite3.Row] = {}
         for r in conn.execute(
-            "SELECT stream_id, scale, q_value, presence_q, bin_start FROM surprise "
+            "SELECT stream_id, scale, COALESCE(q_detect, q_value) AS q_value, presence_q, "
+            "bin_start FROM surprise "
             "WHERE cell = ? AND bin_start >= ? AND q_value IS NOT NULL",
             (cell, cutoff),
         ):
@@ -621,7 +624,8 @@ def _source_overview(
             "at": top["bin_start"],
         }
         item["n_scored"] = len(surprise)
-        item["n_tail"] = sum(_extremity(r["q_value"], 1.0) >= TAIL_EXTREMITY for r in surprise)
+        # calibration is a property of the randomized PIT, not of the detection q
+        item["n_tail"] = sum(_extremity(r["pit"], 1.0) >= TAIL_EXTREMITY for r in surprise)
         if len(cells) <= 1:
             item["now_rarity"] = context.surprise_word(surprise[-1]["q_value"])
     return item

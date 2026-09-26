@@ -370,7 +370,7 @@
 
     function showAlert(a) {
       showDetail(`<b>${esc(a.title)}</b>\n\n${esc(a.text)}` +
-        (a.map_url ? `\n\n<a href="${esc(a.map_url)}" target="_blank" rel="noopener">open region on map ↗</a>` : ""));
+        (a.map_url ? `\n\n<a href="${esc(a.map_url)}" target="_blank" rel="noopener">region on OpenStreetMap, new tab (without Worldwatch layers) ↗</a>` : ""));
       flyTo(a.center, 5);
     }
 
@@ -406,7 +406,7 @@
         ((s.stories || []).length ? `\n   <span class="tipmuted">latest:</span>` + storyLines(s.stories) : ""));
       flyTo(c.center, 5);
       showDetail(`<b>${esc(c.where)}</b>  <span class="sub">${esc(c.cell)}</span>\n\n${rows.join("\n") || "nothing observed here in 24 h"}` +
-        (c.map_url ? `\n\n<a href="${esc(c.map_url)}" target="_blank" rel="noopener">open on OpenStreetMap ↗</a>` : ""));
+        (c.map_url ? `\n\n<a href="${esc(c.map_url)}" target="_blank" rel="noopener">OpenStreetMap, new tab (without Worldwatch layers) ↗</a>` : ""));
     }
 
     function storyLines(stories) {

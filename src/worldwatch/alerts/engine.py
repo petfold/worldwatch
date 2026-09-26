@@ -114,7 +114,8 @@ def run_alerts(
     run. Idempotent: re-running over the same window opens nothing new."""
     run_now = now if now is not None else int(time.time())
     rows = conn.execute(
-        "SELECT stream_id, cell, scale, bin_start, q_value, presence_q, precision "
+        "SELECT stream_id, cell, scale, bin_start, COALESCE(q_detect, q_value) AS q_value, "
+        "presence_q, precision "
         "FROM surprise WHERE bin_start >= ? ORDER BY stream_id, cell, scale, bin_start",
         (run_now - lookback_seconds,),
     ).fetchall()

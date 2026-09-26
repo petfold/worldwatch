@@ -97,6 +97,23 @@ def test_quiet_cells_draw_independent_pit_values(db, sources):
     assert all(len(qs) == len(cells) for ws, qs in by_window.items() if ws > T0)
 
 
+def test_zero_windows_store_a_conservative_detection_q(db, sources):
+    cfg = sources["usgs_seismic"]
+    w = native_seconds(cfg)
+    cell = h3.latlng_to_cell(47.5, 19.0, 3)
+    live = LiveScorer(db, sources, now=T0, grace_seconds=60)
+    live.register_cells("usgs_seismic", [cell], T0)
+    for k in range(1, 40):
+        live.tick(T0 + k * w + 61)
+    rows = db.execute(
+        "SELECT q_value, q_detect, COALESCE(q_detect, q_value) AS q FROM surprise "
+        "WHERE stream_id = 'usgs_seismic' AND n_obs = 0"
+    ).fetchall()
+    assert len(rows) > 30
+    assert all(r["q"] >= 0.5 for r in rows)  # a quiet window is never "unusually low"
+    assert len({round(r["q_value"], 9) for r in rows}) > 20  # the PIT keeps its random draw
+
+
 def test_legacy_shared_seed_is_replaced_on_load(db, sources):
     from worldwatch.layer0 import models
     from worldwatch.layer0.count import LEGACY_SEED, BayesianCount

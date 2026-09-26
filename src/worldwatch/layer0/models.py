@@ -63,6 +63,13 @@ def make_model(cfg: SourceConfig, cell: str | None = None) -> Layer0Model:
     raise ValueError(f"Unsupported flavor {cfg.flavor!r} for source {cfg.stream_id}")
 
 
+def detection_q(model: Layer0Model, q: float) -> float | None:
+    """The q that tail decisions use, stored as surprise.q_detect: for a
+    discrete (count) observation the conservative value, else None (= q)."""
+    d = getattr(model, "last_detect_q", None)
+    return None if d is None or d == q else d
+
+
 def load_model(
     flavor: str, blob: bytes, key: tuple[str, str] | None = None
 ) -> Layer0Model:
