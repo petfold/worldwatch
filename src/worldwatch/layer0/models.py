@@ -1,7 +1,7 @@
 """Layer-0 model family: flavor dispatch, construction from config, (de)serialization.
 
 ONE model family, a few observation flavors (P7). continuous → ContinuousSSM,
-count → NegBinomCount. rate/categorical are deferred (P1+); the runner skips
+count → BayesianCount. rate/categorical are deferred (P1+); the runner skips
 sources with those flavors rather than guessing.
 
 Per-source model hyperparameters live in an optional [<source>.model] TOML
@@ -16,7 +16,7 @@ from typing import Protocol
 from worldwatch.config.loader import SourceConfig
 from worldwatch.layer0 import continuous, count
 from worldwatch.layer0.continuous import ContinuousSSM, make_harmonics
-from worldwatch.layer0.count import NegBinomCount
+from worldwatch.layer0.count import BayesianCount
 
 SUPPORTED_FLAVORS = ("continuous", "count")
 
@@ -47,11 +47,16 @@ def make_model(cfg: SourceConfig) -> Layer0Model:
             trend_var=float(mp.get("trend_var", 1e-6)),
             seasonal_var=float(mp.get("seasonal_var", 1e-4)),
             time_scale=float(mp.get("time_scale", 3600.0)),
+            scale_prior_dof=float(mp.get("scale_prior_dof", 1.0)),
+            scale_memory_seconds=float(mp.get("scale_memory_seconds", 7 * 86400.0)),
         )
     if cfg.flavor == "count":
-        return NegBinomCount(
+        return BayesianCount(
             seasonal_hour=bool(mp.get("seasonal_hour", False)),
             seasonal_dow=bool(mp.get("seasonal_dow", False)),
+            memory_seconds=float(mp.get("memory_seconds", 3 * 86400)),
+            prior_shape=float(mp.get("prior_shape", 0.5)),
+            prior_rate=float(mp.get("prior_rate", 1e-3)),
         )
     raise ValueError(f"Unsupported flavor {cfg.flavor!r} for source {cfg.stream_id}")
 
@@ -61,5 +66,5 @@ def load_model(flavor: str, blob: bytes) -> Layer0Model:
     if flavor == "continuous":
         return ContinuousSSM.from_bytes(blob)
     if flavor == "count":
-        return NegBinomCount.from_bytes(blob)
+        return BayesianCount.from_bytes(blob)
     raise ValueError(f"Unsupported flavor {flavor!r}")

@@ -80,13 +80,39 @@ def test_pit_uniform_on_student_t_noise():
     assert p > 0.01, f"PIT not uniform under t(5): KS p={p:.4f}"
 
 
-def test_miscalibration_is_detected():
-    """Model σ far too small → innovations run to the tails → KS rejects."""
+def test_wrong_scale_guess_is_learned():
+    """obs_scale is only a prior guess: σ claimed 0.5, truth 3.0 → the model
+    learns the scale and ends up calibrated (it used to stay wrong forever)."""
     ts, ys = _gaussian_seasonal_series(2000, seed=3, sigma=3.0)
-    m = _model(obs_scale=0.5)  # claims σ=0.5 but truth is 3.0
+    m = _model(obs_scale=0.5)
+    qs = np.array([m.update(t, y) for t, y in zip(ts, ys, strict=False)][300:])
+    assert kstest(qs, "uniform").pvalue > 0.01
+    assert 2.5 < m._S**0.5 < 3.5
+
+
+def test_miscalibration_is_detected():
+    """A mismatch learning can't fix — Cauchy noise under a Gaussian noise
+    model — must still show up as non-uniform PIT."""
+    ts = _times(2000)
+    rng = np.random.default_rng(3)
+    ys = 100.0 + rng.standard_cauchy(len(ts))
+    m = _model(harmonics=[])  # Gaussian noise (obs_dof ≈ ∞)
     qs = np.array([m.update(t, y) for t, y in zip(ts, ys, strict=False)][300:])
     p = kstest(qs, "uniform").pvalue
     assert p < 0.01, f"miscalibration not detected: KS p={p:.4f}"
+
+
+def test_cold_start_not_overconfident_with_a_fair_guess():
+    """Fresh filters with a scale guess of the right order: the first bins
+    stay within calibration — uncertainty is carried, not special-cased."""
+    early = []
+    for seed in range(150):
+        rng = np.random.default_rng(seed)
+        ys = 5 + np.cumsum(rng.normal(0, 0.05, 25)) + rng.normal(0, 1.0, 25)
+        m = ContinuousSSM(obs_scale=0.7, level_var=0.0025, time_scale=HOUR)
+        early.extend(m.update(T0 + i * HOUR, y) for i, y in enumerate(ys))
+    e = np.array(early[1:])
+    assert np.mean((e < 0.01) | (e > 0.99)) <= 0.03
 
 
 def test_level_not_dragged_by_spike():

@@ -70,9 +70,14 @@ def cmd_presence(conn: sqlite3.Connection, sources: dict[str, SourceConfig]) -> 
     return run_presence(conn, sources)
 
 
-def cmd_detect(conn: sqlite3.Connection, sources: dict[str, SourceConfig]) -> dict[str, int]:
-    """Score new bins → open corroborated alerts → push newly opened ones."""
-    n_surprise = run_layer0(conn, sources)
+def cmd_detect(
+    conn: sqlite3.Connection,
+    sources: dict[str, SourceConfig],
+    fine_window_seconds: int | None = None,
+) -> dict[str, int]:
+    """Score newly closed bins → open corroborated alerts → push newly opened ones."""
+    kwargs = {} if fine_window_seconds is None else {"settle_seconds": fine_window_seconds + 300}
+    n_surprise = run_layer0(conn, sources, **kwargs)
     opened = run_alerts(conn, sources)
     delivered = asyncio.run(notify_alerts(conn, opened, sources=sources))
     return {"surprise": n_surprise, "opened": len(opened), "notified": delivered}
@@ -129,7 +134,7 @@ def main(argv: list[str] | None = None) -> int:
     elif args.command == "presence":
         print(f"silence rows: {cmd_presence(conn, sources)}")
     elif args.command == "detect":
-        print(json.dumps(cmd_detect(conn, sources)))
+        print(json.dumps(cmd_detect(conn, sources, fine_window_seconds())))
     elif args.command == "poll":
         with contextlib.suppress(KeyboardInterrupt):
             asyncio.run(cmd_poll(conn, sources))

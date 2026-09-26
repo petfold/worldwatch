@@ -13,6 +13,13 @@ sibling projects, where the tag is what publishes.
 
 ### Fixed
 
+- **Bins were scored before they were complete.** Layer 0 scored each bin once,
+  as soon as it appeared, while later raw rows could still fold into it (a
+  GDELT bin scored at 5 events ended with 6; another at 1 ended with 8). Only
+  closed bins are scored now: end + fine window + one pass ≤ now.
+- **Cell details matched the day's top story to the day's peak surprise.** The
+  peak now lists the records from its own bin ("no stories stored for that
+  time" when there are none); the latest stories are listed separately.
 - **Re-fetched observations were counted again after consolidation** — raw_ring's
   primary key only deduplicated inside the fine window, but pollers re-request
   overlapping history (USGS: the last hour, Wikipedia: 3 days, Cloudflare:
@@ -52,6 +59,18 @@ sibling projects, where the tag is what publishes.
 
 ### Changed
 
+- **Layer 0 carries its own uncertainty (model v2, both flavors).** The count
+  model was a plug-in EWMA negative binomial: after seeing 1 and 2 events it
+  scored a 5 as 1-in-275 against Poisson(1.05), where the Bayesian predictive
+  says about 1-in-15. It is now a dynamic Gamma–Poisson with a posterior over
+  burstiness (NB size grid, Poisson included): the rate's Gamma posterior is
+  discounted over `memory_seconds`, per-bin burst factors are integrated out,
+  and the predictive mixes over dispersion by its posterior weight — wide when
+  evidence is thin, narrow when ample, bursty when the stream proves bursty,
+  with no warm-up special case. The continuous model now learns its noise
+  variance (West & Harrison unknown-variance recursion, discounted, with state
+  covariance in units of it); `obs_scale` is only a prior guess and the
+  predictive's degrees of freedom grow with the evidence.
 - **Readable pushes** — each evidence line now names the source, the rarity
   ("1-in-2,500 high") and what was observed in natural units ("3 quakes, max
   M6.6", "$84,000", "77% of 7-day peak"), with the region as lat/lon;

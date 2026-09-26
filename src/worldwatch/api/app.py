@@ -324,7 +324,7 @@ def create_app(
             totals[r["stream_id"]] += r["n"]
         peak: dict[str, sqlite3.Row] = {}
         for r in conn.execute(
-            "SELECT stream_id, q_value, presence_q, bin_start FROM surprise "
+            "SELECT stream_id, scale, q_value, presence_q, bin_start FROM surprise "
             "WHERE cell = ? AND bin_start >= ? AND q_value IS NOT NULL",
             (cell, cutoff),
         ):
@@ -344,15 +344,17 @@ def create_app(
                 item["latest"] = context.describe_bin(sid, cfg, latest[sid])
                 item["latest_at"] = latest[sid]["bin_start"]
             if sid in peak:
-                item["peak"] = context.surprise_word(peak[sid]["q_value"])
-                item["peak_at"] = peak[sid]["bin_start"]
+                pk = peak[sid]
+                item["peak"] = context.surprise_word(pk["q_value"])
+                item["peak_at"] = pk["bin_start"]
+                item["peak_until"] = pk["bin_start"] + bin_width(pk["scale"])
+                # the records behind the peak itself — not just the day's top story
+                item["peak_stories"] = _story_dicts(
+                    cfg, evidence.top(conn, sid, cell, pk["bin_start"], item["peak_until"], limit=3)
+                )
             recs = evidence.top(conn, sid, cell, cutoff, _now() + 1, limit=5)
             if recs:
-                item["stories"] = [
-                    {"text": evidence.summary(cfg, rec), "url": evidence.link(cfg, rec),
-                     "domain": evidence.domain(evidence.link(cfg, rec) or "") or None, "ts": rec["ts"]}
-                    for rec in recs
-                ]
+                item["stories"] = _story_dicts(cfg, recs)
             streams.append(item)
         return JSONResponse(
             {"cell": cell, "where": context.where(cell), "center": context.cell_center(cell),
@@ -371,6 +373,15 @@ def _alert_dict(
     d.update(title=title, text=text, where=context.where(row["cell"]),
              center=context.cell_center(row["cell"]), map_url=context.map_url(row["cell"]))
     return d
+
+
+def _story_dicts(cfg: SourceConfig | None, recs: list[dict]) -> list[dict[str, object]]:
+    out = []
+    for rec in recs:
+        url = evidence.link(cfg, rec)
+        out.append({"text": evidence.summary(cfg, rec), "url": url,
+                    "domain": evidence.domain(url) if url else None, "ts": rec["ts"]})
+    return out
 
 
 def _health_summary(conn: sqlite3.Connection, cutoff: int) -> dict[str, dict[str, object]]:

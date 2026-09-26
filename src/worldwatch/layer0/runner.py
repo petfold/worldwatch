@@ -13,6 +13,11 @@ bins (idempotent, incremental).
 The observation fed per bin is the bin's mean (continuous) or event count
 (count). Within a scale, bins share a fixed width, so counts are comparable.
 
+Only CLOSED bins are scored: bin end + settle ≤ now, where settle covers the
+consolidator's fine window (raw rows younger than it are not yet folded). A
+bin scored while still filling would be judged on a partial count — and
+never re-scored, since the archive is frozen.
+
 Presence, precision weighting, and GPD tail_index are later steps; for P0 the
 runner writes presence_q = 1.0, precision = 1.0, tail_index = NULL, and scores
 every non-retired source (nursery models write in shadow — they simply won't be
@@ -24,10 +29,14 @@ from __future__ import annotations
 import sqlite3
 import time
 
+from worldwatch.cascade.bins import bin_width
 from worldwatch.config.loader import SourceConfig
 from worldwatch.instrument import record_health
 from worldwatch.layer0 import models
 from worldwatch.layer0.models import SUPPORTED_FLAVORS, Layer0Model
+
+# Default settle time: the default 15-min fine window plus one 5-min pass.
+DEFAULT_SETTLE_SECONDS = 900 + 300
 
 # Placeholders until the corresponding steps land.
 _PRESENCE_Q_PRESENT = 1.0
@@ -38,19 +47,22 @@ def run_layer0(
     conn: sqlite3.Connection,
     sources: dict[str, SourceConfig],
     now: int | None = None,
+    settle_seconds: int = DEFAULT_SETTLE_SECONDS,
 ) -> int:
-    """Score all newly-consolidated bins. Returns the surprise rows written."""
+    """Score all newly-closed bins. Returns the surprise rows written."""
     run_now = now if now is not None else int(time.time())
     total = 0
     for cfg in sources.values():
         if cfg.status == "retired" or cfg.flavor not in SUPPORTED_FLAVORS:
             continue
-        total += _score_stream(conn, cfg, run_now)
+        total += _score_stream(conn, cfg, run_now, settle_seconds)
     record_health(conn, "layer0", "ok", f"surprise_rows={total}", ts=run_now)
     return total
 
 
-def _score_stream(conn: sqlite3.Connection, cfg: SourceConfig, run_now: int) -> int:
+def _score_stream(
+    conn: sqlite3.Connection, cfg: SourceConfig, run_now: int, settle_seconds: int
+) -> int:
     # Distinct (cell, scale) groups that have bins for this stream.
     groups = conn.execute(
         "SELECT DISTINCT cell, scale FROM bins WHERE stream_id = ? ORDER BY cell, scale",
@@ -59,13 +71,19 @@ def _score_stream(conn: sqlite3.Connection, cfg: SourceConfig, run_now: int) -> 
 
     written = 0
     for g in groups:
-        written += _score_group(conn, cfg, g["cell"], g["scale"], run_now)
+        written += _score_group(conn, cfg, g["cell"], g["scale"], run_now, settle_seconds)
     return written
 
 
 def _score_group(
-    conn: sqlite3.Connection, cfg: SourceConfig, cell: str, scale: int, run_now: int
+    conn: sqlite3.Connection,
+    cfg: SourceConfig,
+    cell: str,
+    scale: int,
+    run_now: int,
+    settle_seconds: int,
 ) -> int:
+    closed_before = run_now - settle_seconds - bin_width(scale)  # bin_start ≤ this
     cursor_row = conn.execute(
         "SELECT MAX(bin_start) AS c FROM surprise WHERE stream_id = ? AND cell = ? AND scale = ?",
         (cfg.stream_id, cell, scale),
@@ -75,16 +93,17 @@ def _score_group(
     if cursor is None:
         new_bins = conn.execute(
             "SELECT bin_start, n, vmean FROM bins "
-            "WHERE stream_id = ? AND cell = ? AND scale = ? ORDER BY bin_start",
-            (cfg.stream_id, cell, scale),
+            "WHERE stream_id = ? AND cell = ? AND scale = ? AND bin_start <= ? "
+            "ORDER BY bin_start",
+            (cfg.stream_id, cell, scale, closed_before),
         ).fetchall()
         model = models.make_model(cfg)
     else:
         new_bins = conn.execute(
             "SELECT bin_start, n, vmean FROM bins "
             "WHERE stream_id = ? AND cell = ? AND scale = ? AND bin_start > ? "
-            "ORDER BY bin_start",
-            (cfg.stream_id, cell, scale, cursor),
+            "AND bin_start <= ? ORDER BY bin_start",
+            (cfg.stream_id, cell, scale, cursor, closed_before),
         ).fetchall()
         model = _load_group_model(conn, cfg, cell, scale)
 

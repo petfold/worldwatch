@@ -6,6 +6,7 @@ from worldwatch.cascade.bins import bin_width
 from worldwatch.cascade.consolidator import consolidate
 from worldwatch.ingest.models import Observation
 from worldwatch.layer0.runner import run_layer0
+from worldwatch.layer0 import models
 from worldwatch.store import write_observations
 
 NOW = 2_000_000_000
@@ -48,7 +49,7 @@ def test_end_to_end_consolidate_then_score(db, sources):
     consolidate(db, now=NOW, fine_window_seconds=300)
     assert db.execute("SELECT COUNT(*) FROM bins").fetchone()[0] > 0
 
-    written = run_layer0(db, sources, now=NOW)
+    written = run_layer0(db, sources, now=NOW, settle_seconds=0)
     assert written > 0
 
     rows = _surprise_rows(db)
@@ -57,7 +58,9 @@ def test_end_to_end_consolidate_then_score(db, sources):
         assert 0.0 <= r["q_value"] <= 1.0
         assert r["presence_q"] == 1.0
         assert r["n_obs"] >= 1
-        assert r["model_version"] == 1
+        assert r["model_version"] == models.MODEL_VERSION[
+            "count" if r["stream_id"] == "usgs_seismic" else "continuous"
+        ]
 
     # model_state persisted, one row per (cell, scale) group scored
     groups = db.execute(

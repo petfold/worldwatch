@@ -30,9 +30,12 @@ def test_cmd_consolidate(db, sources):
 
 
 def test_cmd_detect_scores_and_returns_summary(db, sources):
-    # one clean multi-bin group so Layer-0 writes surprise rows
+    # one clean multi-bin group, closed by the wall clock cmd_detect uses
+    import time
+
     w = bin_width(3)
-    base = (NOW // w) * w - 10 * w
+    now = int(time.time())
+    base = (now // w) * w - 10 * w
     for i in range(5):
         db.execute(
             "INSERT INTO bins (stream_id, cell, scale, bin_start, n, vmin, vmax, vmean, m2) "

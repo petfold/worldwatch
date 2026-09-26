@@ -147,7 +147,14 @@ def test_dashboard_shows_stories(tmp_path, sources):
     )
     conn.commit()
     client = TestClient(create_app(tmp_path / "d.db", sources=sources))
-    (story,) = client.get("/api/cell", params={"cell": CELL}).json()["streams"][0]["stories"]
+    conn.execute(
+        "INSERT INTO surprise VALUES ('usgs_seismic', ?, 2, ?, 0.9996, 1.0, 1.0, 1, NULL, 2)",
+        (CELL, now - 1200),
+    )
+    conn.commit()
+    s = client.get("/api/cell", params={"cell": CELL}).json()["streams"][0]
+    (story,) = s["stories"]
     assert story["text"].startswith("M6.6 80 km ENE") and story["domain"] == "earthquake.usgs.gov"
+    assert [p["text"] for p in s["peak_stories"]] == [story["text"]]  # behind the peak itself
     feats = client.get("/api/activity.geojson").json()["features"]
     assert feats[0]["properties"]["story"].startswith("M6.6")

@@ -321,15 +321,21 @@
       const rows = c.streams.map((s) =>
         `<span style="color:${MODALITY_COLORS[s.modality] || "#888"}">●</span> <b>${esc(s.label)}</b>\n` +
         `   ${esc(s.latest || "—")}${s.latest_at ? " · " + ago(s.latest_at) : ""} · ${s.observations} obs in 24 h` +
-        (s.peak ? `\n   24 h peak surprise: <span class="chip ${chipClass(s.peak)}">${esc(s.peak)}</span>` : "") +
-        (s.stories || []).map((st) =>
-          `\n   › ${esc(st.text)}` + (st.url ? ` <a href="${esc(st.url)}" target="_blank" rel="noopener">${esc(st.domain || "link")} ↗</a>` : "") +
-          ` <span class="tipmuted">${ago(st.ts)}</span>`).join(""));
+        (s.peak ? `\n   24 h peak surprise: <span class="chip ${chipClass(s.peak)}">${esc(s.peak)}</span>` +
+          ` <span class="tipmuted">${utc(s.peak_at).slice(11)}–${utc(s.peak_until).slice(11)}</span>` +
+          ((s.peak_stories || []).length ? storyLines(s.peak_stories)
+            : `\n     <span class="tipmuted">no stories stored for that time</span>`) : "") +
+        ((s.stories || []).length ? `\n   <span class="tipmuted">latest:</span>` + storyLines(s.stories) : ""));
       flyTo(c.center, 5);
       showDetail(`<b>${esc(c.where)}</b>  <span class="sub">${esc(c.cell)}</span>\n\n${rows.join("\n") || "nothing observed here in 24 h"}` +
         (c.map_url ? `\n\n<a href="${esc(c.map_url)}" target="_blank" rel="noopener">open on OpenStreetMap ↗</a>` : ""));
     }
 
+    function storyLines(stories) {
+      return stories.map((st) =>
+        `\n     › ${esc(st.text)}` + (st.url ? ` <a href="${esc(st.url)}" target="_blank" rel="noopener">${esc(st.domain || "link")} ↗</a>` : "") +
+        ` <span class="tipmuted">${ago(st.ts)}</span>`).join("");
+    }
     function flyTo(center, zoom) {  // center = [lat, lng] from the API
       if (center) map.flyTo({ center: [center[1], center[0]], zoom: Math.max(map.getZoom(), zoom) });
     }

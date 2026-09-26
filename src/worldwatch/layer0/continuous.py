@@ -17,11 +17,15 @@ outliers so the level is not dragged by spikes.
 
 Emits the ONLY interchange currency (P3): the PIT q_value — the tail quantile
 of y_t under the one-step-ahead predictive, in [0, 1], uniform iff calibrated.
-The predictive is approximated as Student-t(location=ŷ, scale=√(ZPZᵀ+σ²), ν).
+The predictive is approximated as Student-t(location=ŷ, scale=√(ZPZᵀ+S), ν_t).
 
-Observation scale σ is provided (set by onboarding type/seasonality inference,
-architecture §4); this model treats it as fixed. Online scale/nursery
-machinery is P1.
+The observation variance is unknown and learned (West & Harrison's
+unknown-variance recursion with discounting): S_t is its estimate with n_t
+degrees of freedom of evidence, starting from the stanza's `obs_scale`² as a
+prior guess worth `scale_prior_dof` observations and fading over
+`scale_memory_seconds`. The predictive's degrees of freedom are
+ν_t = min(n_t, obs_dof): while evidence on the scale is thin the predictive is
+correspondingly wide; with ample evidence the configured heavy tail remains.
 """
 
 from __future__ import annotations
@@ -33,7 +37,7 @@ from dataclasses import dataclass, field
 import numpy as np
 from scipy.stats import t as student_t
 
-MODEL_VERSION = 1
+MODEL_VERSION = 2
 
 
 @dataclass
@@ -61,12 +65,16 @@ class ContinuousSSM:
     trend_var: float = 1e-6
     seasonal_var: float = 1e-4
     time_scale: float = 3600.0  # seconds per internal time unit (level/trend)
+    scale_prior_dof: float = 1.0  # how many observations the obs_scale guess is worth
+    scale_memory_seconds: float = 7 * 86400.0  # e-folding time of scale evidence
 
     # state (initialized on first observation)
     _x: np.ndarray | None = field(default=None, repr=False)
     _P: np.ndarray | None = field(default=None, repr=False)
     _last_ts: int | None = None
     _t0: int | None = None
+    _S: float | None = None  # observation-variance estimate
+    _n: float | None = None  # its degrees of freedom (evidence)
 
     @property
     def dim(self) -> int:
@@ -96,20 +104,30 @@ class ContinuousSSM:
             self._init_state(ts, y)
             return 0.5  # no predictive on the first observation
 
-        assert self._last_ts is not None
+        assert self._last_ts is not None and self._S is not None and self._n is not None
         dt = max(1e-9, (ts - self._last_ts) / self.time_scale)
         x_pred, P_pred = self._predict(dt)
+        n = self._discounted_dof(ts)
 
         z = self._z(ts)
         yhat = float(z @ x_pred)
         state_var = float(z @ P_pred @ z)
-        pred_var = state_var + self.obs_scale**2
+        pred_var = state_var + self._S
         scale = math.sqrt(max(pred_var, 1e-12))
 
         std_innov = (y - yhat) / scale
-        q = float(student_t.cdf(std_innov, df=self.obs_dof))
+        q = float(student_t.cdf(std_innov, df=min(n, self.obs_dof)))
 
-        self._robust_update(x_pred, P_pred, z, y, yhat, state_var)
+        w = self._robust_update(x_pred, P_pred, z, y, yhat, state_var)
+        # learn the observation variance from the standardized innovation
+        # (W&H: S ← S·(n + e²/Q)/(n + 1), with the robust weight as the count)
+        s_new = self._S * (n + w * (y - yhat) ** 2 / pred_var) / (n + w)
+        # state uncertainty is learned in units of the noise variance (W&H
+        # scale C by S): when the scale estimate moves, so does P
+        assert self._P is not None
+        self._P = self._P * (s_new / self._S)
+        self._S = s_new
+        self._n = n + w
         self._last_ts = ts
         return q
 
@@ -121,8 +139,14 @@ class ContinuousSSM:
         x_pred, P_pred = self._predict(dt)
         z = self._z(ts)
         yhat = float(z @ x_pred)
-        scale = math.sqrt(max(float(z @ P_pred @ z) + self.obs_scale**2, 1e-12))
+        s = self.obs_scale**2 if self._S is None else self._S
+        scale = math.sqrt(max(float(z @ P_pred @ z) + s, 1e-12))
         return yhat, scale
+
+    def _discounted_dof(self, ts: int) -> float:
+        assert self._n is not None and self._last_ts is not None
+        d = math.exp(-max(0, ts - self._last_ts) / self.scale_memory_seconds)
+        return d * self._n + (1 - d) * self.scale_prior_dof
 
     # --- internals ---
 
@@ -134,7 +158,11 @@ class ContinuousSSM:
         self._x = x
         P = np.eye(self.dim) * 10.0
         P[1, 1] = 1.0  # trend starts near zero with modest uncertainty
-        self._P = P
+        # prior state uncertainty in units of the noise variance (W&H), so the
+        # first innovations are informative about the scale
+        self._P = P * self.obs_scale**2
+        self._S = self.obs_scale**2  # prior guess, worth scale_prior_dof observations
+        self._n = self.scale_prior_dof
 
     def _transition(self, dt: float) -> np.ndarray:
         T = np.eye(self.dim)
@@ -163,18 +191,20 @@ class ContinuousSSM:
         y: float,
         yhat: float,
         state_var: float,
-    ) -> None:
-        # One variational step: weight from the Student-t scale mixture.
-        gauss_var = state_var + self.obs_scale**2
+    ) -> float:
+        """Kalman update with a Student-t variational weight; returns the weight."""
+        assert self._S is not None
+        gauss_var = state_var + self._S
         d2 = (y - yhat) ** 2 / max(gauss_var, 1e-12)
         w = (self.obs_dof + 1.0) / (self.obs_dof + d2)  # ∈ (0, 1]; ↓ for outliers
-        r_eff = self.obs_scale**2 / w  # inflate obs noise for down-weighted points
+        r_eff = self._S / w  # inflate obs noise for down-weighted points
 
         f_eff = state_var + r_eff
         K = (P_pred @ z) / f_eff
         self._x = x_pred + K * (y - yhat)
         eye = np.eye(self.dim)
         self._P = (eye - np.outer(K, z)) @ P_pred
+        return w
 
     # --- serialization for the model_state BLOB ---
 
@@ -188,6 +218,10 @@ class ContinuousSSM:
             "trend_var": self.trend_var,
             "seasonal_var": self.seasonal_var,
             "time_scale": self.time_scale,
+            "scale_prior_dof": self.scale_prior_dof,
+            "scale_memory_seconds": self.scale_memory_seconds,
+            "S": self._S,
+            "n": self._n,
             "x": None if self._x is None else self._x.tolist(),
             "P": None if self._P is None else self._P.tolist(),
             "last_ts": self._last_ts,
@@ -198,6 +232,8 @@ class ContinuousSSM:
     @classmethod
     def from_bytes(cls, blob: bytes) -> ContinuousSSM:
         p = json.loads(blob)
+        if p.get("v") != MODEL_VERSION:
+            raise ValueError(f"continuous model state v{p.get('v')} != v{MODEL_VERSION}")
         m = cls(
             harmonics=[Harmonic(ps, h) for ps, h in p["harmonics"]],
             obs_scale=p["obs_scale"],
@@ -206,7 +242,11 @@ class ContinuousSSM:
             trend_var=p["trend_var"],
             seasonal_var=p["seasonal_var"],
             time_scale=p["time_scale"],
+            scale_prior_dof=p["scale_prior_dof"],
+            scale_memory_seconds=p["scale_memory_seconds"],
         )
+        m._S = p["S"]
+        m._n = p["n"]
         m._x = None if p["x"] is None else np.array(p["x"])
         m._P = None if p["P"] is None else np.array(p["P"])
         m._last_ts = p["last_ts"]
