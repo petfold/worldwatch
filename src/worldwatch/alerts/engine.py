@@ -55,6 +55,7 @@ DEFAULT_MIN_MODALITIES = 2
 DEFAULT_CORR_RESOLUTION = 2
 DEFAULT_LOOKBACK_SECONDS = 24 * 3600
 DEFAULT_SINGLE_SOURCE_Q_TAIL = 1e-4
+DEFAULT_PER_STREAM_QUOTA = 3  # cells a stream may contribute to one region's evidence
 
 
 @dataclass
@@ -190,6 +191,7 @@ def open_alerts(
     k: float = DEFAULT_CUSUM_DRIFT,
     min_modalities: int = DEFAULT_MIN_MODALITIES,
     corr_resolution: int = DEFAULT_CORR_RESOLUTION,
+    per_stream: int = DEFAULT_PER_STREAM_QUOTA,
 ) -> list[int]:
     """Apply the corroboration and per-source policies. Shared by the sweep
     and the live path; idempotent."""
@@ -203,6 +205,7 @@ def open_alerts(
     for c in corroborating:
         regions[coarsen(c.cell, corr_resolution)].append(c)
     for region, members in sorted(regions.items()):
+        members = _quota(members, per_stream)
         modalities = {m.modality for m in members}
         if len(modalities) < min_modalities:
             continue
@@ -216,6 +219,19 @@ def open_alerts(
     created += _single_source_alerts(conn, sources, candidates, k, corr_resolution, now)
     created += _every_event_alerts(conn, sources, corr_resolution, now)
     return created
+
+
+def _quota(members: list[Anomaly], per_stream: int) -> list[Anomaly]:
+    """Coverage balance (ADR 0002 §G): a stream contributes at most `per_stream`
+    cells to one region's evidence (the strongest), so a densely sampled
+    network can't dominate an alert by volume."""
+    by_stream: dict[str, list[Anomaly]] = defaultdict(list)
+    for m in members:
+        by_stream[m.stream_id].append(m)
+    out: list[Anomaly] = []
+    for ms in by_stream.values():
+        out += sorted(ms, key=lambda m: m.evidence, reverse=True)[:per_stream]
+    return out
 
 
 def _single_source_alerts(

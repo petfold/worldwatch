@@ -24,8 +24,13 @@ h3_resolution    = 3
 [usgs_seismic.model]
 native_seconds   = 300     # 5-min report windows; polled every minute
 
+# M1+ is complete only where US networks are dense: context and local detail,
+# never corroboration. Detection uses the uniform M4.5+ stream (usgs_m45).
+[usgs_seismic.alerts]
+role             = "context"
+
 [usgs_seismic.display]
-label            = "Earthquakes (M1+)"
+label            = "Earthquakes, all magnitudes (USGS)"
 unit             = "quakes"
 max_prefix       = "M"
 
@@ -153,21 +158,22 @@ class            = "weather_alert_feed"
 modality         = "physical"
 topic_tags       = ["weather", "hazard", "severe"]
 flavor           = "count"
-endpoint         = "https://api.weather.gov/alerts/active"
-cadence_seconds  = 900
+endpoint         = "https://api.weather.gov/alerts/active?severity=Severe,Extreme"
+cadence_seconds  = 120     # ~60 KB once thinned (was ~2.4 MB for every advisory)
 status           = "nursery"
 notes            = "NWS active alerts (US); polygon/point alerts only — zone-only (null-geometry) alerts skipped in P0"
 
 [nws_severe_alerts.parse]
 format           = "geojson_events"
 time_field       = "onset"
+id_field         = "id"      # many alerts share an onset; keep them distinct
 
 [nws_severe_alerts.geocode]
 strategy         = "feature_coords"
-h3_resolution    = 3
+h3_resolution    = 2       # a few samples of US weather are enough (coverage balance)
 
 [nws_severe_alerts.display]
-label            = "US weather alerts (NWS)"
+label            = "US severe weather (NWS)"
 unit             = "alerts"
 
 [nws_severe_alerts.context]
@@ -183,7 +189,7 @@ topic_tags       = ["radiation", "nuclear"]
 flavor           = "continuous"
 endpoint         = "https://api.safecast.org/measurements.json"
 cadence_seconds  = 900
-status           = "nursery"
+status           = "retired"   # 2026-09-26: serves stale data (newest Jan 2026); EURDEP/BfS supersede
 notes            = "Citizen radiation network; geocoded point measurements"
 
 [safecast_radiation.parse]
@@ -631,6 +637,7 @@ notes            = "NWS active alerts with severity Extreme (US)"
 [nws_extreme.parse]
 format           = "geojson_events"
 time_field       = "onset"
+id_field         = "id"
 
 [nws_extreme.geocode]
 strategy         = "feature_coords"
@@ -678,8 +685,11 @@ h3_resolution    = 3
 [emsc_seismic.model]
 native_seconds   = 300
 
+[emsc_seismic.alerts]
+role             = "context"   # small European quakes: detail, not evidence (see emsc_m45)
+
 [emsc_seismic.display]
-label            = "Earthquakes (EMSC)"
+label            = "Earthquakes, all magnitudes (EMSC)"
 unit             = "quakes"
 max_prefix       = "M"
 
@@ -806,3 +816,191 @@ single_source    = true     # our own measurement; confirmation is across a coun
 min_sensors      = 1        # one country cell already aggregates ~12 independent targets
 q_tail           = 1e-4
 region_resolution = 3
+
+
+# --- Coverage balance (ADR 0002 §G): uniform-magnitude earthquake detection --
+# The global catalogue is complete from about M4.5 everywhere; below that, only
+# where networks are dense (the US, Europe). Detecting on M4.5+ gives every
+# region comparable weight; smaller quakes stay as context above.
+
+[usgs_m45]
+class            = "seismic_feed"
+modality         = "physical"
+topic_tags       = ["seismic", "hazard"]
+flavor           = "count"
+endpoint         = "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/4.5_hour.geojson"
+cadence_seconds  = 60
+status           = "nursery"
+notes            = "USGS M4.5+ worldwide, last hour — the uniform detection stream"
+
+[usgs_m45.parse]
+format           = "geojson_features"
+value_field      = "mag"
+time_field       = "time"
+
+[usgs_m45.geocode]
+strategy         = "feature_coords"
+h3_resolution    = 3
+
+[usgs_m45.model]
+native_seconds   = 300
+
+[usgs_m45.display]
+label            = "Earthquakes M4.5+ (USGS)"
+unit             = "quakes"
+max_prefix       = "M"
+
+[usgs_m45.context]
+fields           = ["title", "place", "mag", "magType", "depth_km", "url", "tsunami", "alert", "felt", "sig"]
+rank             = "mag"
+text             = "M{mag}| {place}|, depth {depth_km:.0f} km"
+link             = "url"
+
+
+[emsc_m45]
+class            = "seismic_feed"
+modality         = "physical"
+topic_tags       = ["seismic", "hazard"]
+flavor           = "count"
+endpoint         = "wss://www.seismicportal.eu/standing_order/websocket"
+cadence_seconds  = 300
+status           = "nursery"
+notes            = "EMSC real-time events, M4.5+ — pushed within seconds; same stream semantics as usgs_m45"
+
+[emsc_m45.fetch]
+kind             = "websocket"
+
+[emsc_m45.parse]
+format           = "emsc_ws"
+filter_min_mag   = 4.5
+
+[emsc_m45.geocode]
+strategy         = "feature_coords"
+h3_resolution    = 3
+
+[emsc_m45.model]
+native_seconds   = 300
+
+[emsc_m45.display]
+label            = "Earthquakes M4.5+ (EMSC)"
+unit             = "quakes"
+max_prefix       = "M"
+
+[emsc_m45.context]
+fields           = ["flynn_region", "mag", "magtype", "depth", "evtype", "auth", "unid", "url"]
+rank             = "mag"
+text             = "M{mag}| {flynn_region}|, depth {depth:.0f} km|, {auth}"
+link             = "url"
+
+
+# --- Global disasters: GDACS (EU JRC / UN OCHA) -----------------------------
+# Alert levels come from modelled population impact — authoritative. Red
+# wakes (priority 5), Orange is shown silently. An escalation Orange → Red is a
+# new observation, so it alerts again.
+
+[gdacs_red]
+class            = "disaster_alert_feed"
+modality         = "physical"
+topic_tags       = ["hazard", "disaster"]
+flavor           = "count"
+endpoint         = "https://www.gdacs.org/gdacsapi/api/events/geteventlist/SEARCH?eventlist=EQ;TC;FL;VO;DR;WF;TS&alertlevel=Red&fromdate={start_date}&todate={end_date}"
+cadence_seconds  = 300
+status           = "nursery"
+notes            = "GDACS current Red alerts (earthquake, cyclone, flood, volcano, drought, wildfire, tsunami)"
+
+[gdacs_red.parse]
+format           = "gdacs_events"
+lookback_seconds = 1209600   # events that started in the last 14 days (204 = none)
+
+[gdacs_red.geocode]
+strategy         = "feature_coords"
+h3_resolution    = 3
+
+[gdacs_red.display]
+label            = "Disasters, Red (GDACS)"
+unit             = "alerts"
+
+[gdacs_red.context]
+fields           = ["type", "name", "country", "level", "episode", "url"]
+text             = "{level}|: {name}"
+link             = "url"
+
+[gdacs_red.alerts]
+every_event      = true
+severity         = 0.95
+fresh_seconds    = 21600   # GDACS may publish hours after an event starts
+
+
+[gdacs_orange]
+class            = "disaster_alert_feed"
+modality         = "physical"
+topic_tags       = ["hazard", "disaster"]
+flavor           = "count"
+endpoint         = "https://www.gdacs.org/gdacsapi/api/events/geteventlist/SEARCH?eventlist=EQ;TC;FL;VO;DR;WF;TS&alertlevel=Orange&fromdate={start_date}&todate={end_date}"
+cadence_seconds  = 300
+status           = "nursery"
+notes            = "GDACS current Orange alerts"
+
+[gdacs_orange.parse]
+format           = "gdacs_events"
+lookback_seconds = 1209600
+
+[gdacs_orange.geocode]
+strategy         = "feature_coords"
+h3_resolution    = 3
+
+[gdacs_orange.display]
+label            = "Disasters, Orange (GDACS)"
+unit             = "alerts"
+
+[gdacs_orange.context]
+fields           = ["type", "name", "country", "level", "episode", "url"]
+text             = "{level}|: {name}"
+link             = "url"
+
+[gdacs_orange.alerts]
+every_event      = true
+severity         = 0.8
+fresh_seconds    = 21600
+
+
+# --- European severe weather: MeteoAlarm (EUMETNET) --------------------------
+# The non-US counterpart to NWS. Legacy Atom feeds, one per country (~25–80 KB),
+# fetched as one source. Warnings carry region codes, not coordinates, so the
+# cell is the country's. Terms: attribute MeteoAlarm/EUMETNET; reuse terms to
+# confirm (guardrail 9).
+
+[meteoalarm_warnings]
+class            = "weather_alert_feed"
+modality         = "physical"
+topic_tags       = ["weather", "hazard", "severe"]
+flavor           = "count"
+endpoint         = "https://feeds.meteoalarm.org/feeds/meteoalarm-legacy-atom-{target}"
+cadence_seconds  = 1800
+status           = "nursery"
+notes            = "MeteoAlarm orange + red warnings, 37 European countries, count per country"
+
+[meteoalarm_warnings.fetch]
+kind             = "multi_get"
+pause_seconds    = 0.3
+targets          = { austria = "AT", belgium = "BE", bosnia-herzegovina = "BA", bulgaria = "BG", croatia = "HR", cyprus = "CY", czechia = "CZ", denmark = "DK", estonia = "EE", finland = "FI", france = "FR", germany = "DE", greece = "GR", hungary = "HU", iceland = "IS", ireland = "IE", israel = "IL", italy = "IT", latvia = "LV", lithuania = "LT", luxembourg = "LU", malta = "MT", moldova = "MD", montenegro = "ME", netherlands = "NL", norway = "NO", poland = "PL", portugal = "PT", romania = "RO", serbia = "RS", slovakia = "SK", slovenia = "SI", spain = "ES", sweden = "SE", switzerland = "CH", ukraine = "UA", united-kingdom = "GB" }
+
+[meteoalarm_warnings.parse]
+format           = "meteoalarm_atom"
+severities       = ["Severe", "Extreme"]
+
+[meteoalarm_warnings.geocode]
+strategy         = "country"
+h3_resolution    = 3
+
+[meteoalarm_warnings.model]
+native_seconds   = 1800
+
+[meteoalarm_warnings.display]
+label            = "European severe weather (MeteoAlarm)"
+unit             = "warnings"
+
+[meteoalarm_warnings.context]
+fields           = ["country", "cc", "title", "event", "level", "severity", "area", "url"]
+text             = "{title}"
+link             = "url"

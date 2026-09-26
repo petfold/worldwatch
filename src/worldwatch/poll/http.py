@@ -39,7 +39,8 @@ async def conditional_get(
 ) -> FetchResult:
     """GET `url`, sending If-None-Match / If-Modified-Since when we have them.
 
-    Returns a FetchResult with parsed JSON on 200, or not_modified=True on 304.
+    Returns a FetchResult with parsed JSON on 200, payload None on 204 (an
+    empty result), or not_modified=True on 304.
     Raises httpx.HTTPError / httpx.TimeoutException on transport failure so the
     caller can classify and instrument it.
     """
@@ -62,4 +63,6 @@ async def conditional_get(
         return FetchResult(304, None, new_validators, not_modified=True)
 
     resp.raise_for_status()
+    if resp.status_code == 204 or not resp.content:
+        return FetchResult(resp.status_code, None, new_validators)  # "nothing matches" (GDACS)
     return FetchResult(resp.status_code, resp.json(), new_validators)

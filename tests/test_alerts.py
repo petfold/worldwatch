@@ -13,8 +13,12 @@ BW = 300  # a bin width for spacing anomalous bins
 
 
 def _src(sources, stream_id, modality, base="usgs_seismic"):
+    """A synthetic stream copied from a real stanza, minus its alert policy
+    (the base's [alerts] table must not leak into the test's streams)."""
+    base_cfg = sources[base]
+    extra = {k: v for k, v in base_cfg.extra.items() if k != "alerts"}
     return dataclasses.replace(
-        sources[base], stream_id=stream_id, modality=modality, status="nursery"
+        base_cfg, stream_id=stream_id, modality=modality, status="nursery", extra=extra
     )
 
 

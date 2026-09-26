@@ -29,7 +29,9 @@ from worldwatch.api import context
 from worldwatch.api.notify import format_alert
 from worldwatch.cascade.bins import bin_width
 from worldwatch.layer0.native import NATIVE_SCALE, row_seconds
+from worldwatch.config.countries import countries
 from worldwatch.config.loader import SourceConfig
+from worldwatch.ingest.geocode import coarsen
 from worldwatch.db import connect
 
 _STATIC = Path(__file__).parent / "static"
@@ -38,6 +40,9 @@ TAIL_EXTREMITY = 0.99  # matches the alert engine's default q tail
 _OK_EVENTS = ("ok", "not_modified")
 _ERROR_EVENTS = ("timeout", "http_error", "fetch_error", "parse_error")
 _extremity = context.extremity
+MAP_QUOTA = 5  # dots per stream per coarse region (coverage balance)
+MAP_REGION_RESOLUTION = 2
+THIN_COVERAGE = 3  # fewer own probe targets than this: "thin"
 
 
 def _cell_polygon(cell: str) -> list[list[float]] | None:
@@ -207,7 +212,7 @@ def create_app(
         surprising bin. Context for a human, not a detection input."""
         now = _now()
         cutoff = now - lookback
-        stream_ids = list(cfgs) or [
+        stream_ids = [sid for sid, c in cfgs.items() if c.status != "retired"] or [
             r[0] for r in conn.execute("SELECT stream_id FROM sources ORDER BY stream_id")
         ]
         health = _health_summary(conn, cutoff)
@@ -283,8 +288,19 @@ def create_app(
             (cutoff,),
         ):
             stories[(r["stream_id"], r["cell"])] = json.loads(r["data"])
+        # coverage balance (ADR 0002 §G): at most MAP_QUOTA dots per stream per
+        # coarse region, the busiest — dense networks don't paint over the map
+        keep: dict[tuple[str, str], list[tuple[int, str]]] = defaultdict(list)
+        for (sid, cell) in latest:
+            if cfgs.get(sid) is not None and cfgs[sid].status == "retired":
+                continue
+            keep[(sid, coarsen(cell, MAP_REGION_RESOLUTION))].append((totals[(sid, cell)], cell))
+        shown = {(sid, cell) for (sid, _), cs in keep.items()
+                 for _, cell in sorted(cs, reverse=True)[:MAP_QUOTA]}
         features = []
         for (sid, cell), r in latest.items():
+            if (sid, cell) not in shown:
+                continue
             lat, lon = context.cell_center(cell)  # type: ignore[misc]
             cfg = cfgs.get(sid)
             story = stories.get((sid, cell))
@@ -306,6 +322,31 @@ def create_app(
                 }
             )
         return JSONResponse({"type": "FeatureCollection", "features": features})
+
+    @app.get("/api/coverage")
+    def coverage(conn: sqlite3.Connection = Depends(get_conn)) -> JSONResponse:
+        """Where our own internet probing is thin or absent — shown on the map so
+        a quiet country is never mistaken for a watched one (the coverage floor).
+        Counts only; target addresses are never exposed."""
+        per_cc = {
+            r["cc"]: r["n"] for r in conn.execute(
+                "SELECT cc, COUNT(*) AS n FROM probe_targets WHERE rejected IS NULL GROUP BY cc"
+            )
+        }
+        feats = []
+        for cc, (name, lat, lon) in sorted(countries().items()):
+            n = per_cc.get(cc, 0)
+            state = "unmonitored" if n == 0 else "thin" if n < THIN_COVERAGE else "ok"
+            if state == "ok":
+                continue
+            feats.append({"type": "Feature", "geometry": {"type": "Point", "coordinates": [lon, lat]},
+                          "properties": {"cc": cc, "country": name, "targets": n, "state": state}})
+        return JSONResponse({
+            "type": "FeatureCollection", "features": feats,
+            "summary": {"countries_probed": len(per_cc),
+                        "thin": sum(1 for f in feats if f["properties"]["state"] == "thin"),
+                        "unmonitored": sum(1 for f in feats if f["properties"]["state"] == "unmonitored")},
+        })
 
     @app.get("/api/cell")
     def cell_detail(

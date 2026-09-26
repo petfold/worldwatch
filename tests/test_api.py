@@ -129,7 +129,7 @@ def rich_client(tmp_path, sources):
     path = tmp_path / "rich.db"
     conn = open_db(path)
     quake_cell = h3.latlng_to_cell(-21.3, 168.6, 3)
-    for sid in ("usgs_seismic", "btc_usd", "safecast_radiation"):
+    for sid in ("usgs_seismic", "btc_usd", "bfs_odl_gamma"):
         conn.execute(
             "INSERT INTO sources (stream_id, class, modality, flavor, status, created_at) "
             "VALUES (?, 'x', ?, ?, 'nursery', 0)",
@@ -141,7 +141,7 @@ def rich_client(tmp_path, sources):
         ("btc_usd", "GLOBAL", 2, NOW - 3600, 5, 11.3, 11.4, 11.338),
         ("btc_usd", "GLOBAL", 2, NOW - 2400, 5, 11.3, 11.4, 11.34),
         ("btc_usd", "GLOBAL", 2, NOW - 1200, 5, 11.3, 11.4, 11.35),
-        ("safecast_radiation", CELL, 19, NOW - 90 * 86400, 1, 38, 38, 38),  # stale feed
+        ("bfs_odl_gamma", CELL, 19, NOW - 90 * 86400, 1, -2.3, -2.3, -2.3),  # stale feed (log µSv/h)
     ]
     conn.executemany(
         "INSERT INTO bins (stream_id, cell, scale, bin_start, n, vmin, vmax, vmean) "
@@ -161,8 +161,8 @@ def rich_client(tmp_path, sources):
         [
             ("usgs_seismic", NOW - 120, "ok", "rows=3"),
             ("btc_usd", NOW - 200, "ok", "rows=1"),
-            ("safecast_radiation", NOW - 900, "ok", "rows=0"),
-            ("safecast_radiation", NOW - 60, "http_error", "503 Service Unavailable"),
+            ("bfs_odl_gamma", NOW - 900, "ok", "rows=0"),
+            ("bfs_odl_gamma", NOW - 60, "http_error", "503 Service Unavailable"),
         ],
     )
     conn.commit()
@@ -178,7 +178,7 @@ def test_overview_describes_calm_data(rich_client):
     o = rich_client.get("/api/overview").json()
     assert o["open_alerts"] == 0
     quakes = _src(o, "usgs_seismic")
-    assert quakes["label"] == "Earthquakes (M1+)" and quakes["state"] == "ok"
+    assert quakes["label"] == "Earthquakes, all magnitudes (USGS)" and quakes["state"] == "ok"
     assert quakes["latest"] == "4 quakes in 2 cells; largest M6.6 @ 20.9S 169.0E"
     assert quakes["peak"]["rarity"] == "rare, 1-in-1,000 high"
     btc = _src(o, "btc_usd")
@@ -187,10 +187,10 @@ def test_overview_describes_calm_data(rich_client):
 
 
 def test_overview_shows_stale_feed_and_error(rich_client):
-    rad = _src(rich_client.get("/api/overview").json(), "safecast_radiation")
+    rad = _src(rich_client.get("/api/overview").json(), "bfs_odl_gamma")
     assert rad["state"] == "error"
     assert rad["last_error"]["event"] == "http_error"
-    assert rad["latest"] == "38 cpm"  # newest data, even though outside the look-back
+    assert rad["latest"] == "0.100 µSv/h"  # newest data, even though outside the look-back
     assert rad["latest_at"] < NOW - 80 * 86400
 
 
@@ -199,7 +199,7 @@ def test_activity_points_carry_hover_details(rich_client):
     quake = next(f for f in feats if f["properties"]["n"] == 3)
     assert quake["geometry"]["type"] == "Point"
     assert quake["properties"]["latest"] == "3 quakes, max M6.6"
-    assert quake["properties"]["label"] == "Earthquakes (M1+)"
+    assert quake["properties"]["label"] == "Earthquakes, all magnitudes (USGS)"
     assert all(f["properties"]["cell"] != "GLOBAL" for f in feats)
 
 

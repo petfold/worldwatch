@@ -13,6 +13,10 @@ sibling projects, where the tag is what publishes.
 
 ### Fixed
 
+- **An HTTP 204 was a fetch error** — "no matching events" (GDACS) is now an
+  empty result.
+- **NWS alerts sharing an onset merged into one key** — `id_field` keeps them
+  distinct.
 - **Co-located radiation detectors were mixed into one series** (EURDEP: 3,630
   stations at 3,369 coordinates). Radiation stanzas now geocode at H3 res 10
   and keep one detector per site (`site_field`).
@@ -47,6 +51,15 @@ sibling projects, where the tag is what publishes.
 
 ### Added
 
+- **Coverage balance (ADR 0002 phase 4).** Each region gets comparable weight,
+  not weight proportional to how much data exists there: NWS thinned to
+  Severe/Extreme in coarser cells (2.4 MB → 60 KB a poll, so every 2 min);
+  earthquake detection on a uniform M4.5+ (`usgs_m45`, `emsc_m45`) with M1+
+  kept as context; new non-US sources GDACS (Red wakes, Orange silent; an
+  escalation re-alerts) and MeteoAlarm (37 European countries, orange/red
+  warnings per country, via a new `multi_get` fetcher); a stream contributes
+  at most 3 cells to an alert and 5 dots per region to the map; and a map
+  layer of countries where our own probing is thin or absent.
 - **Internet outages, fast and broad (ADR 0002 phase 3).** IODA's outage events
   (authoritative, every new event alerts at priority 4) and per-signal alerts
   (a count stream per country), plus our own active prober
@@ -102,6 +115,8 @@ sibling projects, where the tag is what publishes.
 
 ### Changed
 
+- **Safecast retired** — its endpoint serves stale data (newest January 2026);
+  EURDEP and BfS supersede it.
 - **GDELT is context, not evidence, and counts articles.** News reports what
   sensors race to beat; it no longer corroborates alerts. It counts distinct
   articles per cell instead of coded events (~3.2 per article), which takes

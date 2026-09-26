@@ -109,6 +109,9 @@ def parse_geojson_events(payload: Any, cfg: SourceConfig) -> list[Observation]:
     # where = { site_status = [1] }: keep features whose property is one of the values
     where = {str(k): list(v) for k, v in (cfg.parse.get("where") or {}).items()}
     site_field = cfg.parse.get("site_field")  # sensor networks: one site per cell
+    # id_field: distinct items often share an onset (one warning, many counties);
+    # a stable offset from the item's id (< 10 min) keeps them distinct keys
+    id_field = cfg.parse.get("id_field")
     resolution = int(cfg.geocode.get("h3_resolution", 3))
 
     obs: list[Observation] = []
@@ -136,6 +139,10 @@ def parse_geojson_events(payload: Any, cfg: SourceConfig) -> list[Observation]:
 
                 val = math.log(max(val, 1e-9))
 
+        if id_field and props.get(id_field):
+            import hashlib
+
+            ts += int(hashlib.sha1(str(props[id_field]).encode()).hexdigest()[:6], 16) % 600
         obs.append(
             Observation(
                 stream_id=cfg.stream_id,
@@ -635,6 +642,96 @@ def parse_ioda_alerts(payload: Any, cfg: SourceConfig) -> list[Observation]:
             cfg.stream_id, cell, int(a["time"]) + ds_order.get(ds, 9), None,
             context=evidence.with_rank(cfg, evidence.pick(cfg, source)),
         ))
+    return obs
+
+
+_CAP_LEVEL = {"Moderate": "yellow", "Severe": "orange", "Extreme": "red"}
+
+
+@register("meteoalarm_atom")
+def parse_meteoalarm_atom(payload: Any, cfg: SourceConfig) -> list[Observation]:
+    """MeteoAlarm legacy Atom feeds (one per country, via multi_get) → one
+    pure-event observation per warning of the stanza's `severities`, in the
+    country's cell (warnings carry region codes, not coordinates).
+
+    Each warning's ts is its onset plus a stable offset from its CAP identifier
+    (< 10 min), so warnings with the same onset stay distinct and re-polls
+    dedup. Context: event type, awareness colour, area, and the MeteoAlarm page.
+    """
+    import hashlib
+    import xml.etree.ElementTree as ET
+
+    from worldwatch.config.countries import country_cell, country_name
+
+    ns = {"a": "http://www.w3.org/2005/Atom", "cap": "urn:oasis:names:tc:emergency:cap:1.2"}
+    keep = set(cfg.parse.get("severities") or ["Severe", "Extreme"])
+    res = int(cfg.geocode.get("h3_resolution", 3))
+    obs: list[Observation] = []
+    for feed in payload or []:
+        if not feed.get("text"):
+            continue
+        cell = country_cell(str(feed.get("cc", "")), res)
+        if cell is None:
+            continue
+        try:
+            root = ET.fromstring(feed["text"])
+        except ET.ParseError:
+            continue
+        for e in root.findall("a:entry", ns):
+            sev = (e.findtext("cap:severity", default="", namespaces=ns) or "").strip()
+            if sev not in keep:
+                continue
+            onset = e.findtext("cap:onset", default="", namespaces=ns) or e.findtext("cap:sent", default="", namespaces=ns)
+            ts = _parse_event_time(onset) if onset else None
+            ident = e.findtext("cap:identifier", default="", namespaces=ns) or e.findtext("a:id", default="", namespaces=ns)
+            if ts is None or not ident:
+                continue
+            offset = int(hashlib.sha1(ident.encode()).hexdigest()[:6], 16) % 600
+            link = next((lk.get("href") for lk in e.findall("a:link", ns)
+                         if lk.get("href", "").startswith("https://meteoalarm.org")), None)
+            source = {
+                "country": country_name(str(feed["cc"])), "cc": feed["cc"],
+                "title": (e.findtext("a:title", default="", namespaces=ns) or "").strip(),
+                "event": (e.findtext("cap:event", default="", namespaces=ns) or "").strip(),
+                "level": _CAP_LEVEL.get(sev, sev.lower()), "severity": sev,
+                "area": (e.findtext("cap:areaDesc", default="", namespaces=ns) or "").strip(),
+                "url": link,
+            }
+            obs.append(Observation(cfg.stream_id, cell, ts + offset, None,
+                                   context=evidence.with_rank(cfg, evidence.pick(cfg, source))))
+    return obs
+
+
+_GDACS_TYPES = {"EQ": "Earthquake", "TC": "Tropical cyclone", "FL": "Flood", "VO": "Volcano",
+                "DR": "Drought", "WF": "Wildfire", "TS": "Tsunami"}
+
+
+@register("gdacs_events")
+def parse_gdacs_events(payload: Any, cfg: SourceConfig) -> list[Observation]:
+    """GDACS event list (GeoJSON) → one observation per *current* event, keyed
+    by its start time plus the alert level (Orange 0, Red 1), so an escalation
+    from Orange to Red is a new observation. Context: type, name, country,
+    level, and the GDACS report."""
+    res = int(cfg.geocode.get("h3_resolution", 3))
+    level_offset = {"Green": 0, "Orange": 1, "Red": 2}
+    obs: list[Observation] = []
+    for feat in (payload or {}).get("features") or []:
+        p = feat.get("properties") or {}
+        if str(p.get("iscurrent", "")).lower() != "true":
+            continue
+        c = _feature_centroid(feat.get("geometry"))
+        ts = _parse_event_time(p["fromdate"] + "Z") if p.get("fromdate") else None
+        if c is None or ts is None:
+            continue
+        kind, eid = str(p.get("eventtype", "")), p.get("eventid")
+        source = {
+            "type": _GDACS_TYPES.get(kind, kind), "name": p.get("name"), "country": p.get("country"),
+            "level": p.get("alertlevel"), "episode": p.get("episodeid"),
+            "url": f"https://www.gdacs.org/report.aspx?eventid={eid}&eventtype={kind}" if eid else None,
+        }
+        obs.append(Observation(cfg.stream_id, h3_cell(c[1], c[0], res),
+                               ts + level_offset.get(str(p.get("alertlevel")), 0), None,
+                               context=evidence.with_rank(cfg, evidence.pick(cfg, source))))
     return obs
 
 

@@ -42,6 +42,10 @@ def build_url(cfg: SourceConfig, now: int) -> str:
     fields.setdefault("end", end_dt.strftime(fmt))
     fields.setdefault("start_epoch", now - lookback)  # APIs taking epoch seconds (IODA)
     fields.setdefault("end_epoch", now)
+    # APIs taking calendar dates (GDACS); end_date is tomorrow, so an API that
+    # treats it as exclusive still includes today
+    fields.setdefault("start_date", start_dt.strftime("%Y-%m-%d"))
+    fields.setdefault("end_date", (end_dt + timedelta(days=1)).strftime("%Y-%m-%d"))
 
     try:
         return endpoint.format(**fields)

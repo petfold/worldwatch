@@ -85,7 +85,11 @@ around 2026-10-10.
       Coinbase WebSockets, 60-s USGS/NWS Extreme polling) DONE 2026-09-26;
       NWWS-OI push optional (operator account). Phase 3 (IODA events +
       alerts, own stratified prober: 826 targets in 134 countries) DONE
-      2026-09-26; transparency page and thin-country targets open.
+      2026-09-26; transparency page and thin-country targets open. Phase 4
+      (coverage balance: NWS thinned, M4.5+ quake detection, GDACS,
+      MeteoAlarm, evidence/map quotas, coverage-gap layer; Safecast retired)
+      DONE 2026-09-26; night lights NRT deferred (measured ~16–40 h latency,
+      uncorrected radiance — needs a granule inspected on the VPS).
 - [ ] Seismic layer, alert-triggered (no continuous sampling, no phone data) —
       discrimination enrichment (event type, mb : Ms, depth flags, test-site
       distance), waveform screening of the triggered window

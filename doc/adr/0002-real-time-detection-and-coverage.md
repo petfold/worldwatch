@@ -223,8 +223,9 @@ hidden.
 
 - **Retire Safecast.** Its newest measurement is from January 2026;
   EURDEP/BfS supersede it.
-- **Night lights → VNP46A1 NRT** (LANCE, about 3 h) instead of the 9-day
-  gap-filled VNP46A2.
+- **Night lights → VNP46A1 NRT** (LANCE) instead of the 9-day gap-filled
+  VNP46A2. (Estimated here at ~3 h; measured 2026-09-26 at ~16–40 h, see the
+  phase 4 notes.)
 - **Deploy the radiation feeds after A**, so their hourly values are modelled
   at native resolution from the start (coarse bins can't be split later).
 
@@ -359,3 +360,41 @@ poll process:
   contact address (needs an nginx location, operator); more targets for the
   47 thin countries (e.g. the USC/ISI hitlist, operator registration); a
   second vantage point.
+
+## Implementation notes — phase 4 (2026-09-26)
+
+**Coverage balance (§G):**
+- **NWS:** only `severity=Severe,Extreme`, which cuts the payload from 2.4 MB
+  to ~60 KB. Cells at H3 res 2; polled every 2 min. A new `id_field` offsets
+  each alert's key by a stable hash of its id, so alerts sharing an onset
+  aren't merged.
+- **Earthquakes, uniform magnitude:** new detection streams `usgs_m45` (USGS
+  M4.5+ feed) and `emsc_m45` (EMSC M4.5+). The existing M1+ streams
+  (`usgs_seismic`, `emsc_seismic`) become `role = "context"`: map and
+  evidence, never corroboration.
+- **GDACS:** `gdacs_red` wakes (0.95) and `gdacs_orange` doesn't (0.8). Both
+  use the search endpoint with a 14-day date window; without dates it returns
+  an archive, and the app endpoint is capped at 100 events. An empty result
+  is HTTP 204, now handled as an empty payload. An escalation from Orange to
+  Red is a new key, so it alerts again.
+- **MeteoAlarm:** 37 countries' legacy Atom feeds (25–80 KB each; the JSON API
+  is 1–1.5 MB per country, uncompressed, with no ETag) through one stanza and
+  the new `multi_get` fetcher. Severe/Extreme warnings count per country cell.
+  A separate every-event feed for red warnings was not added (it would fetch
+  every feed twice). Reuse terms still to confirm.
+- **Evidence quota:** a stream contributes at most 3 cells to one alert's
+  evidence (`DEFAULT_PER_STREAM_QUOTA`).
+- **Map quota:** at most 5 dots per stream per res-2 region.
+- **Coverage gaps:** `/api/coverage` shows countries where our own probing is
+  thin (< 3 targets) or absent, as rings on the map ("silence here is not
+  evidence of calm"); counts only.
+
+**Source changes (§H):**
+- Safecast retired (status `retired`; hidden from the dashboard).
+- **Night lights NRT: deferred, with corrected facts.** VNP46A1_NRT v2 exists
+  at LANCE, but the newest h18v04 granule at 16:30 UTC on 26 Sep was for
+  25 Sep: latency is ~16–40 h, not ~3 h. It's 44 MB per tile per day, and
+  uncorrected at-sensor radiance (moonlight and clouds must be handled using
+  its moon-fraction and cloud-mask fields). It needs a new parser designed
+  against a real granule, which can only be downloaded with the VPS's
+  Earthdata login.

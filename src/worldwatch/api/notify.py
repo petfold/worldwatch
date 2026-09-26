@@ -190,7 +190,7 @@ def story_links(
 def _evidence_line(
     e: dict, conn: sqlite3.Connection | None, sources: dict[str, SourceConfig]
 ) -> str:
-    """'- Earthquakes (M1+) [physical] 1-in-2,500 high: 4 quakes, max M5.1 @ 35.9N 140.1E'"""
+    """'- Earthquakes M4.5+ (USGS) [physical] 1-in-2,500 high: 1 quake, max M6.6 @ 21.3S 167.9E'"""
     cfg = sources.get(e["stream_id"])
     label = context.display_for(e["stream_id"], cfg).label
     head = f"- {label} [{e['modality']}]"

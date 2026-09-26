@@ -39,7 +39,7 @@ def test_cmd_detect_sweeps_alerts_and_returns_summary(db, sources):
     now = int(time.time())
     uk = h3.latlng_to_cell(54.0, -2.5, 2)  # cf_radar_netflows_gb's cell
     quake = h3.cell_to_children(uk, 3)[0]
-    for sid, cell in (("usgs_seismic", quake), ("cf_radar_netflows_gb", uk)):
+    for sid, cell in (("usgs_m45", quake), ("cf_radar_netflows_gb", uk)):
         db.execute(
             "INSERT INTO surprise (stream_id, cell, scale, bin_start, q_value, presence_q, "
             "precision, n_obs, tail_index, model_version) "

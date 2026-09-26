@@ -58,7 +58,7 @@ def test_format_alert_with_observed_context(db, sources):
     row = _alert(db, 3, h3.cell_to_parent(cell, 2), 0.95, ev)
     title, message, priority, _ = format_alert(row, db, sources)
     assert title.startswith("Worldwatch SEVERE 0.95 - 21.") and title.isascii()
-    assert "Earthquakes (M1+) [physical] 1-in-2,500 high: 3 quakes, max M6.6" in message
+    assert "Earthquakes, all magnitudes (USGS) [physical] 1-in-2,500 high: 3 quakes, max M6.6" in message
     assert "News events (GDELT) [informational] 1-in-333 high" in message
     assert "latest bin 1970-01-01 01:23 UTC" in message
     assert priority == 5

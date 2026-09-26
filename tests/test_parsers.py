@@ -93,9 +93,11 @@ def test_geojson_events_alerts(sources):
     poly = obs[0]
     from worldwatch.ingest.geocode import h3_cell
 
-    assert poly.cell == h3_cell(48.21, -100.385, 3)
-    # onset ISO-8601 with -05:00 offset → epoch (17:30 −05:00 = 22:30 UTC)
-    assert poly.ts == 1783636200
+    res = sources["nws_severe_alerts"].geocode["h3_resolution"]
+    assert poly.cell == h3_cell(48.21, -100.385, res)
+    # onset ISO-8601 with -05:00 offset → epoch (17:30 −05:00 = 22:30 UTC),
+    # plus the stable per-alert offset (id_field) that keeps same-onset alerts distinct
+    assert 1783636200 <= poly.ts < 1783636200 + 600
 
 
 def test_geojson_events_time_fallback(sources):

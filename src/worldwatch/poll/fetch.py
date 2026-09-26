@@ -74,6 +74,41 @@ async def fetch_json_get(
     return await conditional_get(client, build_url(cfg, now), validators, headers=headers)
 
 
+# --- several feeds of one source (one stanza, many URLs) ---------------------
+
+
+@register("multi_get")
+async def fetch_multi_get(
+    client: httpx.AsyncClient,
+    cfg: SourceConfig,
+    validators: CacheValidators,
+    now: int,
+) -> FetchResult:
+    """One source published as a feed per region (MeteoAlarm: one per country).
+
+    `[fetch] targets = { germany = "DE", … }` fills `{target}` in the endpoint;
+    feeds are fetched one after another with `pause_seconds` between them, and
+    the payload is a list of {"target", "cc", "status", "text"}. A failing feed
+    is recorded in its entry and never fails the others.
+    """
+    targets = dict(cfg.fetch.get("targets") or {})
+    pause = float(cfg.fetch.get("pause_seconds", 0.3))
+    out: list[dict[str, Any]] = []
+    for i, (target, cc) in enumerate(sorted(targets.items())):
+        if i:
+            await asyncio.sleep(pause)
+        url = cfg.endpoint.replace("{target}", target)
+        try:
+            resp = await client.get(url, headers={"User-Agent": USER_AGENT}, timeout=30.0)
+            out.append({"target": target, "cc": cc, "status": resp.status_code,
+                        "text": resp.text if resp.status_code == 200 else ""})
+        except httpx.HTTPError as e:
+            out.append({"target": target, "cc": cc, "status": 0, "text": "", "error": str(e)})
+    if targets and not any(o["status"] == 200 for o in out):
+        raise httpx.HTTPError(f"all {len(out)} feeds failed")
+    return FetchResult(200, out, validators)
+
+
 # --- GDELT 2.0 batch-file fetch ---------------------------------------------
 
 

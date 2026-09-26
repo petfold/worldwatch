@@ -83,6 +83,9 @@
     <span class="lrow"><span class="sw circle" style="background:var(--infrastructural)"></span>internet</span>
     <span class="lrow"><span class="sw circle" style="background:var(--economic)"></span>markets</span>
     <div class="sub" style="font-size:11px">size = number of observations · hover or click for details</div>
+    <b>Rings: coverage gaps</b>
+    <span class="lrow"><span class="sw circle" style="border:1.5px solid #9aa7b4"></span>thin</span>
+    <span class="lrow"><span class="sw circle" style="border:1.5px solid #6c7a89"></span>unmonitored (internet)</span>
   </div>
   <div id="panel">
     <h1>Worldwatch</h1>
@@ -142,6 +145,15 @@
           "circle-opacity": 0.45, "circle-stroke-width": 0,
         },
       });
+      map.addSource("coverage", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+      map.addLayer({
+        id: "coverage", type: "circle", source: "coverage",
+        paint: {
+          "circle-radius": 7, "circle-color": "rgba(0,0,0,0)",
+          "circle-stroke-width": 1.5, "circle-stroke-opacity": 0.7,
+          "circle-stroke-color": ["match", ["get", "state"], "unmonitored", "#6c7a89", "#9aa7b4"],
+        },
+      });
       map.addSource("surprise", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
       map.addLayer({
         id: "surprise-fill", type: "fill", source: "surprise",
@@ -163,13 +175,17 @@
           (p.story ? `<span class="story">${esc(p.story)}</span><br>` : "") +
           `latest: ${esc(p.latest)}<br>${p.n} observation${p.n === 1 ? "" : "s"} in 24 h · last ${ago(p.last)}<br>` +
           `<span class="tipmuted">${esc(p.where)} · click for everything here</span>`,
+        coverage: (p) =>
+          `<b>${esc(p.country)}</b><br>internet reachability: ${p.state === "unmonitored"
+            ? "unmonitored — no probe targets" : `thin — ${p.targets} probe target${p.targets === 1 ? "" : "s"}`}<br>` +
+          `<span class="tipmuted">silence here is not evidence of calm</span>`,
         "surprise-fill": (p) =>
           `<b style="color:${p.surprise >= 0.99 ? "var(--rare)" : "var(--unusual)"}">` +
           `${p.surprise >= 0.99 ? "Rare" : "Unusual"}: 1-in-${Math.round(1 / Math.max(1e-6, 1 - p.surprise)).toLocaleString()}</b><br>` +
           `${esc(p.streams)}<br><span class="tipmuted">${esc(p.where)} · click for details</span>`,
       };
-      for (const layer of ["activity", "surprise-fill"]) {
-        map.on("click", layer, (e) => showCell(e.features[0].properties.cell));
+      for (const layer of ["activity", "surprise-fill", "coverage"]) {
+        if (layer !== "coverage") map.on("click", layer, (e) => showCell(e.features[0].properties.cell));
         map.on("mousemove", layer, (e) => {
           map.getCanvas().style.cursor = "pointer";
           hover.setLngLat(e.lngLat).setHTML(tip[layer](e.features[0].properties)).addTo(map);
@@ -198,9 +214,11 @@
     function refreshPanel() { loadOverview(); loadAlerts(); loadSilence(); }
     async function refreshMap() {
       if (!map.getSource("activity")) return;
-      const [activity, surprise] = await Promise.all([getJSON("/api/activity.geojson"), getJSON("/api/surprise.geojson")]);
+      const [activity, surprise, coverage] = await Promise.all(
+        [getJSON("/api/activity.geojson"), getJSON("/api/surprise.geojson"), getJSON("/api/coverage")]);
       layerData = { activity: activity.features, surprise: surprise.features };
       map.getSource("activity").setData(activity);
+      map.getSource("coverage").setData(coverage);
       map.getSource("surprise").setData(surprise);
       map.triggerRepaint();
     }
