@@ -80,7 +80,13 @@ around 2026-10-10.
       [`doc/adr/0002-real-time-detection-and-coverage.md`](doc/adr/0002-real-time-detection-and-coverage.md)
       (accepted 2026-09-26; measured per-source latency in
       [`doc/source-latency.tsv`](doc/source-latency.tsv)). Pipeline currently
-      adds 30–60 min; target seconds. Radiation deploy waits for its phase 1.
+      adds 30–60 min; target seconds. Phase 1 (live scoring + sequential
+      evidence) DONE 2026-09-26; radiation deployed with it.
+- [ ] Seismic layer — discrimination enrichment (event type, mb : Ms, depth
+      flags, test-site distance), event-triggered waveform screening
+      (EarthScope/GEOFON/Raspberry Shake, pretrained pickers), Raspberry Shake
+      urban-explosion detector — [`doc/seismic-layer.md`](doc/seismic-layer.md);
+      after ADR 0002 phases 2–4.
 
 ---
 
