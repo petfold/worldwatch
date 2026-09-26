@@ -99,6 +99,40 @@ streams follows the tails research agenda
 ([`doc/research-tails-and-dependence.md`](../research-tails-and-dependence.md));
 until then the ADR 0001 rules apply.
 
+**Confirm in space before time.** Waiting for several bins is only a stand-in
+for confirmation. Independent sensors agreeing *at the same instant* give the
+same confirmation without the wait. So evidence accumulates across sensors
+as well as over time, and strong simultaneous agreement alerts on the first
+observation:
+
+- **Radiation:** `persist_n = 1`, at least 2 independent nearby stations.
+  Set the per-station threshold p from a network false-alarm budget:
+  expected false alarms per hour ≈ (number of neighbour pairs) × p².
+  About 5,000 stations with ~10 neighbours each gives ~25,000 pairs, so
+  p = 10⁻⁴ per reading is about one false alarm per six months; 3 stations
+  allow p ≈ 10⁻³.
+- **Prober:** 5 of a country's 10 targets failing in the same round has
+  probability ≈ 2.5 × 10⁻⁸ under independent 1% loss, so it alerts after one
+  round (~60 s).
+- **Caveat (dependence):** the pair arithmetic assumes independence. Common
+  causes break it: rain raises dose rates regionally; co-located detectors
+  are one sensor; a shared upstream affects several probe targets. Until
+  tail dependence is learned (the research agenda's extremal coefficient),
+  guard against rain with three cheap checks:
+  - size: rain gives +10–100%, rarely tenfold;
+  - shape: washout decays with the ~hour half-life of radon progeny;
+  - precipitation: BfS publishes a 15-min layer per station, which explains
+    rain away.
+
+**Averaging at the source** is the one delay we can't remove. Dose rates are
+pulse counts over an interval, so short intervals carry more Poisson noise
+(relative 1/√N). That matters only for small changes; a tenfold jump is
+unmistakable in a 1-min value. BfS and EURDEP publish hourly means, which
+costs the wait for the hour to end plus relay, and dilutes a late-hour jump.
+Task: find open national feeds with 10-min values (Switzerland's NADAM
+records them; others to verify) to cut radiation from about 2 h to about
+10–20 min.
+
 ### D. Transport: push where offered, poll faster where not
 
 | Source | Change | Floor after change |
@@ -205,7 +239,8 @@ Expected event → alert, after A–G:
 | Crypto moves | 35–50 min | **seconds** |
 | Internet outage (own prober) | ~2.5 h (Cloudflare) | **~2–5 min** |
 | Internet outage (IODA breadth) | — | ~10–25 min |
-| Radiation (BfS / EURDEP) | ~2.5–3 h | ~1.2–2.2 h + averaging (the source's floor) |
+| Radiation (BfS / EURDEP, hourly) | ~2.5–3 h | ~1.2–2.2 h after the hour (the source's floor) |
+| Radiation (open 10-min national feeds, if found) | — | ~10–20 min |
 
 - The largest change is to the poller process, which now also hosts scoring
   and the alert fast path. Failure isolation and exactly-once scoring are
