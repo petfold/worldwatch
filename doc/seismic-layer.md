@@ -25,19 +25,43 @@ Real-time *products* worth reusing as context: USGS automatic locations
 moment tensors. CTBTO's bulletins do exactly this discrimination but are not
 public. Phone-accelerometer networks (Google's Android system, MyShake,
 Earthquake Network) detect strong local shaking fast, but their raw data is not
-public and MEMS sensitivity rules out distant events.
+public and MEMS sensitivity rules out distant events; not used.
+
+## Principles (operator, 2026-09-26)
+
+- **Long-range effects only.** No phone-accelerometer data: phones see strong
+  local shaking, not the teleseismic signals discrimination needs.
+- **Alert-triggered, not sampled.** Continuously processing a sample of
+  stations would likely miss the interesting moments and exceed the VPS's
+  processing budget. Networks that already detect events tell us *when and
+  where*; the data centres archive every waveform, so FDSN `dataselect` lets
+  us fetch exactly that window after the fact (20–30 s after real time at the
+  earliest) and analyse only it.
+
+## Triggers
+
+| Trigger | How it arrives | Window to fetch |
+|---|---|---|
+| USGS catalogue events (already ingested) | feeds updated every minute | origin −1 min … +15 min (P), … +40 min (surface waves) |
+| EMSC events | WebSocket push (ADR 0002 §D) | same |
+| GEOFON automatic solutions | FDSN event service | same |
+| Our own alerts (radiation, internet outage, …) | the alert engine | the alert's region and time, looking for an explosion signature before it |
+
+Filter before fetching: magnitude ≥ 4 or an own alert; shallow or depth
+unconstrained; away from known seismic zones or near known test sites. About
+40 M4+ events a day worldwide; each analysis is a few MB and seconds of CPU.
 
 ## Plan
 
-1. **Discrimination enrichment (small; context only).** For M ≥ 4 events,
-   fetch the USGS/EMSC event details: the event type label; the magnitude set
-   (mb, Ms, Mw), giving the mb : Ms discriminant; depth with its uncertainty,
-   flagged when it is the fixed 10 km default; distance to known test sites.
-   Goes to the evidence store and push text, e.g. *"M5.1 shallow,
+1. **Discrimination enrichment (small; context only).** For each triggered
+   event, fetch the USGS/EMSC event details: the event type label; the
+   magnitude set (mb, Ms, Mw), giving the mb : Ms discriminant; depth with its
+   uncertainty, flagged when it is the fixed 10 km default; distance to known
+   test sites. Goes to the evidence store and push text, e.g. *"M5.1 shallow,
    mb–Ms explosion-like, 15 km from Punggye-ri"*.
-2. **Event-triggered waveform screening.** For shallow events in unusual
-   places, fetch minutes of waveforms from GSN, GEOFON and nearby Raspberry
-   Shakes, then:
+2. **Triggered waveform screening.** For each triggered window, choose the
+   ~10–20 stations best spread in azimuth and distance (GSN, GEOFON, EIDA,
+   nearby Raspberry Shakes), fetch the window, then:
    - pick P onsets and first-motion polarity with pretrained models
      (SeisBench: PhaseNet-type pickers, polarity classifiers). "Compressional
      at every azimuth" is explosion-like;
@@ -46,11 +70,12 @@ public and MEMS sensitivity rules out distant events.
    - output a *screening score*, not a verdict (mining blasts and small
      events stay hard; full isotropic moment-tensor inversion is left out).
 
-   New dependencies: ObsPy (instrument response, processing) and SeisBench,
-   justified per guardrail 10. First screening ≈ 10–15 min after origin
-   (P arrival + picking); mb : Ms ≈ 20–40 min.
-3. **Raspberry Shake urban-explosion detector.** Continuous streams from dense
-   city clusters; impulsive, shallow, local signals seen by several nearby
-   units at once ("confirm in space before time", ADR 0002). The independent
-   seismic counterpart to radiation and news for explosions and industrial
-   accidents (Beirut 2020 was recorded clearly by nearby Raspberry Shakes).
+   New dependencies: ObsPy and SeisBench, justified per guardrail 10. First
+   screening ≈ 10–15 min after origin; mb : Ms ≈ 20–40 min.
+3. **Retrospective check for own alerts.** When Worldwatch alerts on
+   something non-seismic (radiation, outage), fetch the region's seismometers,
+   including dense Raspberry Shake clusters in cities, over the hours before
+   it, and look for impulsive, shallow, local signals seen by several nearby
+   units at once ("confirm in space before time", ADR 0002). This replaces an
+   always-on urban detector (Beirut 2020 was recorded clearly by nearby
+   Raspberry Shakes).

@@ -82,11 +82,12 @@ around 2026-10-10.
       [`doc/source-latency.tsv`](doc/source-latency.tsv)). Pipeline currently
       adds 30–60 min; target seconds. Phase 1 (live scoring + sequential
       evidence) DONE 2026-09-26; radiation deployed with it.
-- [ ] Seismic layer — discrimination enrichment (event type, mb : Ms, depth
-      flags, test-site distance), event-triggered waveform screening
-      (EarthScope/GEOFON/Raspberry Shake, pretrained pickers), Raspberry Shake
-      urban-explosion detector — [`doc/seismic-layer.md`](doc/seismic-layer.md);
-      after ADR 0002 phases 2–4.
+- [ ] Seismic layer, alert-triggered (no continuous sampling, no phone data) —
+      discrimination enrichment (event type, mb : Ms, depth flags, test-site
+      distance), waveform screening of the triggered window
+      (EarthScope/GEOFON/EIDA/Raspberry Shake, pretrained pickers), and a
+      retrospective seismic check for Worldwatch's own non-seismic alerts —
+      [`doc/seismic-layer.md`](doc/seismic-layer.md); after ADR 0002 phases 2–4.
 
 ---
 
