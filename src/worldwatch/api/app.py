@@ -253,11 +253,12 @@ def create_app(
                     "(SELECT MAX(bin_start) FROM bins WHERE stream_id = ?)",
                     (sid, sid),
                 ).fetchall()
-        # where each row takes the map — from the same rows the list shows
-        places = {sid: _place(bins.get(sid, []), surprise.get(sid, [])) for sid in stream_ids}
         if view is not None:  # only what lies in the map view; non-spatial rows always count
             bins = {sid: [b for b in rs if in_view(b["cell"], view)] for sid, rs in bins.items()}
             surprise = {sid: [r for r in rs if in_view(r["cell"], view)] for sid, rs in surprise.items()}
+        # where each row takes the map — from the same rows the list shows, so
+        # with a view the peak is the one in view, not one across the continent
+        places = {sid: _place(bins.get(sid, []), surprise.get(sid, [])) for sid in stream_ids}
         out = []
         hidden = 0
         for sid in stream_ids:

@@ -244,6 +244,16 @@ def test_view_filter_keeps_global_streams_and_hides_what_is_elsewhere(rich_clien
     assert "usgs_seismic" in {s["stream_id"] for s in pacific["sources"]}
 
 
+def test_view_filter_locates_within_the_view(rich_client):
+    # usgs_seismic's unusual peak is near Vanuatu; zoomed on California the row
+    # must take the map to what it reported there, not fly across the Pacific
+    o = rich_client.get("/api/overview", params={"bbox": "-126,34,-118,42"}).json()
+    q = _src(o, "usgs_seismic")
+    assert q["center"] is None  # no unusual peak in view
+    w, s_, e, n = q["extent"]
+    assert -126 < w <= e < -118 and 34 < s_ <= n < 42
+
+
 def test_parse_bbox_normalizes_world_copies():
     from worldwatch.api.app import in_view, parse_bbox
 
