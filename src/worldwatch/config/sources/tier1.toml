@@ -94,7 +94,9 @@ notes            = "BTC/USD from the Coinbase WebSocket ticker (push, ADR 0002 Â
 
 [btc_usd.fetch]
 kind             = "websocket"
-subscribe        = { type = "subscribe", product_ids = ["BTC-USD"], channels = ["ticker"] }
+subscribe        = { type = "subscribe", product_ids = ["BTC-USD"], channels = ["ticker", "heartbeat"] }
+ping_interval    = 0         # Coinbase doesn't answer pings reliably (dropped 3Ã— in 2.5 h)...
+stale_seconds    = 60        # ...its 1/s heartbeat is the liveness signal instead
 emit_every_seconds = 60      # ~8 ticks/s thinned to one a minute...
 emit_delta       = 0.003     # ...but a 0.3% move (log price) goes out at once
 
@@ -130,7 +132,9 @@ notes            = "ETH/USD from the Coinbase WebSocket ticker (push, ADR 0002 Â
 
 [eth_usd.fetch]
 kind             = "websocket"
-subscribe        = { type = "subscribe", product_ids = ["ETH-USD"], channels = ["ticker"] }
+subscribe        = { type = "subscribe", product_ids = ["ETH-USD"], channels = ["ticker", "heartbeat"] }
+ping_interval    = 0         # Coinbase doesn't answer pings reliably (dropped 3Ã— in 2.5 h)...
+stale_seconds    = 60        # ...its 1/s heartbeat is the liveness signal instead
 emit_every_seconds = 60      # ~8 ticks/s thinned to one a minute...
 emit_delta       = 0.003     # ...but a 0.3% move (log price) goes out at once
 

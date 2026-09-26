@@ -17,6 +17,10 @@ live scorer.
   silence.
 - **Isolation.** Every failure is recorded as data; the stream reconnects with
   exponential backoff (capped) and never affects other sources.
+- **Liveness.** By default a WebSocket keepalive ping every 20 s. A feed that
+  talks constantly (Coinbase's heartbeat channel) can instead turn pings off
+  (`ping_interval = 0`) and reconnect when silent for `stale_seconds` —
+  Coinbase does not answer pings reliably.
 """
 
 from __future__ import annotations
@@ -98,8 +102,10 @@ async def run_stream(
     backoff = 0.0
     while stop is None or not stop.is_set():
         try:
+            ping = cfg.fetch.get("ping_interval", 20)
             async with connect(
-                cfg.endpoint, user_agent_header=USER_AGENT, open_timeout=30, ping_interval=20
+                cfg.endpoint, user_agent_header=USER_AGENT, open_timeout=30,
+                ping_interval=(float(ping) if ping else None),
             ) as ws:
                 if cfg.fetch.get("subscribe"):
                     await ws.send(json.dumps(cfg.fetch["subscribe"]))
@@ -132,6 +138,8 @@ async def _pump(
     messages = rows = parse_errors = 0
     next_flush = clock() + flush_seconds
     next_beat = clock()  # heartbeat right away, then once per cadence
+    stale = cfg.fetch.get("stale_seconds")  # feeds that keep talking: silence = dead link
+    last_message = clock()
     while stop is None or not stop.is_set():
         timeout = max(0.05, min(next_flush, next_beat) - clock())
         try:
@@ -141,6 +149,7 @@ async def _pump(
         now = clock()
         if raw is not None:
             messages += 1
+            last_message = now
             try:
                 for o in parsers.parse({"message": json.loads(raw), "received": int(now)}, cfg):
                     o = o if o.ts != parsers._NOW_SENTINEL else _with_ts(o, int(now))
@@ -170,6 +179,9 @@ async def _pump(
             record_health(conn, cfg.stream_id, "ok", f"messages={messages} rows={rows}", ts=int(now))
             messages = rows = 0
             next_beat = now + cfg.cadence_seconds
+        # after the flush, so nothing already received is lost when the link is dropped
+        if stale and not batch and now - last_message > float(stale):
+            raise ConnectionError(f"no message for {now - last_message:.0f} s")
 
 
 def _with_ts(o: Observation, ts: int) -> Observation:

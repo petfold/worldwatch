@@ -173,3 +173,25 @@ async def test_emsc_updates_of_a_seen_event_are_not_recounted(db, sources):
 def test_push_stanzas_are_websocket(sources, sid):
     cfg = sources[sid]
     assert cfg.fetch["kind"] == "websocket" and cfg.endpoint.startswith("wss://")
+
+
+async def test_silent_feed_is_reconnected_when_stale(db, sources):
+    """A feed that should talk constantly (Coinbase heartbeat) and goes quiet
+    is treated as a dead link: reconnect, recorded as data."""
+    cfg = _fast(sources["btc_usd"], stale_seconds=0.05)
+    stop = asyncio.Event()
+    silent, alive = FakeWS([], stop), FakeWS([_tick(84000, "2026-09-26T13:00:00Z")], stop)
+    got: list = []
+
+    async def on_new(c, obs, t):
+        got.extend(obs)
+
+    await _run_until(lambda: got, run_stream(db, cfg, on_new=on_new, stop=stop,
+                                             connect=_connector([silent, alive]), min_backoff=0.01), stop)
+    err = db.execute("SELECT detail FROM health WHERE event = 'stream_error'").fetchone()
+    assert "no message for" in err[0] and len(got) == 1
+
+
+def test_coinbase_liveness_is_its_heartbeat(sources):
+    f = sources["btc_usd"].fetch
+    assert "heartbeat" in f["subscribe"]["channels"] and f["ping_interval"] == 0 and f["stale_seconds"] == 60

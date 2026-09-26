@@ -13,6 +13,11 @@ sibling projects, where the tag is what publishes.
 
 ### Fixed
 
+- **Coinbase streams dropped together every hour or two** ("keepalive ping
+  timeout"; our event loop was verified running, and reconnects met
+  "connection reset by peer"): Coinbase doesn't answer pings reliably. Its
+  streams now turn pings off and use Coinbase's 1/s heartbeat channel,
+  reconnecting after 60 s of silence (`ping_interval`, `stale_seconds`).
 - **An HTTP 204 was a fetch error** — "no matching events" (GDACS) is now an
   empty result.
 - **NWS alerts sharing an onset merged into one key** — `id_field` keeps them
