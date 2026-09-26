@@ -214,3 +214,9 @@ def test_alert_carries_readable_text(client):
     a = client.get("/api/alerts/1").json()
     assert a["title"].startswith("Worldwatch SEVERE 0.95")
     assert "corroborated surprise" in a["text"]
+
+
+def test_about_page_is_served_and_linked(client):
+    page = client.get("/about")
+    assert page.status_code == 200 and "Opting out" in page.text and "158.220.117.131" in page.text
+    assert 'href="/about"' in client.get("/").text

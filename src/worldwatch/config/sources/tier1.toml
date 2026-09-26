@@ -799,6 +799,8 @@ anchor_quota     = 4
 vantage_lat      = 49.0     # the VPS (Karlsruhe area); for the light-speed check
 vantage_lon      = 8.4
 vantage_fault_fraction = 0.5
+# opt-outs requested via /about (addresses or CIDR ranges) — never probed
+exclude          = []
 
 [probe_reachability.geocode]
 strategy         = "country"

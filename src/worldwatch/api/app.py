@@ -84,6 +84,11 @@ def create_app(
     def index() -> FileResponse:
         return FileResponse(_STATIC / "index.html")
 
+    @app.get("/about")
+    def about() -> FileResponse:
+        """What Worldwatch is, what it actively measures, and how to opt out."""
+        return FileResponse(_STATIC / "about.html")
+
     @app.get("/api/surprise.geojson")
     def surprise_geojson(
         lookback: int = DEFAULT_LOOKBACK_SECONDS,

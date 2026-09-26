@@ -144,3 +144,19 @@ async def test_firewalled_targets_are_dropped_at_discovery(db, sources):
 
     got = await _one_round(db, cfg, resolve, ntp, rounds=2)
     assert got == []
+
+
+async def test_opted_out_hosts_are_never_probed(db, sources):
+    import dataclasses
+
+    cfg = sources["probe_reachability"]
+    cfg = dataclasses.replace(cfg, fetch={**cfg.fetch, "exclude": ["5.2.0.0/16", "5.3.0.1"]})
+    resolve = _zones({"0.de.pool.ntp.org": ["5.1.0.1", "5.2.0.1", "5.3.0.1", "5.4.0.1"]})
+    probed: list[str] = []
+
+    async def ntp(ips, round_no):
+        probed.extend(ips)
+        return {ip: 9.0 for ip in ips}
+
+    await _one_round(db, cfg, resolve, ntp)
+    assert sorted(set(probed)) == ["5.1.0.1", "5.4.0.1"]

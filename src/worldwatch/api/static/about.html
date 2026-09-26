@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>About Worldwatch</title>
+  <style>
+    :root { color-scheme: dark; --bg: #0b0f14; --panel: #11161d; --line: #223040; --text: #dfe6ee;
+            --muted: #8a99a8; --faint: #5d6b78; --link: #8ecae6; }
+    body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.6 system-ui, sans-serif; }
+    main { max-width: 760px; margin: 0 auto; padding: 28px 16px 60px; }
+    h1 { font-size: 22px; margin: 0 0 4px; }
+    h2 { font-size: 16px; margin: 30px 0 8px; color: #c3ceda; }
+    p, li { color: #c9d3dd; }
+    .sub { color: var(--muted); margin: 0 0 20px; }
+    a { color: var(--link); }
+    code { background: var(--panel); border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; font-size: 13px; }
+    table { border-collapse: collapse; width: 100%; font-size: 14px; margin: 8px 0; }
+    th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+    th { color: var(--muted); font-weight: 600; }
+    .box { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 12px 14px; margin: 12px 0; }
+    .back { font-size: 14px; }
+  </style>
+</head>
+<body>
+<main>
+  <p class="back"><a href="/">← back to the map</a></p>
+  <h1>About Worldwatch</h1>
+  <p class="sub">What this is, what it measures, and how to opt out.</p>
+
+  <h2>What this is</h2>
+  <p>
+    Worldwatch is a non-commercial, open-source research project
+    (<a href="https://github.com/petfold/worldwatch">github.com/petfold/worldwatch</a>).
+    It watches free, open data streams — earthquakes, weather warnings, radiation
+    monitoring, internet reachability, markets, news — learns what is normal for each,
+    and flags calibrated departures from normal, aiming to notice unusual events early.
+  </p>
+  <p>
+    Almost everything it does is <em>passive</em>: it reads public feeds and APIs, with
+    conditional requests where supported, within their published rate limits, and with a
+    descriptive User-Agent:<br><code>worldwatch/0.1 (global anomaly monitor; https://github.com/petfold/worldwatch; contact via repo)</code>
+  </p>
+
+  <h2>Active measurements (internet reachability)</h2>
+  <p>
+    To see internet outages quickly and evenly around the world, Worldwatch also sends a
+    small number of standard, harmless probes from one server:
+  </p>
+  <div class="box">
+    <table>
+      <tr><th>From</th><td><code>158.220.117.131</code> (categor.io), a single server in Germany</td></tr>
+      <tr><th>NTP servers</th><td>One standard NTP client request (48 bytes, UDP port 123) every
+        2 minutes to servers listed in the <a href="https://www.ntppool.org/">NTP Pool</a>
+        country zones — within the pool's guidance of at most one query per 64 seconds per server.
+        We read only whether a reply arrived and how long it took; the time value itself is unused.</td></tr>
+      <tr><th>RIPE Atlas anchors</th><td>A TCP connection to port 80, closed immediately without sending
+        data, every 2 minutes, to <a href="https://atlas.ripe.net/anchors/">RIPE Atlas anchors</a>
+        — hosts deployed to be measured.</td></tr>
+      <tr><th>Scale</th><td>About 8 NTP servers and 4 anchors per country, spread across different networks;
+        roughly 800 hosts in total, about 150 KB of traffic per round.</td></tr>
+      <tr><th>What is kept</th><td>Reachable or not, and round-trip time. Only per-country counts
+        ("5 of 12 unreachable") are ever shown; individual target addresses are never published.</td></tr>
+    </table>
+  </div>
+
+  <h2>Opting out</h2>
+  <p>
+    If you operate one of these hosts and would rather not be probed, open an issue at
+    <a href="https://github.com/petfold/worldwatch/issues">github.com/petfold/worldwatch/issues</a>
+    with the address or range. It will be added to the exclusion list and no longer probed,
+    typically within a day. Questions about any other traffic from this server are welcome
+    the same way.
+  </p>
+
+  <h2>Data sources and attribution</h2>
+  <table>
+    <tr><th>Earthquakes</th><td><a href="https://earthquake.usgs.gov/">USGS</a>,
+      <a href="https://www.seismicportal.eu/">EMSC</a></td></tr>
+    <tr><th>Disasters</th><td><a href="https://www.gdacs.org/">GDACS</a> (EU JRC / UN OCHA)</td></tr>
+    <tr><th>Weather warnings</th><td><a href="https://www.weather.gov/">US National Weather Service</a>,
+      <a href="https://meteoalarm.org/">MeteoAlarm</a> (EUMETNET)</td></tr>
+    <tr><th>Radiation</th><td><a href="https://remap.jrc.ec.europa.eu/">EURDEP</a> and the German
+      ODL network, via <a href="https://www.imis.bfs.de/">BfS open data</a></td></tr>
+    <tr><th>Internet</th><td><a href="https://ioda.inetintel.cc.gatech.edu/">IODA</a> (Georgia Tech),
+      <a href="https://radar.cloudflare.com/">Cloudflare Radar</a>, NTP Pool, RIPE Atlas</td></tr>
+    <tr><th>Markets</th><td><a href="https://www.coinbase.com/">Coinbase</a> public prices</td></tr>
+    <tr><th>News &amp; attention</th><td><a href="https://www.gdeltproject.org/">GDELT</a>,
+      <a href="https://wikimedia.org/api/rest_v1/">Wikimedia pageviews</a></td></tr>
+    <tr><th>Night lights</th><td>NASA Black Marble (VIIRS), via <a href="https://www.earthdata.nasa.gov/">Earthdata</a></td></tr>
+    <tr><th>Maps</th><td><a href="https://openfreemap.org/">OpenFreeMap</a>, © OpenMapTiles, © OpenStreetMap
+      contributors; country points from <a href="https://www.naturalearthdata.com/">Natural Earth</a> (public domain)</td></tr>
+  </table>
+
+  <h2>Caveats</h2>
+  <p>
+    This is an experiment. Its signals are statistical ("unusual for this place and time"),
+    not verified reports, and much of the world is covered thinly — the map shows where our
+    own internet probing is thin or absent. Do not use it for safety decisions; follow your
+    local authorities.
+  </p>
+</main>
+</body>
+</html>

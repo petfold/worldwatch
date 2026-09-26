@@ -21,7 +21,8 @@ Checks:
     emitted (the spec's poller/network-fault attribution).
 
 Privacy: target IPs stay in `probe_targets`; the evidence store, API and
-pushes only ever see country-level counts.
+pushes only ever see country-level counts. Hosts that ask not to be probed
+(see /about) go in the stanza's `exclude` list (addresses or CIDR ranges).
 """
 
 from __future__ import annotations
@@ -329,7 +330,8 @@ async def _discover(
     except Exception as e:
         record_health(conn, cfg.stream_id, "probe_error", f"anchors: {type(e).__name__}: {e}"[:300], ts=now)
         anchors = []
-    targets = [t for t in ntp_targets + anchors if t.ip not in rejected]
+    excluded = _excluded(f.get("exclude") or [])
+    targets = [t for t in ntp_targets + anchors if t.ip not in rejected and not excluded(t.ip)]
     conn.execute("DELETE FROM probe_targets WHERE rejected IS NULL")
     conn.executemany(
         "INSERT OR IGNORE INTO probe_targets (ip, cc, kind, asn, discovered_at) VALUES (?, ?, ?, ?, ?)",
@@ -339,6 +341,25 @@ async def _discover(
     record_health(conn, cfg.stream_id, "discovered",
                   f"targets={len(targets)} countries={len({t.cc for t in targets})}", ts=now)
     return targets
+
+
+def _excluded(entries: list[str]) -> Callable[[str], bool]:
+    """Operator opt-out list (addresses or CIDR ranges, see /about): never probed."""
+    nets = []
+    for e in entries:
+        try:
+            nets.append(ipaddress.ip_network(str(e), strict=False))
+        except ValueError:
+            continue
+
+    def test(ip: str) -> bool:
+        try:
+            a = ipaddress.ip_address(ip)
+        except ValueError:
+            return False
+        return any(a in n for n in nets)
+
+    return test
 
 
 def _reject(conn: sqlite3.Connection, targets: list[Target], why: str) -> None:

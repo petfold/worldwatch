@@ -51,6 +51,11 @@ sibling projects, where the tag is what publishes.
 
 ### Added
 
+- **Transparency page** at `/about` (linked from the map): what Worldwatch is,
+  exactly what the prober sends (NTP client requests to pool servers every
+  2 min; TCP connects to RIPE Atlas anchors), what is kept, how to opt out
+  (GitHub issues), and attribution for every data source. The prober honours
+  an `exclude` list of addresses/ranges.
 - **Coverage balance (ADR 0002 phase 4).** Each region gets comparable weight,
   not weight proportional to how much data exists there: NWS thinned to
   Severe/Extreme in coarser cells (2.4 MB → 60 KB a poll, so every 2 min);
