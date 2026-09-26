@@ -48,6 +48,9 @@
     .chip { grid-column: 2; font-size: 11px; }
     .chip.typical { color: var(--typical); } .chip.unusual { color: var(--unusual); } .chip.rare { color: var(--rare); }
     .errnote { grid-column: 2; color: var(--err); font-size: 11px; }
+    .src.open { background: #151c25; }
+    .inline { grid-column: 1 / span 3; white-space: pre-wrap; font-size: 12px; color: #bcd;
+              border-left: 2px solid var(--line); margin: 4px 0 2px 4px; padding: 2px 0 2px 8px; }
 
     #detail { white-space: pre-wrap; font-size: 12px; color: #bcd; margin-top: 8px;
               border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; display: none; }
@@ -95,6 +98,7 @@
       <label><input type="checkbox" id="activityToggle" checked /> data dots</label>
       <label><input type="checkbox" id="surpriseToggle" checked /> surprise hexagons</label>
       <label><input type="checkbox" id="silenceToggle" /> silent sources</label>
+      <label title="list only sources and alerts inside the visible map area"><input type="checkbox" id="viewToggle" /> only in view</label>
     </div>
     <div id="silence"></div>
     <div id="detail"></div>
@@ -212,6 +216,20 @@
     // The panel does not wait for the basemap: its "load" event needs every
     // tile and font, which can take seconds on a slow link.
     function refreshPanel() { loadOverview(); loadAlerts(); loadSilence(); }
+
+    // "only in view": the list and the alerts follow the visible map area
+    function viewParam() {
+      if (!document.getElementById("viewToggle").checked) return "";
+      const b = map.getBounds();
+      return `bbox=${[b.getWest(), b.getSouth(), b.getEast(), b.getNorth()].map((x) => x.toFixed(3)).join(",")}`;
+    }
+    let moveTimer = null;
+    map.on("moveend", () => {
+      if (!document.getElementById("viewToggle").checked) return;
+      clearTimeout(moveTimer);
+      moveTimer = setTimeout(() => { loadOverview(); loadAlerts(); }, 350);
+    });
+    document.getElementById("viewToggle").onchange = () => { loadOverview(); loadAlerts(); };
     async function refreshMap() {
       if (!map.getSource("activity")) return;
       const [activity, surprise, coverage] = await Promise.all(
@@ -242,26 +260,31 @@
     }
 
     let overview = null;
+    let openSource = null;  // stream_id whose inline detail is open (survives refresh)
     async function loadOverview() {
-      overview = await getJSON("/api/overview");
+      const q = viewParam();
+      overview = await getJSON("/api/overview" + (q ? "?" + q : ""));
       const o = overview;
       document.getElementById("status").innerHTML =
         `<b>${o.reporting}/${o.sources.length}</b> sources reporting · ` +
         (o.open_alerts ? `<b style="color:var(--rare)">${o.open_alerts} open alert${o.open_alerts > 1 ? "s" : ""}</b>` : "<b>no open alerts</b>") +
-        ` · updated ${new Date().toISOString().slice(11, 16)} UTC`;
+        ` · updated ${new Date().toISOString().slice(11, 16)} UTC` +
+        (q ? ` · <span class="tipmuted">${o.out_of_view} source${o.out_of_view === 1 ? "" : "s"} with nothing in view</span>` : "");
       const groups = {};
-      for (const s of o.sources) (groups[s.modality] ||= []).push(s);
+      for (const s of o.sources) (groups[s.global ? "global" : s.modality] ||= []).push(s);
       const el = document.getElementById("world");
       el.innerHTML = "";
-      for (const mod of ["physical", "informational", "infrastructural", "economic", ""]) {
+      for (const mod of ["physical", "informational", "infrastructural", "economic", "", "global"]) {
         if (!groups[mod]) continue;
+        const name = mod === "global" ? "Global — not tied to a place" : (MODALITY_NAMES[mod] || "Other");
         el.insertAdjacentHTML("beforeend",
-          `<div class="group" style="color:${MODALITY_COLORS[mod] || "#888"}">${esc(MODALITY_NAMES[mod] || "Other")}</div>`);
+          `<div class="group" style="color:${MODALITY_COLORS[mod] || "#888"}">${esc(name)}</div>`);
         for (const s of groups[mod]) {
           const word = s.peak?.rarity;
           const row = document.createElement("div");
           row.className = "src";
-          row.title = `${s.stream_id} · ${s.status || ""} · polls ok ${s.polls_ok}, errors ${s.polls_error} (24 h)`;
+          row.dataset.id = s.stream_id;
+          row.title = `${s.stream_id} · click for details${s.center || s.extent ? " and to show it on the map" : ""}`;
           const stale = s.latest_at && Date.now() / 1000 - s.latest_at > 2 * 86400;
           row.innerHTML =
             `<span class="dot ${esc(s.state)}"></span>` +
@@ -270,9 +293,37 @@
             `<span class="val">${esc(s.latest || "no data yet")}${s.latest_at ? ` · ${stale ? "data from " + utc(s.latest_at).slice(0, 10) : ago(s.latest_at)}` : ""}</span>` +
             (word ? `<span class="chip ${chipClass(word)}">24 h peak: ${esc(word)}${s.n_cells > 1 && s.peak.where ? " @ " + esc(s.peak.where) : ""}</span>` : "") +
             (s.state === "error" && s.last_error ? `<span class="errnote">${esc(s.last_error.event)}: ${esc(s.last_error.detail.slice(0, 90))}</span>` : "");
-          row.onclick = () => showSource(s);
+          row.onclick = () => toggleSource(row, s, true);
           el.appendChild(row);
+          if (openSource === s.stream_id) toggleSource(row, s, false);
         }
+      }
+    }
+
+    function toggleSource(row, s, userClick) {
+      const existing = row.querySelector(".inline");
+      if (existing && userClick) {  // second click closes
+        existing.remove(); row.classList.remove("open"); openSource = null; return;
+      }
+      for (const other of document.querySelectorAll(".src.open")) {
+        other.classList.remove("open"); other.querySelector(".inline")?.remove();
+      }
+      const box = document.createElement("div");
+      box.className = "inline";
+      box.innerHTML = sourceDetail(s);
+      box.onclick = (e) => e.stopPropagation();  // links inside don't toggle the row
+      row.appendChild(box);
+      row.classList.add("open");
+      openSource = s.stream_id;
+      if (userClick) locate(s);
+    }
+
+    function locate(s) {  // the peak if unusual, else the extent of what it reported
+      if (s.center) flyTo(s.center, 5);
+      else if (s.extent) {
+        const [w, so, e, n] = s.extent;
+        if (w === e && so === n) flyTo([so, w], 4);
+        else map.fitBounds([[w, so], [e, n]], { padding: 40, maxZoom: 6, duration: 800 });
       }
     }
 
@@ -280,8 +331,12 @@
 
     async function loadAlerts() {
       const el = document.getElementById("alerts");
-      const { alerts } = await getJSON("/api/alerts?limit=50");
-      if (!alerts.length) { el.innerHTML = '<span class="empty">no alerts — nothing corroborated across modalities</span>'; return; }
+      const q = viewParam();
+      const { alerts } = await getJSON("/api/alerts?limit=50" + (q ? "&" + q : ""));
+      if (!alerts.length) {
+        el.innerHTML = `<span class="empty">${q ? "no alerts in view" : "no alerts — nothing corroborated across modalities"}</span>`;
+        return;
+      }
       el.innerHTML = "";
       for (const a of alerts) {
         const mods = [...new Set(a.evidence.map((e) => e.modality))].join(", ");
@@ -317,21 +372,24 @@
       flyTo(a.center, 5);
     }
 
-    function showSource(s) {
+    function sourceDetail(s) {
       const lines = [
-        `<b>${esc(s.label)}</b>  (${esc(s.stream_id)})`,
-        `state: ${esc(s.state)} · model: ${esc(s.status || "?")} · polls every ${Math.round(s.cadence_seconds / 60)} min`,
+        `<b>${esc(s.label)}</b>  <span class="tipmuted">${esc(s.stream_id)}</span>`,
+        `state: ${esc(s.state)} · model: ${esc(s.status || "?")} · reports every ${Math.round(s.cadence_seconds / 60) || "<1"} min`,
         `last successful poll: ${s.last_ok ? utc(s.last_ok) + " (" + ago(s.last_ok) + ")" : "none in 24 h"}`,
         `polls in 24 h: ${s.polls_ok} ok, ${s.polls_error} failed`,
         `latest: ${esc(s.latest || "no data yet")}${s.latest_at ? " · " + utc(s.latest_at) : ""}`,
       ];
-      if (s.n_cells > 1) lines.push(`cells observed: ${s.n_cells}`);
+      if (s.n_cells > 1) lines.push(`places reporting: ${s.n_cells}`);
       if (s.peak) lines.push(`24 h peak surprise: ${esc(s.peak.rarity)} @ ${esc(s.peak.where)} (${utc(s.peak.at)})`);
-      if (s.n_scored) lines.push(`bins scored: ${s.n_scored}, in the 1% tails: ${s.n_tail} (${(100 * s.n_tail / s.n_scored).toFixed(1)}%; calibrated ≈ 2%)`);
+      if (s.n_scored) lines.push(`scored: ${s.n_scored}, in the 1% tails: ${s.n_tail} (${(100 * s.n_tail / s.n_scored).toFixed(1)}%; calibrated ≈ 2%)`);
       if (s.now_rarity) lines.push(`right now: ${esc(s.now_rarity)}`);
       if (s.last_error) lines.push(`last error: ${esc(s.last_error.event)} ${utc(s.last_error.ts)}\n  ${esc(s.last_error.detail)}`);
-      showDetail(lines.join("\n"));
-      if (s.peak && s.n_cells > 1) flyToCell(s.peak.cell);
+      lines.push(s.global ? '<span class="tipmuted">not tied to a place — nothing to show on the map</span>'
+        : s.center ? '<span class="tipmuted">map: flown to the peak</span>'
+        : s.extent ? '<span class="tipmuted">map: zoomed to where it reported</span>'
+        : '<span class="tipmuted">no located data yet</span>');
+      return lines.join("\n");
     }
 
     async function showCell(cell) {

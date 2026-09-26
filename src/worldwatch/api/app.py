@@ -174,6 +174,7 @@ def create_app(
     def alerts(
         limit: int = 100,
         status: str | None = None,
+        bbox: str | None = None,
         conn: sqlite3.Connection = Depends(get_conn),
     ) -> JSONResponse:
         if status:
@@ -185,6 +186,9 @@ def create_app(
             rows = conn.execute(
                 "SELECT * FROM alerts ORDER BY opened_at DESC LIMIT ?", (limit,)
             ).fetchall()
+        view = parse_bbox(bbox)
+        if view is not None:
+            rows = [r for r in rows if in_view(r["cell"], view)]
         return JSONResponse({"alerts": [_alert_dict(r, conn, cfgs) for r in rows]})
 
     @app.get("/api/alerts/{alert_id}")
@@ -210,6 +214,7 @@ def create_app(
     @app.get("/api/overview")
     def overview(
         lookback: int = DEFAULT_LOOKBACK_SECONDS,
+        bbox: str | None = None,
         conn: sqlite3.Connection = Depends(get_conn),
     ) -> JSONResponse:
         """Per-source picture of the collected data, calm or not: health,
@@ -239,21 +244,32 @@ def create_app(
             r["stream_id"]: r["status"]
             for r in conn.execute("SELECT stream_id, status FROM sources")
         }
+        view = parse_bbox(bbox)
         for sid in stream_ids:
-            if not bins.get(sid):  # lagging or stalled feed: show its newest data, dated
+            if not bins.get(sid):  # lagging or stalled feed: its newest data, dated
                 bins[sid] = conn.execute(
                     "SELECT stream_id, cell, scale, bin_start, n, vmin, vmax, vmean FROM bins "
                     "WHERE stream_id = ? AND bin_start = "
                     "(SELECT MAX(bin_start) FROM bins WHERE stream_id = ?)",
                     (sid, sid),
                 ).fetchall()
-        out = [
-            _source_overview(
+        # where each row takes the map — from the same rows the list shows
+        places = {sid: _place(bins.get(sid, []), surprise.get(sid, [])) for sid in stream_ids}
+        if view is not None:  # only what lies in the map view; non-spatial rows always count
+            bins = {sid: [b for b in rs if in_view(b["cell"], view)] for sid, rs in bins.items()}
+            surprise = {sid: [r for r in rs if in_view(r["cell"], view)] for sid, rs in surprise.items()}
+        out = []
+        hidden = 0
+        for sid in stream_ids:
+            if view is not None and not places[sid]["global"] and not bins.get(sid):
+                hidden += 1
+                continue
+            item = _source_overview(
                 sid, cfgs.get(sid), status.get(sid), health.get(sid, {}),
                 bins.get(sid, []), surprise.get(sid, []), now,
             )
-            for sid in stream_ids
-        ]
+            item.update(places[sid])
+            out.append(item)
         n_open = conn.execute("SELECT COUNT(*) FROM alerts WHERE status = 'open'").fetchone()[0]
         return JSONResponse(
             {
@@ -262,6 +278,7 @@ def create_app(
                 "open_alerts": n_open,
                 "reporting": sum(s["state"] == "ok" for s in out),
                 "sources": out,
+                "out_of_view": hidden,
             }
         )
 
@@ -423,6 +440,52 @@ def _alert_dict(
     d.update(title=title, text=text, where=context.where(row["cell"]),
              center=context.cell_center(row["cell"]), map_url=context.map_url(row["cell"]))
     return d
+
+
+def parse_bbox(bbox: str | None) -> tuple[float, float, float, float] | None:
+    """'west,south,east,north' in degrees (as MapLibre's getBounds gives, which
+    may run past ±180 with world copies) → normalized, or None for no filter."""
+    if not bbox:
+        return None
+    try:
+        w, s_, e, n = (float(x) for x in bbox.split(","))
+    except ValueError:
+        return None
+    if e - w >= 360:
+        w, e = -180.0, 180.0  # the whole width is in view
+    else:
+        w, e = ((w + 180) % 360) - 180, ((e + 180) % 360) - 180
+    return w, max(s_, -90.0), e, min(n, 90.0)
+
+
+def in_view(cell: str, view: tuple[float, float, float, float]) -> bool:
+    """Is the cell's centre inside the view? Non-spatial cells (GLOBAL, an
+    entity) are everywhere, so always in view."""
+    c = context.cell_center(cell)
+    if c is None:
+        return True
+    lat, lon = c
+    w, s_, e, n = view
+    if not s_ <= lat <= n:
+        return False
+    return w <= lon <= e if w <= e else (lon >= w or lon <= e)  # across the antimeridian
+
+
+def _place(bins: list[sqlite3.Row], surprise: list[sqlite3.Row]) -> dict[str, object]:
+    """Where a source's row should take the map: its peak if that is unusual
+    and located, else the extent of what it reported; `global` if it isn't
+    tied to any place (prices, world traffic, Wikipedia)."""
+    pts = [c for b in bins if (c := context.cell_center(b["cell"])) is not None]
+    peak_center = None
+    if surprise:
+        top = max(surprise, key=lambda r: _extremity(r["q_value"], 1.0))
+        if _extremity(top["q_value"], 1.0) >= 0.9:
+            peak_center = context.cell_center(top["cell"])
+    extent = None
+    if pts:
+        lats, lons = [p[0] for p in pts], [p[1] for p in pts]
+        extent = [min(lons), min(lats), max(lons), max(lats)]
+    return {"center": peak_center, "extent": extent, "global": not pts and bool(bins)}
 
 
 def _story_dicts(cfg: SourceConfig | None, recs: list[dict]) -> list[dict[str, object]]:

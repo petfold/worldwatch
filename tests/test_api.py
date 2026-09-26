@@ -220,3 +220,41 @@ def test_about_page_is_served_and_linked(client):
     page = client.get("/about")
     assert page.status_code == 200 and "Opting out" in page.text and "158.220.117.131" in page.text
     assert 'href="/about"' in client.get("/").text
+
+
+# --- "only in view" and where each row takes the map ------------------------------------
+
+
+def test_overview_gives_every_row_a_place(rich_client):
+    o = rich_client.get("/api/overview").json()
+    by = {s["stream_id"]: s for s in o["sources"]}
+    assert by["btc_usd"]["global"] is True and by["btc_usd"]["extent"] is None
+    q = by["usgs_seismic"]
+    assert q["global"] is False and q["center"] is not None  # its peak is unusual (1-in-1,000)
+    w, s_, e, n = q["extent"]
+    assert w < e and s_ < n
+
+
+def test_view_filter_keeps_global_streams_and_hides_what_is_elsewhere(rich_client):
+    europe = rich_client.get("/api/overview", params={"bbox": "-12,34,32,62"}).json()
+    ids = {s["stream_id"] for s in europe["sources"]}
+    assert "btc_usd" in ids  # not tied to a place: always listed
+    assert "usgs_seismic" not in ids and europe["out_of_view"] >= 1
+    pacific = rich_client.get("/api/overview", params={"bbox": "160,-30,200,0"}).json()  # across ±180
+    assert "usgs_seismic" in {s["stream_id"] for s in pacific["sources"]}
+
+
+def test_parse_bbox_normalizes_world_copies():
+    from worldwatch.api.app import in_view, parse_bbox
+
+    assert parse_bbox("-200,-80,200,80") == (-180.0, -80.0, 180.0, 80.0)  # whole width in view
+    v = parse_bbox("170,-10,190,10")  # MapLibre past the antimeridian
+    assert v == (170.0, -10.0, -170.0, 10.0)
+    assert in_view(h3.latlng_to_cell(0, 179, 3), v) and in_view(h3.latlng_to_cell(0, -175, 3), v)
+    assert not in_view(h3.latlng_to_cell(0, 0, 3), v)
+    assert in_view("GLOBAL", v) and parse_bbox("nonsense") is None
+
+
+def test_alerts_filtered_by_view(client):
+    assert len(client.get("/api/alerts", params={"bbox": "-125,35,-120,40"}).json()["alerts"]) == 1
+    assert client.get("/api/alerts", params={"bbox": "0,40,10,50"}).json()["alerts"] == []

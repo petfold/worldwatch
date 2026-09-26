@@ -56,6 +56,14 @@ sibling projects, where the tag is what publishes.
 
 ### Added
 
+- **Dashboard: "only in view" and rows that go somewhere.** A toggle limits the
+  World Now list and the alerts to the visible map area, following pans and
+  zooms; sources not tied to a place (prices, world traffic, Wikipedia) stay
+  listed in their own group. Clicking a row opens its details inline under the
+  row (a second click closes) and moves the map — to the peak if it is
+  unusual, else to the extent of what the source reported. `/api/overview`
+  and `/api/alerts` take `bbox=west,south,east,north` (world copies and the
+  antimeridian handled); overview rows carry `center`, `extent`, `global`.
 - **Transparency page** at `/about` (linked from the map): what Worldwatch is,
   exactly what the prober sends (NTP client requests to pool servers every
   2 min; TCP connects to RIPE Atlas anchors), what is kept, how to opt out
