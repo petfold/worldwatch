@@ -1,6 +1,11 @@
 """Replay Worldwatch's usgs_seismic count streams (prepare.py) through the current Layer-0
-count model (BayesianCount, the stanza's defaults) and a Poisson-only change-point model
-(bayesbin.ChangePointStream), window by window, scoring each window before updating.
+count model (BayesianCount, the stanza's defaults), a Poisson-only change-point model
+(bayesbin.ChangePointStream.poisson) and one with a burst factor (ChangePointStream.
+overdispersed: negative binomial segments averaged over a grid of dispersions), window by
+window, scoring each window before updating.
+
+    replay.py            # the current and Poisson-only models  -> replay_results.npz
+    replay.py mixture    # the burst-factor model               -> replay_results_mixture.npz
 
 Both give the randomized PIT (calibration) and the conservative q_detect of ADR 0003
 (alarms: q_detect >= 0.999, the upper tail). Saves per-window results for report.py.
@@ -10,6 +15,7 @@ Both give the randomized PIT (calibration) and the conservative q_detect of ADR 
 
 from __future__ import annotations
 
+import sys
 import time
 from pathlib import Path
 
@@ -49,14 +55,36 @@ def replay_stream(counts: np.ndarray, t0: int, width: int, seed: int):
     return out
 
 
+def replay_mixture(counts: np.ndarray, seed: int):
+    """The change-point model with a burst factor, scored as replay_stream scores the others."""
+    n = len(counts)
+    out = {k: np.full(n, np.nan) for k in ("q_mx", "d_mx", "m_mx", "r_mx")}
+    mean = max(counts[:WARMUP].mean(), 0.5 / WARMUP)
+    mx = ChangePointStream.overdispersed(alpha=1.0, beta=1.0 / mean, expected_run_length=RUN)
+    rng = np.random.default_rng(seed)
+    for i, y in enumerate(counts):
+        below = float(mx.next_cdf(y - 1)[0]) if y >= 1 else 0.0
+        at = float(mx.next_cdf(y)[0])
+        out["q_mx"][i] = below + rng.random() * (at - below)
+        out["d_mx"][i] = conservative_q(below, at)
+        out["m_mx"][i] = mx.rate_now()[0] if mx.T else np.nan
+        mx.update(y)
+        r, w = mx.dispersion_posterior()
+        out["r_mx"][i] = r[np.argmax(w)]  # the most probable dispersion
+    return out
+
+
 def main() -> None:
     d = np.load(CACHE / "usgs_streams.npz")
+    mixture = sys.argv[1:] == ["mixture"]
     res = {}
     for j, (name, counts) in enumerate(zip(d["names"], d["counts"])):
         t = time.perf_counter()
-        res[str(name)] = replay_stream(counts, int(d["t0"]), int(d["width"]), seed=1000 + j)
+        res[str(name)] = (replay_mixture(counts, seed=2000 + j) if mixture
+                          else replay_stream(counts, int(d["t0"]), int(d["width"]), seed=1000 + j))
         print(f"{name}: {time.perf_counter() - t:.0f} s", flush=True)
-    np.savez(CACHE / "replay_results.npz", **{f"{nm}|{k}": v for nm, r in res.items() for k, v in r.items()})
+    out = CACHE / ("replay_results_mixture.npz" if mixture else "replay_results.npz")
+    np.savez(out, **{f"{nm}|{k}": v for nm, r in res.items() for k, v in r.items()})
 
 
 if __name__ == "__main__":
