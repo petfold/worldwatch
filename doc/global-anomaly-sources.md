@@ -49,6 +49,6 @@ Spans physical / economic / infrastructural / informational so cross-corroborati
 - Ground truth for evaluation: Wikipedia Current Events / GDELT records, replayed historically; score on lead time
 
 ## Next steps
-- [ ] Per-source endpoint URLs, auth requirements, rate limits, poll cadence (city-level lists for GTFS-RT, radiation stations, grid operators)
+- [x] Per-source endpoint URLs, auth requirements, rate limits, poll cadence: the 2026-09-27 review, `source-review-2026-09.md`
 - [ ] Common record schema: (stream, cell, scale, bin) + statistics + silence representation
 - [ ] Architecture doc: process layout, storage, UI
