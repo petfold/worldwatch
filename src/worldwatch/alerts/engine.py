@@ -34,6 +34,15 @@ Two layers:
      with cooldown_seconds, none again for the region within it (a feed that
      re-reports one ongoing outage every poll).
 
+   - provisional: a stream that needs corroboration, with one candidate strong
+     enough on its own (alert_score >= PROVISIONAL_SCORE, p ~ 1e-6), opens an
+     unconfirmed alert at once instead of waiting (vantage guard as above).
+3. **Escalation.** An alert has a stage: 0 unconfirmed (one modality), 1
+   confirmed (two or more, or a stanza marked extreme), 2 extreme (confirmed,
+   and alert_score >= extreme_score()). Every run, the open alerts of the last
+   ESCALATE_SECONDS gather the region's current candidates into their
+   evidence; when the stage rises, the alert is updated and returned again, so
+   the notifier re-pushes it at the higher priority.
 Check-then-insert runs under BEGIN IMMEDIATE, so the live path and the sweep
 can both run without opening the same alert twice (guardrail 7).
 """
@@ -42,11 +51,14 @@ from __future__ import annotations
 
 import json
 import math
+import os
 import sqlite3
 import time
 from collections import defaultdict
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
+
+import h3
 
 from worldwatch.config.loader import SourceConfig
 from worldwatch.ingest.geocode import coarsen
@@ -64,6 +76,9 @@ DEFAULT_LOOKBACK_SECONDS = 24 * 3600
 DEFAULT_SINGLE_SOURCE_Q_TAIL = 1e-4
 DEFAULT_PER_STREAM_QUOTA = 3  # cells a stream may contribute to one region's evidence
 DEFAULT_COOLDOWN_SECONDS = 6 * 3600  # single-source: no second alert per region and stream within this
+DEFAULT_MAX_REGIONS = 5  # provisional alerts: more regions of one stream at once = our vantage point
+PROVISIONAL_SCORE = 6.0  # one candidate this strong (p ~ 1e-6) alerts unconfirmed, at once
+ESCALATE_SECONDS = 6 * 3600  # how long an alert keeps gathering confirmation
 
 
 @dataclass
@@ -221,13 +236,15 @@ def open_alerts(
         mean_ext = sum(m.extremity for m in members) / len(members)
         severity = min(1.0, mean_ext * len(modalities) / min_modalities)
         aid = _insert_unless(conn, lambda r=region: _open_alert_exists(conn, r),
-                             region, members, severity, now)
+                             region, members, severity, now, sources=sources)
         if aid is not None:
             created.append(aid)
 
     created += _single_source_alerts(conn, sources, candidates, k, corr_resolution, now)
     created += _every_event_alerts(conn, sources, corr_resolution, now)
-    return created
+    created += _provisional_alerts(conn, sources, candidates, corr_resolution, now)
+    escalated = _escalations(conn, sources, candidates, now)
+    return created + [a for a in escalated if a not in created]
 
 
 def _quota(members: list[Anomaly], per_stream: int) -> list[Anomaly]:
@@ -282,7 +299,7 @@ def _single_source_alerts(
                 # not yet proven calibrated: visible, but never priority 5
                 severity = min(severity, float(pol.get("nursery_severity_cap", 0.85)))
             aid = _insert_unless(conn, lambda r=region, s=since: _alert_since_exists(conn, r, s, sid),
-                                 region, members, severity, now)
+                                 region, members, severity, now, sources=sources)
             if aid is not None:
                 created.append(aid)
     return created
@@ -319,6 +336,7 @@ def _every_event_alerts(
                 conn,
                 lambda rg=region, fs=since: _alert_since_exists(conn, rg, fs, sid),
                 region, [member], float(pol.get("severity", 0.9)), now, kind="source_alert",
+                sources=sources,
             )
             if aid is not None:
                 created.append(aid)
@@ -353,6 +371,7 @@ def _insert_unless(
     severity: float,
     now: int,
     kind: str | None = None,
+    sources: dict[str, SourceConfig] | None = None,
 ) -> int | None:
     """Check-then-insert atomically across processes (BEGIN IMMEDIATE)."""
     conn.commit()  # close any implicit transaction before taking the write lock
@@ -361,7 +380,7 @@ def _insert_unless(
         if exists():
             conn.rollback()
             return None
-        aid = _insert_alert(conn, region, members, severity, now, kind)
+        aid = _insert_alert(conn, region, members, severity, now, kind, sources)
     except Exception:
         conn.rollback()
         raise
@@ -376,33 +395,118 @@ def _insert_alert(
     severity: float,
     now: int,
     kind: str | None = None,
+    sources: dict[str, SourceConfig] | None = None,
 ) -> int:
     scale = min(m.scale for m in members)
-    evidence = json.dumps(
-        [
-            {
-                "stream_id": m.stream_id,
-                "cell": m.cell,
-                "scale": m.scale,
-                "bin_start": m.bin_start,
-                "bin_seconds": m.bin_seconds,
-                "q_value": m.q_value,
-                "presence_q": m.presence_q,
-                "precision": m.precision,
-                "modality": m.modality,
-                **({"evidence": round(m.evidence, 2)} if math.isfinite(m.evidence) else {}),
-                **({"kind": kind} if kind else {}),
-            }
-            for m in sorted(members, key=lambda m: m.extremity, reverse=True)
-        ],
-        separators=(",", ":"),
-    )
+    ev = [_member(m, kind) for m in sorted(members, key=lambda m: m.extremity, reverse=True)]
     cur = conn.execute(
-        "INSERT INTO alerts (opened_at, status, severity, cell, scale, evidence) "
-        "VALUES (?, 'open', ?, ?, ?, ?)",
-        (now, min(1.0, severity), region, scale, evidence),
+        "INSERT INTO alerts (opened_at, status, severity, cell, scale, evidence, stage) "
+        "VALUES (?, 'open', ?, ?, ?, ?, ?)",
+        (now, min(1.0, severity), region, scale, json.dumps(ev, separators=(",", ":")),
+         stage_of(ev, sources)),
     )
     return int(cur.lastrowid)  # type: ignore[arg-type]
+
+
+def _member(m: Anomaly, kind: str | None = None) -> dict:
+    """An alert's evidence entry for one anomaly."""
+    return {
+        "stream_id": m.stream_id,
+        "cell": m.cell,
+        "scale": m.scale,
+        "bin_start": m.bin_start,
+        "bin_seconds": m.bin_seconds,
+        "q_value": m.q_value,
+        "presence_q": m.presence_q,
+        "precision": m.precision,
+        "modality": m.modality,
+        **({"evidence": round(m.evidence, 2)} if math.isfinite(m.evidence) else {}),
+        **({"kind": kind} if kind else {}),
+    }
+
+
+# --- provisional alerts and escalation (alert early, raise the priority as confirmation comes)
+
+
+def _provisional_alerts(
+    conn: sqlite3.Connection,
+    sources: dict[str, SourceConfig],
+    candidates: list[Anomaly],
+    corr_resolution: int,
+    now: int,
+) -> list[int]:
+    """Streams that need corroboration, with one candidate strong enough on its own:
+    an unconfirmed alert now, not silence until a second modality agrees. Escalation
+    raises it when one does."""
+    created: list[int] = []
+    strong: dict[str, dict[str, list[Anomaly]]] = defaultdict(lambda: defaultdict(list))
+    for c in candidates:
+        pol = policy(sources.get(c.stream_id))
+        if (c.q_value is None or pol.get("role") == "context" or pol.get("single_source")
+                or pol.get("every_event")):
+            continue
+        if alert_score([_member(c)], sources)[0] >= PROVISIONAL_SCORE:
+            strong[c.stream_id][coarsen(c.cell, corr_resolution)].append(c)
+    for sid, by_region in sorted(strong.items()):
+        pol = policy(sources.get(sid))
+        if len(by_region) > int(pol.get("max_regions", DEFAULT_MAX_REGIONS)):
+            record_health(conn, sid, "vantage_suspect", f"regions={len(by_region)}", ts=now)
+            continue
+        cooldown = int(pol.get("cooldown_seconds", DEFAULT_COOLDOWN_SECONDS))
+        for region, members in sorted(by_region.items()):
+            aid = _insert_unless(
+                conn,
+                lambda r=region: _open_alert_exists(conn, r) or _alert_since_exists(conn, r, now - cooldown, sid),
+                region, members, 0.6, now, kind="provisional", sources=sources,
+            )
+            if aid is not None:
+                created.append(aid)
+    return created
+
+
+def _escalations(
+    conn: sqlite3.Connection,
+    sources: dict[str, SourceConfig],
+    candidates: list[Anomaly],
+    now: int,
+) -> list[int]:
+    """Open alerts of the last ESCALATE_SECONDS gather the current candidates of their
+    region (data rows only: a silent feed confirms nothing); where the stage rises, the
+    alert is updated (a conditional UPDATE: one process escalates it once)."""
+    rows = conn.execute(
+        "SELECT alert_id, cell, severity, evidence, stage FROM alerts "
+        "WHERE status = 'open' AND opened_at >= ? AND stage < 2", (now - ESCALATE_SECONDS,),
+    ).fetchall()
+    escalated: list[int] = []
+    for r in rows:
+        ev = json.loads(r["evidence"])
+        have = {(e.get("stream_id"), e.get("cell")) for e in ev}
+        extra = [_member(c) for c in candidates if c.q_value is not None
+                 and (c.stream_id, c.cell) not in have and _within(c.cell, r["cell"])]
+        if not extra:
+            continue
+        merged = ev + extra
+        stage = stage_of(merged, sources)
+        if stage <= r["stage"]:
+            continue
+        severity = max(float(r["severity"]), 0.95 if stage == 2 else 0.8)
+        cur = conn.execute(
+            "UPDATE alerts SET evidence = ?, stage = ?, severity = ?, escalated_at = ? "
+            "WHERE alert_id = ? AND stage < ?",
+            (json.dumps(merged, separators=(",", ":")), stage, severity, now, r["alert_id"], stage),
+        )
+        conn.commit()
+        if cur.rowcount:
+            escalated.append(int(r["alert_id"]))
+    return escalated
+
+
+def _within(cell: str, region: str) -> bool:
+    """Whether a cell lies in an alert's region (non-H3 cells: only itself)."""
+    if not (h3.is_valid_cell(region) and h3.is_valid_cell(cell)):
+        return cell == region
+    res = h3.get_resolution(region)
+    return h3.get_resolution(cell) >= res and coarsen(cell, res) == region
 
 
 # --- how serious an alert is: what the push budget ranks by ---------------------------------
@@ -437,3 +541,17 @@ def alert_score(evidence: list[dict], sources: dict[str, SourceConfig] | None) -
     modalities = len({e.get("modality") for e in evidence})
     score = (sum(per_cell.values()) + feed) * (modalities if modalities >= 2 else 1)
     return score, modalities, extreme or modalities >= 2
+
+
+def extreme_score() -> float:
+    """The score an alert must reach, confirmed, to be extreme (stage 2): may wake."""
+    return float(os.environ.get("WW_PUSH_EXTREME_SCORE", "15"))
+
+
+def stage_of(evidence: list[dict], sources: dict[str, SourceConfig] | None) -> int:
+    """0 unconfirmed (one modality), 1 confirmed (two or more, or a stanza marked
+    extreme), 2 extreme (confirmed, and alert_score >= extreme_score())."""
+    score, _, confirmed = alert_score(evidence, sources)
+    if not confirmed:
+        return 0
+    return 2 if score >= extreme_score() else 1

@@ -326,3 +326,66 @@ def test_every_event_cooldown_holds_back_re_reports_of_one_ongoing_outage(db, so
         db.commit()
         opened += run_alerts(db, src, now=t)
     assert len(opened) == 1
+
+
+# --- early, unconfirmed alerts and escalation (alert at once, raise the priority as confirmation comes)
+
+
+def test_one_very_strong_stream_alerts_at_once_unconfirmed(db, sources):
+    src = {"quake": _src(sources, "quake", "physical"), "news": _src(sources, "news", "informational")}
+    _surprise(db, "quake", _cellA(), 3, NOW, q=1 - 1e-4)  # strong, but alone: waits for corroboration
+    assert run_alerts(db, src, now=NOW) == []
+    _surprise(db, "quake", _cellA(), 3, NOW + BW, q=1 - 1e-11)  # p ~ 2e-11: alone, but not waiting
+    created = run_alerts(db, src, now=NOW + BW)
+    assert len(created) == 1
+    row = db.execute("SELECT stage, severity, evidence FROM alerts").fetchone()
+    assert row["stage"] == 0 and row["severity"] == 0.6
+    assert json.loads(row["evidence"])[0]["kind"] == "provisional"
+    assert run_alerts(db, src, now=NOW + BW) == []  # re-run: no second alert
+
+
+def test_an_unconfirmed_alert_escalates_when_a_second_modality_agrees(db, sources):
+    src = {"quake": _src(sources, "quake", "physical"), "net": _src(sources, "net", "infrastructural")}
+    _surprise(db, "quake", _cellA(), 3, NOW, q=1 - 1e-11)
+    [aid] = run_alerts(db, src, now=NOW)
+    _surprise(db, "net", _cell_near_A(), 3, NOW + BW, q=1 - 1e-3)  # the same region, another modality
+    assert run_alerts(db, src, now=NOW + BW) == [aid]  # the same alert, returned again: re-push
+    row = db.execute("SELECT stage, severity, escalated_at, evidence FROM alerts").fetchone()
+    assert row["stage"] == 2  # 2 x (10.7 + 2.7) >= 15: extreme
+    assert row["severity"] == 0.95 and row["escalated_at"] == NOW + BW
+    assert {e["modality"] for e in json.loads(row["evidence"])} == {"physical", "infrastructural"}
+    assert db.execute("SELECT COUNT(*) FROM alerts").fetchone()[0] == 1
+    assert run_alerts(db, src, now=NOW + 2 * BW) == []  # escalated once
+
+
+def test_escalation_is_gradual(db, monkeypatch, sources):
+    monkeypatch.setenv("WW_PUSH_EXTREME_SCORE", "40")
+    src = {"quake": _src(sources, "quake", "physical"), "net": _src(sources, "net", "infrastructural"),
+           "wx": _src(sources, "wx", "environmental")}
+    _surprise(db, "quake", _cellA(), 3, NOW, q=1 - 1e-11)
+    [aid] = run_alerts(db, src, now=NOW)
+    _surprise(db, "net", _cell_near_A(), 3, NOW + BW, q=1 - 1e-3)
+    assert run_alerts(db, src, now=NOW + BW) == [aid]
+    assert db.execute("SELECT stage FROM alerts").fetchone()[0] == 1  # confirmed, 2 x 13.4 < 40
+    _surprise(db, "wx", _cellA(), 3, NOW + 2 * BW, q=1 - 1e-4)
+    assert run_alerts(db, src, now=NOW + 2 * BW) == [aid]
+    assert db.execute("SELECT stage FROM alerts").fetchone()[0] == 2  # 3 x 17.1 >= 40
+
+
+def test_far_away_candidates_do_not_escalate(db, sources):
+    src = {"quake": _src(sources, "quake", "physical"), "net": _src(sources, "net", "infrastructural")}
+    _surprise(db, "quake", _cellA(), 3, NOW, q=1 - 1e-11)
+    run_alerts(db, src, now=NOW)
+    _surprise(db, "net", _cell_far(), 3, NOW + BW, q=1 - 1e-11)  # Sydney: its own unconfirmed alert
+    run_alerts(db, src, now=NOW + BW)
+    assert [r[0] for r in db.execute("SELECT stage FROM alerts")] == [0, 0]
+
+
+def test_very_strong_readings_everywhere_are_our_vantage_point(db, sources):
+    src = {"net": _src(sources, "net", "infrastructural")}
+    places = [(48.2, 16.4), (40.4, -3.7), (52.5, 13.4), (35.7, 139.7), (-33.9, 151.2), (38.1, -122.5)]
+    for lat, lng in places:
+        _surprise(db, "net", h3.latlng_to_cell(lat, lng, 3), 3, NOW, q=1 - 1e-11)
+    assert run_alerts(db, src, now=NOW) == []
+    assert db.execute("SELECT detail FROM health WHERE component = 'net' AND event = 'vantage_suspect'"
+                      ).fetchone()[0] == "regions=6"

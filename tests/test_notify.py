@@ -283,7 +283,7 @@ async def test_extreme_alerts_wake_only_when_confirmed_and_rarely(db):
     cfg = NtfyConfig(server="http://n", topic="t")
     async with _client(handler) as client:
         await notify_alerts(db, [1, 2, 3], client=client, cfg=cfg, now=10_000)
-    assert posts == [3, 5, 3]
+    assert posts == [3, 5, 4]  # the third as confirmed: no waking
 
 
 async def test_silent_until_caps_the_priority(db):
@@ -306,3 +306,62 @@ def test_silent_until_parses_dates_and_epochs(monkeypatch):
     assert NtfyConfig.from_env().silent_until == 1791072000  # 2026-10-04T00:00Z
     monkeypatch.setenv("WW_PUSH_SILENT_UNTIL", "1791072000")
     assert NtfyConfig.from_env().silent_until == 1791072000
+
+
+async def test_an_alert_is_pushed_early_then_again_as_it_is_confirmed(db):
+    seen = []
+
+    def handler(request):
+        seen.append((int(request.headers["priority"]), request.headers["title"].split(":")[0]))
+        return httpx.Response(200)
+
+    _value_alert(db, 1, 1 - 1e-11)  # one modality, score 10.7: unconfirmed
+    cfg = NtfyConfig(server="http://n", topic="t", per_day=1)
+    async with _client(handler) as client:
+        assert await notify_alerts(db, [1], client=client, cfg=cfg, now=10_000) == 1
+        assert await notify_alerts(db, [1], client=client, cfg=cfg, now=10_060) == 0  # same stage: once
+        for i in range(2, 4):  # the daily cap (2 x 1) is used up
+            _value_alert(db, i, 1 - 1e-12)
+        assert await notify_alerts(db, [2, 3], client=client, cfg=cfg, now=10_100) == 1
+        ev = json.loads(db.execute("SELECT evidence FROM alerts WHERE alert_id = 1").fetchone()[0])
+        ev.append({"stream_id": "net", "cell": "c9", "modality": "infrastructural", "q_value": 1 - 1e-3,
+                   "presence_q": 1.0})
+        db.execute("UPDATE alerts SET evidence = ?, stage = 2 WHERE alert_id = 1", (json.dumps(ev),))
+        db.commit()
+        # escalated (2 modalities, 2 x 13.4 >= 15): re-pushed despite the cap, and it wakes
+        assert await notify_alerts(db, [1], client=client, cfg=cfg, now=10_200) == 1
+    assert seen == [(3, "Unconfirmed"), (3, "Unconfirmed"), (5, "EXTREME (update)")]
+    assert [tuple(r) for r in db.execute("SELECT alert_id, kind, stage FROM push_log")] == [
+        (1, "alert", 0), (2, "alert", 0), (1, "extreme", 2)]
+
+
+async def test_a_held_alert_is_pushed_when_confirmation_lifts_it_into_the_budget(db):
+    seen = []
+
+    def handler(request):
+        seen.append(int(request.headers["priority"]))
+        return httpx.Response(200)
+
+    _value_alert(db, 1, 1 - 1e-5)  # score 4.7: below the floor, held
+    cfg = NtfyConfig(server="http://n", topic="t")
+    async with _client(handler) as client:
+        assert await notify_alerts(db, [1], client=client, cfg=cfg, now=10_000) == 0
+        ev = json.loads(db.execute("SELECT evidence FROM alerts WHERE alert_id = 1").fetchone()[0])
+        ev.append({"stream_id": "net", "cell": "c9", "modality": "infrastructural", "q_value": 1 - 1e-2,
+                   "presence_q": 1.0})
+        db.execute("UPDATE alerts SET evidence = ?, stage = 1 WHERE alert_id = 1", (json.dumps(ev),))
+        db.commit()
+        assert await notify_alerts(db, [1], client=client, cfg=cfg, now=10_100) == 1  # 2 x 6.4 = 12.8
+    assert seen == [4]  # confirmed: priority 4, not waking
+
+
+async def test_an_early_alert_skips_the_ranking_but_not_the_daily_cap(db):
+    ev = [{"stream_id": "q", "cell": "c", "modality": "physical", "q_value": 1 - 1e-7, "presence_q": 1.0,
+           "kind": "provisional"}]  # score 6.7: below the floor of 8, but early
+    for i in (1, 2, 3):
+        db.execute("INSERT INTO alerts (alert_id, opened_at, status, severity, cell, scale, evidence) "
+                   "VALUES (?, 10000, 'open', 0.6, '8226', 0, ?)", (i, json.dumps(ev)))
+    db.commit()
+    cfg = NtfyConfig(server="http://n", topic="t", per_day=1)
+    async with _client(lambda r: httpx.Response(200)) as client:
+        assert await notify_alerts(db, [1, 2, 3], client=client, cfg=cfg, now=10_000) == 2

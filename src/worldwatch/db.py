@@ -191,13 +191,17 @@ MIGRATIONS: list[str] = [
     ALTER TABLE surprise ADD COLUMN q_detect REAL;
     """,
     # v9 — the pushes sent, for the notifier's budget (kind: alert, or extreme:
-    # the ones that may wake the operator).
+    # the ones that may wake the operator; stage: the alert's stage when pushed), and
+    # an alert's stage (0 unconfirmed, 1 confirmed, 2 extreme), raised by escalation.
     """
     CREATE TABLE IF NOT EXISTS push_log (
         ts          INTEGER NOT NULL,
         alert_id    INTEGER,
-        kind        TEXT NOT NULL CHECK (kind IN ('alert', 'extreme'))
+        kind        TEXT NOT NULL CHECK (kind IN ('alert', 'extreme')),
+        stage       INTEGER NOT NULL DEFAULT 0
     );
+    ALTER TABLE alerts ADD COLUMN stage INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE alerts ADD COLUMN escalated_at INTEGER;
     CREATE INDEX IF NOT EXISTS push_log_ts ON push_log (ts);
     """,
 ]

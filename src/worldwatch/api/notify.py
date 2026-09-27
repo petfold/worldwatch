@@ -27,6 +27,8 @@ MAX_EVIDENCE_LINES = 8
 STORIES_PER_SIGNAL = 2
 MAX_MESSAGE_BYTES = 3900  # ntfy's limit is 4096; leave room for the footer
 MAX_ACTIONS = 3  # ntfy allows three buttons
+STAGE_PRIORITY = {0: 3, 1: 4, 2: 5}  # unconfirmed, confirmed, extreme (5 wakes)
+STAGE_PREFIX = {0: "Unconfirmed", 1: "Confirmed", 2: "EXTREME"}
 
 
 @dataclass(frozen=True)
@@ -248,13 +250,15 @@ async def send_ntfy(
     alert: sqlite3.Row,
     conn: sqlite3.Connection | None = None,
     sources: dict[str, SourceConfig] | None = None,
-    extreme: bool | None = None,
+    priority: int | None = None,
+    prefix: str | None = None,
 ) -> bool:
-    """Publish one alert to ntfy. Returns True on success. extreme: whether it may wake
-    the operator (priority 5); others are pushed at 3 at most (None: as formatted)."""
-    title, message, priority, tags = format_alert(alert, conn, sources)
-    if extreme is not None:
-        priority = 5 if extreme else min(priority, 3)
+    """Publish one alert to ntfy. Returns True on success. priority: overrides the
+    formatted one (5 wakes the operator); prefix: goes before the title (ASCII)."""
+    title, message, formatted, tags = format_alert(alert, conn, sources)
+    priority = formatted if priority is None else priority
+    if prefix:
+        title = f"{prefix}: {title}"
     if cfg.silent():  # ntfy 2: no sound, no vibration; still listed
         priority = min(priority, 2)
     headers = {
@@ -316,10 +320,16 @@ async def notify_alerts(
 
     The budget: an alert is pushed only if its score (alerts.engine.alert_score) is
     among the most serious, at least _budget_threshold (about cfg.per_day a day), and
-    fewer than 2 × per_day went out in the last 24 h. Extreme ones (confirmed by two
-    modalities or a stanza marked extreme, scoring at least extreme_score) are pushed
-    at priority 5, at most extreme_per_week a week; the rest at 3 at most. The others
-    are held: recorded, and on the dashboard, not pushed."""
+    fewer than 2 × per_day went out in the last 24 h. An early (unconfirmed) alert,
+    one very strong signal (alerts.engine.PROVISIONAL_SCORE), skips the score test but
+    not the 24-h cap. The others are held: recorded, and on the dashboard, not pushed.
+
+    The priority follows the alert's stage: unconfirmed (one modality) 3, confirmed
+    (two or more, or a stanza marked extreme) 4, extreme (confirmed, scoring at least
+    extreme_score) 5, which wakes, at most extreme_per_week a week (then 4). Extreme
+    ones skip the budget. An alert already pushed is pushed again, skipping the budget,
+    only when escalation has raised its stage: an early unconfirmed push, then an
+    update at the higher priority as confirmation comes in."""
     if not alert_ids:
         return 0
     cfg = cfg or NtfyConfig.from_env()
@@ -340,18 +350,30 @@ async def notify_alerts(
     delivered = held = 0
     try:
         for alert in rows:
-            score, _, eligible = alert_score(json.loads(alert["evidence"]), sources)
-            extreme = (eligible and score >= cfg.extreme_score
+            evidence = json.loads(alert["evidence"])
+            score, _, confirmed = alert_score(evidence, sources)
+            stage = max(int(alert["stage"]), (2 if score >= cfg.extreme_score else 1) if confirmed else 0)
+            pushed = conn.execute("SELECT MAX(stage) FROM push_log WHERE alert_id = ?",
+                                  (alert["alert_id"],)).fetchone()[0]
+            if pushed is not None and stage <= pushed:
+                continue  # already pushed at this stage
+            extreme = (stage == 2
                        and _pushes_since(conn, ("extreme",), now - 7 * 86400) < cfg.extreme_per_week)
-            if not extreme and (score < _budget_threshold(conn, cfg, sources, now)
-                                or _pushes_since(conn, ("alert", "extreme"), now - 86400) >= 2 * cfg.per_day):
+            early = stage == 0 and any(e.get("kind") == "provisional" for e in evidence)
+            if pushed is None and not extreme and (
+                    (not early and score < _budget_threshold(conn, cfg, sources, now))
+                    or _pushes_since(conn, ("alert", "extreme"), now - 86400) >= 2 * cfg.per_day):
                 held += 1
                 continue
+            priority = 5 if extreme else min(STAGE_PRIORITY[stage], 4)
+            prefix = STAGE_PREFIX[stage] if extreme or stage < 2 else "Confirmed"
+            if pushed is not None:
+                prefix += " (update)"
             try:
-                if await send_ntfy(client, cfg, alert, conn, sources, extreme=extreme):
+                if await send_ntfy(client, cfg, alert, conn, sources, priority=priority, prefix=prefix):
                     delivered += 1
-                    conn.execute("INSERT INTO push_log (ts, alert_id, kind) VALUES (?, ?, ?)",
-                                 (now, alert["alert_id"], "extreme" if extreme else "alert"))
+                    conn.execute("INSERT INTO push_log (ts, alert_id, kind, stage) VALUES (?, ?, ?, ?)",
+                                 (now, alert["alert_id"], "extreme" if extreme else "alert", stage))
                     conn.commit()
             except httpx.HTTPError as e:
                 record_health(conn, "notify", "push_error", f"alert={alert['alert_id']}: {e}")

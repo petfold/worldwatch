@@ -41,6 +41,22 @@ sibling projects, where the tag is what publishes.
 
 ### Added
 
+- **Early alerts that escalate.** A stream that needs corroboration no longer
+  stays silent until a second modality agrees when one reading is strong
+  enough on its own (`alert_score` ≥ 6, p ~ 1e-6; on the archive, a few times
+  a year): it opens an unconfirmed alert at once (the vantage guard applies, 5 regions by default). For 6 h
+  after opening, each detection run gathers the region's new candidates into
+  an open alert's evidence and raises its stage: unconfirmed (one modality),
+  confirmed (two or more), extreme (confirmed, and `WW_PUSH_EXTREME_SCORE`).
+  The push follows: "Unconfirmed" at priority 3 (skipping the week's ranking, not the 24-h cap), then an
+  "(update)" push at the higher priority — "Confirmed" 4, "EXTREME" 5 (the one
+  that may wake; then 4 once the week's allowance is used) — which skips the
+  budget, at most once per stage. An alert held at first is pushed when
+  confirmation lifts it into the budget. Schema v9 adds `alerts.stage`,
+  `alerts.escalated_at` and `push_log.stage`.
+
+### Added
+
 - `WW_PUSH_SILENT_UNTIL` (an ISO date/time, UTC, or epoch seconds): until then
   every push goes out at ntfy priority 2 at most (no sound, no vibration;
   still listed).
