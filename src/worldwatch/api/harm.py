@@ -12,6 +12,7 @@ A stanza's [alerts] table may give:
     harm_levels    = [[0.3, "above natural background"], [1.0, "..."], ...]
     harm_below     = "within natural background"   # words for level 0
     harm_value     = "max"      # the bin statistic, in the source's units: max | mean
+    harm_direction = "below"    # optional: harm is a drop; thresholds descend
     harm_floor     = true       # level 0 is not worth a push (the signal is dropped)
     harm_confirmed = 2          # this level, confirmed: at least Confirmed, pushed past the budget
     harm_extreme   = 3          # this level, confirmed: Extreme
@@ -78,7 +79,10 @@ def member_harm(conn: sqlite3.Connection | None, e: dict, cfg: SourceConfig | No
     value = context.natural_value(raw, context.display_for(e["stream_id"], cfg))
     if value is None:
         return None
-    level = sum(value >= float(t) for t, _ in levels)
+    if pol.get("harm_direction") == "below":  # harm is a drop (grid frequency): thresholds descend
+        level = sum(value <= float(t) for t, _ in levels)
+    else:
+        level = sum(value >= float(t) for t, _ in levels)
     label = str(levels[level - 1][1]) if level else str(pol.get("harm_below", "below harm levels"))
     return MemberHarm(level, value, label)
 

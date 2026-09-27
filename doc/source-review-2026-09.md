@@ -14,6 +14,15 @@ positions are dropped at the door.
 
 ## Batch 1 — keyless (or the Cloudflare key we already have), add now
 
+**Status 2026-09-27: added** (`config/sources/tier2.toml`, 42 stanzas), except
+RIPEstat (IODA's BGP signal covers it; per-country calls are many) and the AWS
+and GCP status pages (their regions need a place table) — both later. Added
+besides: the UAE Defense Monitor's daily air-defence engagements
+(`uaedefensemonitor.com/mod-reports.json`, a published dataset; unofficial,
+compiled from the UAE MoD's statements; daily). Found while adding: adsb.lol
+rate-limits (429 after two quick requests), so its feeds are paced 4–6 s apart;
+Oman's CAP mirror is dead (last item 2023), not added.
+
 About 0.6 GB/day in total at the cadences given.
 
 | Source | Measures | Coverage | Age | Access | ~MB/day | Why |

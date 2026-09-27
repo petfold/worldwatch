@@ -1,0 +1,158 @@
+[
+ {
+  "sensor": {
+   "id": 1000,
+   "sensor_type": {
+    "name": "SDS011"
+   }
+  },
+  "location": {
+   "country": "DE",
+   "latitude": "52.52",
+   "longitude": "13.40",
+   "indoor": 0,
+   "id": 2000
+  },
+  "sensordatavalues": [
+   {
+    "value_type": "P1",
+    "value": "10"
+   },
+   {
+    "value_type": "P2",
+    "value": "5"
+   }
+  ],
+  "timestamp": "2026-09-27 19:09:02"
+ },
+ {
+  "sensor": {
+   "id": 1001,
+   "sensor_type": {
+    "name": "SDS011"
+   }
+  },
+  "location": {
+   "country": "DE",
+   "latitude": "52.52",
+   "longitude": "13.41",
+   "indoor": 0,
+   "id": 2001
+  },
+  "sensordatavalues": [
+   {
+    "value_type": "P1",
+    "value": "11"
+   },
+   {
+    "value_type": "P2",
+    "value": "6"
+   }
+  ],
+  "timestamp": "2026-09-27 19:09:02"
+ },
+ {
+  "sensor": {
+   "id": 1002,
+   "sensor_type": {
+    "name": "SDS011"
+   }
+  },
+  "location": {
+   "country": "DE",
+   "latitude": "52.52",
+   "longitude": "13.42",
+   "indoor": 0,
+   "id": 2002
+  },
+  "sensordatavalues": [
+   {
+    "value_type": "P1",
+    "value": "12"
+   },
+   {
+    "value_type": "P2",
+    "value": "7"
+   }
+  ],
+  "timestamp": "2026-09-27 19:09:02"
+ },
+ {
+  "sensor": {
+   "id": 1003,
+   "sensor_type": {
+    "name": "SDS011"
+   }
+  },
+  "location": {
+   "country": "DE",
+   "latitude": "52.52",
+   "longitude": "13.43",
+   "indoor": 0,
+   "id": 2003
+  },
+  "sensordatavalues": [
+   {
+    "value_type": "P1",
+    "value": "13"
+   },
+   {
+    "value_type": "P2",
+    "value": "8"
+   }
+  ],
+  "timestamp": "2026-09-27 19:09:02"
+ },
+ {
+  "sensor": {
+   "id": 1004,
+   "sensor_type": {
+    "name": "SDS011"
+   }
+  },
+  "location": {
+   "country": "DE",
+   "latitude": "52.52",
+   "longitude": "13.44",
+   "indoor": 0,
+   "id": 2004
+  },
+  "sensordatavalues": [
+   {
+    "value_type": "P1",
+    "value": "14"
+   },
+   {
+    "value_type": "P2",
+    "value": "9"
+   }
+  ],
+  "timestamp": "2026-09-27 19:09:02"
+ },
+ {
+  "sensor": {
+   "id": 1005,
+   "sensor_type": {
+    "name": "SDS011"
+   }
+  },
+  "location": {
+   "country": "DE",
+   "latitude": "52.52",
+   "longitude": "13.45",
+   "indoor": 0,
+   "id": 2005
+  },
+  "sensordatavalues": [
+   {
+    "value_type": "P1",
+    "value": "15"
+   },
+   {
+    "value_type": "P2",
+    "value": "10"
+   }
+  ],
+  "timestamp": "2026-09-27 19:09:02"
+ }
+]

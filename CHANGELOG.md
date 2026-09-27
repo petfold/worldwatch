@@ -64,6 +64,38 @@ sibling projects, where the tag is what publishes.
   never make an event near. Radiation networks reach 500 km, or everywhere
   when 5 or more stations agree (`global_sensors`: a release, not a
   detector).
+- **42 new sources (batch 1 of the source review, `doc/source-review-2026-09.md`),
+  all keyless or on the existing Cloudflare token, in `config/sources/tier2.toml`:**
+  - official warnings (CAP) from Saudi Arabia, Kuwait, Qatar, Bahrain, Iran,
+    Pakistan and India (IMD, NDMA), placed by each warning's polygon: the UAE
+    publishes none;
+  - tropical cyclones (JTWC, incl. the Arabian Sea; NHC), tsunami watches and
+    warnings (PTWC, NTWC);
+  - space weather (Kp, X-ray flares, solar wind; its own cell, `SPACE`);
+  - volcanic ash SIGMETs; fires from space (FIRMS VIIRS, NOAA-20 and -21);
+  - PM2.5 from citizen sensors (Sensor.Community, the median per area) and
+    AirNow monitors, with harm levels at the US AQI breakpoints;
+  - German river levels (PEGELONLINE), England's flood warnings;
+  - grid frequency (GB, harm when it drops below 49.8/49.5/48.8 Hz), demand in
+    eastern Australia (AEMO) and the 13 US regions (EIA);
+  - aircraft per area (OpenSky), emergency squawks and GPS interference
+    (adsb.lol: the share of aircraft with poor position accuracy, Gulf, E. Med,
+    Baltic, Black Sea, Red Sea), Baltic ships (Digitraffic);
+  - censorship tests per country (OONI), RIPE Atlas probes online per country,
+    Cloudflare data centres degraded, Wikipedia reading in 20 languages, and
+    Cloudflare Radar traffic for the UAE, Saudi Arabia, Qatar, Kuwait, Bahrain,
+    Oman, Iran and Israel;
+  - UAE air-defence engagements per day (the UAE Ministry of Defence's
+    statements via the unofficial UAE Defense Monitor): each day with
+    engagements is pushed once (daily, a day behind).
+  Aircraft, ship, sensor and probe identities never leave the parsers. New
+  building blocks, so the stanzas are config: fetch kinds `text_get`,
+  `linked_get` (a listing and the documents it links to, each fetched once)
+  and `paged_get`; parsers `records` (JSON, CSV or several feeds: time, value
+  and place named in the stanza) and `cell_aggregate` (a count, median, mean or
+  fraction per area); `{start_dt:%Y%m%d%H}` in endpoints; harm levels that count
+  downwards (`harm_direction = "below"`). About 0.45 GB/day more download and
+  ~200k more archive rows a day.
 - **A weekly report, read by an LLM.** Every Monday (`worldwatch digest`, a
   weekly timer): every deviation of the week beyond 1 in 1,000, in both
   directions and whether alerted or not (a drop in a pollutant can mean a

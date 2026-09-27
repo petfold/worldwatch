@@ -5,7 +5,9 @@ Wikimedia pageviews API:
   .../aggregate/{project}/{access}/{agent}/{granularity}/{start}/{end}).
 
 `build_url` fills `{placeholders}` from the source's [parse] table plus computed
-`start`/`end` covering a rolling look-back window ending at the poll time. Feeds
+`start`/`end` covering a rolling look-back window ending at the poll time (also
+as `start_dt`/`end_dt` datetimes, for format specs like `{start_dt:%Y%m%d%H}`,
+and `start_iso`/`end_iso`). Feeds
 with a plain endpoint (no braces) are returned unchanged. Overlapping windows
 are harmless — ingestion dedups on (stream, cell, ts) via the `seen` table.
 """
@@ -46,6 +48,11 @@ def build_url(cfg: SourceConfig, now: int) -> str:
     # treats it as exclusive still includes today
     fields.setdefault("start_date", start_dt.strftime("%Y-%m-%d"))
     fields.setdefault("end_date", (end_dt + timedelta(days=1)).strftime("%Y-%m-%d"))
+    # datetimes for format specs: "{start_dt:%Y/%Y%m%d}/file_{start_dt:%Y%m%d%H}.dat"
+    fields.setdefault("start_dt", start_dt)
+    fields.setdefault("end_dt", end_dt)
+    fields.setdefault("start_iso", start_dt.strftime("%Y-%m-%dT%H:%M:%SZ"))
+    fields.setdefault("end_iso", end_dt.strftime("%Y-%m-%dT%H:%M:%SZ"))
 
     try:
         return endpoint.format(**fields)

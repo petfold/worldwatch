@@ -1,0 +1,72 @@
+{
+ "warnings": [
+  {
+   "warning": "incomplete return",
+   "description": "The API can only return 5000 rows in JSON format.  Please consider constraining your request with facet, start, or end, or using offset to paginate results."
+  }
+ ],
+ "response": {
+  "total": "4563931",
+  "dateFormat": "YYYY-MM-DD\"T\"HH24",
+  "frequency": "hourly",
+  "data": [
+   {
+    "period": "2026-09-27T18",
+    "respondent": "AECI",
+    "respondent-name": "Associated Electric Cooperative, Inc.",
+    "type": "D",
+    "type-name": "Demand",
+    "value": "2182",
+    "value-units": "megawatthours"
+   },
+   {
+    "period": "2026-09-27T18",
+    "respondent": "AVA",
+    "respondent-name": "Avista Corporation",
+    "type": "D",
+    "type-name": "Demand",
+    "value": "1293",
+    "value-units": "megawatthours"
+   },
+   {
+    "period": "2026-09-27T18",
+    "respondent": "AZPS",
+    "respondent-name": "Arizona Public Service Company",
+    "type": "D",
+    "type-name": "Demand",
+    "value": "3233",
+    "value-units": "megawatthours"
+   },
+   {
+    "period": "2026-09-27T18",
+    "respondent": "BANC",
+    "respondent-name": "Balancing Authority of Northern California",
+    "type": "D",
+    "type-name": "Demand",
+    "value": "1787",
+    "value-units": "megawatthours"
+   },
+   {
+    "period": "2026-09-27T18",
+    "respondent": "BHBA",
+    "respondent-name": "Black Hills Energy",
+    "type": "D",
+    "type-name": "Demand",
+    "value": "848",
+    "value-units": "megawatthours"
+   },
+   {
+    "period": "2026-09-27T18",
+    "respondent": "BPAT",
+    "respondent-name": "Bonneville Power Administration",
+    "type": "D",
+    "type-name": "Demand",
+    "value": "7469",
+    "value-units": "megawatthours"
+   }
+  ],
+  "description": "Hourly demand, day-ahead demand forecast, net generation, and interchange by balancing authority.  \n    Source: Form EIA-930\n    Product: Hourly Electric Grid Monitor"
+ },
+ "apiVersion": "2.1.14",
+ "ExcelAddInVersion": "2.1.0"
+}

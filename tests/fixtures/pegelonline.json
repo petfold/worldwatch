@@ -1,0 +1,96 @@
+[
+ {
+  "uuid": "b475386c-30cc-453a-b3b7-1d17ace13595",
+  "number": "48300105",
+  "shortname": "CELLE",
+  "longname": "CELLE",
+  "km": 1.74,
+  "agency": "VERDEN",
+  "longitude": 10.062164,
+  "latitude": 52.622706,
+  "water": {
+   "shortname": "ALLER",
+   "longname": "ALLER"
+  },
+  "timeseries": [
+   {
+    "shortname": "W",
+    "longname": "WASSERSTAND ROHDATEN",
+    "unit": "cm",
+    "equidistance": 15,
+    "currentMeasurement": {
+     "timestamp": "2026-09-27T21:00:00+02:00",
+     "value": 113.0,
+     "stateMnwMhw": "low",
+     "stateNswHsw": "normal"
+    },
+    "gaugeZero": {
+     "unit": "m. ü. NN",
+     "value": 31.82,
+     "validFrom": "1936-11-01"
+    }
+   }
+  ]
+ },
+ {
+  "uuid": "8b4f9f7c-3376-4dd8-95c1-de55b1be4dfd",
+  "number": "48700103",
+  "shortname": "MARKLENDORF",
+  "longname": "MARKLENDORF",
+  "km": 38.47,
+  "agency": "VERDEN",
+  "longitude": 9.703456,
+  "latitude": 52.682757,
+  "water": {
+   "shortname": "ALLER",
+   "longname": "ALLER"
+  },
+  "timeseries": [
+   {
+    "shortname": "W",
+    "longname": "WASSERSTAND ROHDATEN",
+    "unit": "cm",
+    "equidistance": 15,
+    "currentMeasurement": {
+     "timestamp": "2026-09-27T21:00:00+02:00",
+     "value": 89.0,
+     "stateMnwMhw": "low",
+     "stateNswHsw": "normal"
+    },
+    "gaugeZero": {
+     "unit": "m. ü. NN",
+     "value": 23.01,
+     "validFrom": "1950-11-01"
+    }
+   }
+  ]
+ },
+ {
+  "uuid": "522286e2-b2b3-4d0d-9a11-01b3ea418c76",
+  "number": "48900102",
+  "shortname": "AHLDEN",
+  "longname": "AHLDEN",
+  "km": 58.71,
+  "agency": "VERDEN",
+  "longitude": 9.570881,
+  "latitude": 52.762431,
+  "water": {
+   "shortname": "ALLER",
+   "longname": "ALLER"
+  },
+  "timeseries": [
+   {
+    "shortname": "W",
+    "longname": "WASSERSTAND ROHDATEN",
+    "unit": "cm",
+    "equidistance": 15,
+    "currentMeasurement": {
+     "timestamp": "2026-09-27T21:00:00+02:00",
+     "value": -8.0,
+     "stateMnwMhw": "low",
+     "stateNswHsw": "normal"
+    }
+   }
+  ]
+ }
+]

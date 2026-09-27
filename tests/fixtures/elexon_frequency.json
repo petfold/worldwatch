@@ -1,0 +1,33 @@
+{
+ "metadata": {
+  "datasets": [
+   "FREQ"
+  ]
+ },
+ "data": [
+  {
+   "measurementTime": "2026-09-27T18:49:15Z",
+   "frequency": 49.951
+  },
+  {
+   "measurementTime": "2026-09-27T18:49:30Z",
+   "frequency": 49.953
+  },
+  {
+   "measurementTime": "2026-09-27T18:49:45Z",
+   "frequency": 49.948
+  },
+  {
+   "measurementTime": "2026-09-27T18:50:00Z",
+   "frequency": 49.954
+  },
+  {
+   "measurementTime": "2026-09-27T18:50:15Z",
+   "frequency": 49.936
+  },
+  {
+   "measurementTime": "2026-09-27T18:50:30Z",
+   "frequency": 49.945
+  }
+ ]
+}

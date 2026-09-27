@@ -18,6 +18,18 @@ kinds:
                      Earthdata Login (EDL) bearer token. The token is reused
                      from `token_env` if set, else listed/minted via the URS
                      API from `user_env`/`pass_env` and cached per process.
+  text_get           conditional GET of a non-JSON body (CSV, XML, text): the
+                     payload is {"url", "text"}, so a parser can read the time
+                     from a templated URL
+  multi_get          one feed per target (`{target}` in the endpoint): a list of
+                     {"target", "cc", "status", "text"}
+  linked_get         a listing (RSS/Atom) whose items link to the documents that
+                     matter (CAP alerts, warning texts): GET the listing, then
+                     each item's links matching `link_pattern` that this process
+                     has not fetched for that item version; payload: a list of
+                     {"url", "text"}
+  paged_get          JSON pages following `next` (RIPE Atlas): the pages'
+                     `results` joined, up to `max_pages`
   gdelt_lastupdate   GDELT 2.0: GET the endpoint (lastupdate.txt, "size md5
                      url" lines refreshed every 15 min) → the newest batch file
                      URL matching `file_marker`; skip if it matches the last
@@ -72,6 +84,121 @@ async def fetch_json_get(
     if token is not None:
         headers = {"Authorization": f"Bearer {token}"}
     return await conditional_get(client, build_url(cfg, now), validators, headers=headers)
+
+
+@register("text_get")
+async def fetch_text_get(
+    client: httpx.AsyncClient,
+    cfg: SourceConfig,
+    validators: CacheValidators,
+    now: int,
+) -> FetchResult:
+    url = build_url(cfg, now)
+    headers = {"User-Agent": USER_AGENT, "Accept-Encoding": "gzip"}
+    if validators.etag:
+        headers["If-None-Match"] = validators.etag
+    if validators.last_modified:
+        headers["If-Modified-Since"] = validators.last_modified
+    resp = await client.get(url, headers=headers, timeout=float(cfg.fetch.get("timeout", 60.0)),
+                            follow_redirects=True)
+    new = CacheValidators(etag=resp.headers.get("ETag", validators.etag),
+                          last_modified=resp.headers.get("Last-Modified", validators.last_modified))
+    if resp.status_code == 304:
+        return FetchResult(304, None, new, not_modified=True)
+    resp.raise_for_status()
+    return FetchResult(resp.status_code, {"url": url, "text": resp.text}, new)
+
+
+# per process: (stream, item key) already fetched, so a listing's unchanged items
+# are not fetched again every poll (bounded: oldest forgotten first)
+_linked_seen: dict[str, dict[str, None]] = {}
+_LINKED_MEMORY = 5000
+
+
+@register("linked_get")
+async def fetch_linked_get(
+    client: httpx.AsyncClient,
+    cfg: SourceConfig,
+    validators: CacheValidators,
+    now: int,
+) -> FetchResult:
+    """A listing whose items link to the documents: fetch the new ones.
+
+    An item's version is its link plus its guid/id and date, so a document
+    re-issued at the same URL (Kuwait's cap.xml, JTWC's warning texts) is
+    fetched again when the listing says it changed."""
+    import re
+
+    listing = await conditional_get_text(client, build_url(cfg, now), validators)
+    if listing is None:
+        return FetchResult(304, None, validators, not_modified=True)
+    text, new_validators = listing
+    pattern = re.compile(str(cfg.fetch.get("link_pattern", r"https?://[^\s<>\"']+\.xml[^\s<>\"']*")))
+    limit = int(cfg.fetch.get("max_items", 40))
+    seen = _linked_seen.setdefault(cfg.stream_id, {})
+    items = re.findall(r"<(?:item|entry)\b.*?</(?:item|entry)>", text, re.S) or [text]
+    todo: list[tuple[str, str]] = []
+    for it in items:
+        version = " ".join(re.findall(r"<(?:guid|id|pubDate|updated)[^>]*>(.*?)</", it, re.S))
+        for url in dict.fromkeys(pattern.findall(it.replace("&amp;", "&"))):
+            key = f"{url}|{version}"
+            if key not in seen:
+                todo.append((key, url))
+    out: list[dict[str, Any]] = []
+    for key, url in todo[:limit]:
+        try:
+            resp = await client.get(url, headers={"User-Agent": USER_AGENT}, timeout=30.0,
+                                    follow_redirects=True)
+            resp.raise_for_status()
+        except httpx.HTTPError:
+            continue  # fetched again next poll
+        out.append({"url": url, "text": resp.text})
+        seen[key] = None
+        if len(seen) > _LINKED_MEMORY:
+            del seen[next(iter(seen))]
+    return FetchResult(200, out, new_validators)
+
+
+async def conditional_get_text(
+    client: httpx.AsyncClient, url: str, validators: CacheValidators
+) -> tuple[str, CacheValidators] | None:
+    """The body of url as text, or None when not modified."""
+    headers = {"User-Agent": USER_AGENT, "Accept-Encoding": "gzip"}
+    if validators.etag:
+        headers["If-None-Match"] = validators.etag
+    if validators.last_modified:
+        headers["If-Modified-Since"] = validators.last_modified
+    resp = await client.get(url, headers=headers, timeout=30.0, follow_redirects=True)
+    if resp.status_code == 304:
+        return None
+    resp.raise_for_status()
+    return resp.text, CacheValidators(etag=resp.headers.get("ETag", validators.etag),
+                                      last_modified=resp.headers.get("Last-Modified", validators.last_modified))
+
+
+@register("paged_get")
+async def fetch_paged_get(
+    client: httpx.AsyncClient,
+    cfg: SourceConfig,
+    validators: CacheValidators,
+    now: int,
+) -> FetchResult:
+    """JSON pages linked by `next`; their `results` joined."""
+    url: str | None = build_url(cfg, now)
+    pause = float(cfg.fetch.get("pause_seconds", 0.2))
+    results: list[Any] = []
+    for i in range(int(cfg.fetch.get("max_pages", 50))):
+        if url is None:
+            break
+        if i:
+            await asyncio.sleep(pause)
+        resp = await client.get(url, headers={"User-Agent": USER_AGENT, "Accept-Encoding": "gzip"},
+                                timeout=30.0, follow_redirects=True)
+        resp.raise_for_status()
+        page = resp.json()
+        results += page.get("results") or []
+        url = page.get("next")
+    return FetchResult(200, {"results": results}, validators)
 
 
 # --- several feeds of one source (one stanza, many URLs) ---------------------

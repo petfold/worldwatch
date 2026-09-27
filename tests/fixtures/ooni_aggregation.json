@@ -1,0 +1,66 @@
+{
+ "v": 0,
+ "dimension_count": 2,
+ "db_stats": {
+  "row_count": 1639998,
+  "bytes": 57273574,
+  "total_row_count": 1639998,
+  "elapsed_seconds": 0.09127163887023926
+ },
+ "result": [
+  {
+   "anomaly_count": 4,
+   "confirmed_count": 0,
+   "failure_count": 0,
+   "ok_count": 67,
+   "measurement_count": 71,
+   "measurement_start_day": "2026-09-27T00:00:00Z",
+   "probe_cc": "AE"
+  },
+  {
+   "anomaly_count": 221,
+   "confirmed_count": 357,
+   "failure_count": 37,
+   "ok_count": 782,
+   "measurement_count": 1397,
+   "measurement_start_day": "2026-09-27T00:00:00Z",
+   "probe_cc": "IR"
+  },
+  {
+   "anomaly_count": 42,
+   "confirmed_count": 0,
+   "failure_count": 3,
+   "ok_count": 111,
+   "measurement_count": 156,
+   "measurement_start_day": "2026-09-27T01:00:00Z",
+   "probe_cc": "AE"
+  },
+  {
+   "anomaly_count": 164,
+   "confirmed_count": 380,
+   "failure_count": 48,
+   "ok_count": 666,
+   "measurement_count": 1258,
+   "measurement_start_day": "2026-09-27T01:00:00Z",
+   "probe_cc": "IR"
+  },
+  {
+   "anomaly_count": 27,
+   "confirmed_count": 0,
+   "failure_count": 3,
+   "ok_count": 108,
+   "measurement_count": 138,
+   "measurement_start_day": "2026-09-27T02:00:00Z",
+   "probe_cc": "AE"
+  },
+  {
+   "anomaly_count": 112,
+   "confirmed_count": 361,
+   "failure_count": 22,
+   "ok_count": 731,
+   "measurement_count": 1226,
+   "measurement_start_day": "2026-09-27T02:00:00Z",
+   "probe_cc": "IR"
+  }
+ ]
+}

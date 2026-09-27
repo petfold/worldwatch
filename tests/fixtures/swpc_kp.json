@@ -1,0 +1,32 @@
+[
+ {
+  "time_tag": "2026-09-27T19:00:00",
+  "kp_index": 0,
+  "estimated_kp": 0.33,
+  "kp": "0P"
+ },
+ {
+  "time_tag": "2026-09-27T19:01:00",
+  "kp_index": 0,
+  "estimated_kp": 0.33,
+  "kp": "0P"
+ },
+ {
+  "time_tag": "2026-09-27T19:02:00",
+  "kp_index": 0,
+  "estimated_kp": 0.33,
+  "kp": "0P"
+ },
+ {
+  "time_tag": "2026-09-27T19:03:00",
+  "kp_index": 0,
+  "estimated_kp": 0.0,
+  "kp": "0Z"
+ },
+ {
+  "time_tag": "2026-09-27T19:04:00",
+  "kp_index": 0,
+  "estimated_kp": 0.0,
+  "kp": "0Z"
+ }
+]

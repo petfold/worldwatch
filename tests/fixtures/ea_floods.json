@@ -1,0 +1,81 @@
+{
+ "@context": "http://environment.data.gov.uk/flood-monitoring/meta/context.jsonld",
+ "meta": {
+  "publisher": "Environment Agency",
+  "licence": "http://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/",
+  "documentation": "http://environment.data.gov.uk/flood-monitoring/doc/reference",
+  "version": "0.9",
+  "comment": "Status: Beta service",
+  "hasFormat": [
+   "http://environment.data.gov.uk/flood-monitoring/id/floods.csv",
+   "http://environment.data.gov.uk/flood-monitoring/id/floods.rdf",
+   "http://environment.data.gov.uk/flood-monitoring/id/floods.ttl",
+   "http://environment.data.gov.uk/flood-monitoring/id/floods.html"
+  ]
+ },
+ "items": [
+  {
+   "@id": "http://environment.data.gov.uk/flood-monitoring/id/floods/122WAC952",
+   "description": "North Sea coast from Staithes to Whitby including tidal River Esk",
+   "eaAreaName": "Yorkshire",
+   "eaRegionName": "No longer used",
+   "floodArea": {
+    "@id": "http://environment.data.gov.uk/flood-monitoring/id/floodAreas/122WAC952",
+    "county": "North Yorkshire, Redcar and Cleveland",
+    "notation": "122WAC952",
+    "polygon": "http://environment.data.gov.uk/flood-monitoring/id/floodAreas/122WAC952/polygon",
+    "riverOrSea": "North Sea"
+   },
+   "floodAreaID": "122WAC952",
+   "isTidal": true,
+   "message": "High tides, strong winds and large waves tomorrow morning may lead to flooding. \nFlooding is possible from 03:30 to 07:00 on Monday 28/09/2026. \nLocations most affected will be coastal roads and footpaths along the North Sea coast from Staithes to Whitby, including Sandsend and the tidal River Esk. \nWe are closely monitoring the situation and closing locks and flood gates. \nTake care and avoid walking, cycling or driving through flood water . \nThis message will be updated by 1:21AM on 28 September 2026 or as the situation changes.\n",
+   "severity": "Flood alert",
+   "severityLevel": 3,
+   "timeMessageChanged": "2026-09-27T17:25:00",
+   "timeRaised": "2026-09-27T17:25:31",
+   "timeSeverityChanged": "2026-09-27T17:25:00"
+  },
+  {
+   "@id": "http://environment.data.gov.uk/flood-monitoring/id/floods/112WATSOM1",
+   "description": "Somerset coast at Porlock Weir",
+   "eaAreaName": "Wessex",
+   "eaRegionName": "No longer used",
+   "floodArea": {
+    "@id": "http://environment.data.gov.uk/flood-monitoring/id/floodAreas/112WATSOM1",
+    "county": "Somerset",
+    "notation": "112WATSOM1",
+    "polygon": "http://environment.data.gov.uk/flood-monitoring/id/floodAreas/112WATSOM1/polygon",
+    "riverOrSea": "Bristol Channel"
+   },
+   "floodAreaID": "112WATSOM1",
+   "isTidal": true,
+   "message": "High tides today may lead to flooding. \nFlooding is possible from 18:00 to 20:00 on 27/09/2026. \nHigh tides this evening may lead to flooding.  \n\nFlooding is forecast to affect locations at Porlock Bay, with low lying land and roads expected to be most affected, particularly around the coastline between Gore Point and Hurlstone Point including Porlock Weir. The highest tide is at 19:15 on Sunday 27/09/2026 with a peak height of 6.19m and a F5 westerly wind. \nWe are closely monitoring the situation . \nTake care and avoid walking, cycling or driving through flood water . \nThis message will be updated by 9:00AM on 28 September 2026 or as the situation changes.\n",
+   "severity": "Flood alert",
+   "severityLevel": 3,
+   "timeMessageChanged": "2026-09-27T09:10:00",
+   "timeRaised": "2026-09-27T09:10:17",
+   "timeSeverityChanged": "2026-09-27T09:10:00"
+  },
+  {
+   "@id": "http://environment.data.gov.uk/flood-monitoring/id/floods/011WACN6",
+   "description": "Coast at North Morecambe Bay",
+   "eaAreaName": "Cumbria and Lancashire",
+   "eaRegionName": "No longer used",
+   "floodArea": {
+    "@id": "http://environment.data.gov.uk/flood-monitoring/id/floodAreas/011WACN6",
+    "county": "Lancashire, Westmorland and Furness",
+    "notation": "011WACN6",
+    "polygon": "http://environment.data.gov.uk/flood-monitoring/id/floodAreas/011WACN6/polygon",
+    "riverOrSea": "Irish Sea"
+   },
+   "floodAreaID": "011WACN6",
+   "isTidal": true,
+   "message": "High tides overnight may lead to flooding. \nFlooding is possible from 22:00 on 27/9/2026 to 02:00 on 28/9/2026. \nLocations most affected will be coastal roads and footpaths. \nWe are closely monitoring the situation . \nTake care and avoid walking, cycling or driving through flood water . \nThis message will be updated by 4:00PM on 28 September 2026 or as the situation changes.\n",
+   "severity": "Flood alert",
+   "severityLevel": 3,
+   "timeMessageChanged": "2026-09-27T15:56:00",
+   "timeRaised": "2026-09-27T15:56:55",
+   "timeSeverityChanged": "2026-09-27T15:56:00"
+  }
+ ]
+}

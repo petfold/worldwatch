@@ -1,0 +1,39 @@
+{
+ "components": [
+  {
+   "id": "1km35smx8p41",
+   "name": "Cloudflare Sites and Services",
+   "status": "degraded_performance",
+   "updated_at": "2020-11-11T20:12:30.000Z",
+   "group": true
+  },
+  {
+   "id": "00gpj4s37mz4",
+   "name": "Africa",
+   "status": "partial_outage",
+   "updated_at": "2020-11-11T20:12:30.000Z",
+   "group": true
+  },
+  {
+   "id": "2htqrtyxmmtr",
+   "name": "Arica, Chile - (ARI)",
+   "status": "partial_outage",
+   "updated_at": "2026-02-27T23:03:00.000Z",
+   "group": false
+  },
+  {
+   "id": "gxjcfyf5pht1",
+   "name": "Baghdad, Iraq - (BGW)",
+   "status": "under_maintenance",
+   "updated_at": "2026-09-25T18:33:00.000Z",
+   "group": false
+  },
+  {
+   "id": "h3smcpzt8hq6",
+   "name": "Dubai, United Arab Emirates - (DXB)",
+   "status": "under_maintenance",
+   "updated_at": "2026-09-25T09:20:31.000Z",
+   "group": false
+  }
+ ]
+}

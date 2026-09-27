@@ -1,0 +1,36 @@
+{
+ "activeStorms": [
+  {
+   "id": "al062026",
+   "name": "Fay",
+   "classification": "TD",
+   "intensity": "30",
+   "pressure": "1010",
+   "latitudeNumeric": 29.3,
+   "longitudeNumeric": -43.8,
+   "lastUpdate": "2026-09-27T15:00:00.000Z",
+   "publicAdvisory": {
+    "advNum": "030",
+    "issuance": "2026-09-27T15:00:00.000Z",
+    "fileUpdateTime": "2026-09-27T14:38:36.401Z",
+    "url": "https://www.nhc.noaa.gov/text/MIATCPAT1.shtml"
+   }
+  },
+  {
+   "id": "ep162026",
+   "name": "Odalys",
+   "classification": "TS",
+   "intensity": "50",
+   "pressure": "992",
+   "latitudeNumeric": 22.6,
+   "longitudeNumeric": -123.4,
+   "lastUpdate": "2026-09-27T15:00:00.000Z",
+   "publicAdvisory": {
+    "advNum": "031",
+    "issuance": "2026-09-27T15:00:00.000Z",
+    "fileUpdateTime": "2026-09-27T14:44:07.543Z",
+    "url": "https://www.nhc.noaa.gov/text/MIATCPEP1.shtml"
+   }
+  }
+ ]
+}

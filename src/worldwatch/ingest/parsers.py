@@ -19,17 +19,7 @@ from worldwatch.config.loader import SourceConfig
 from worldwatch.ingest.geocode import fixed_cell, h3_cell, resolve_fixed
 from worldwatch.ingest.models import Observation
 
-Parser = Callable[[Any, SourceConfig], list[Observation]]
-
-PARSERS: dict[str, Parser] = {}
-
-
-def register(fmt: str) -> Callable[[Parser], Parser]:
-    def deco(fn: Parser) -> Parser:
-        PARSERS[fmt] = fn
-        return fn
-
-    return deco
+from worldwatch.ingest.registry import _NOW_SENTINEL, PARSERS, Parser, register  # noqa: F401
 
 
 def parse(payload: Any, cfg: SourceConfig) -> list[Observation]:
@@ -735,8 +725,6 @@ def parse_gdacs_events(payload: Any, cfg: SourceConfig) -> list[Observation]:
     return obs
 
 
-# Sentinel: parser could not derive a timestamp; the poller substitutes poll time.
-_NOW_SENTINEL = -1
 
 
 def _wiki_stamp_to_epoch(stamp: str) -> int:
@@ -755,3 +743,9 @@ def _iso_to_epoch(iso: str) -> int:
     from datetime import datetime
 
     return int(datetime.fromisoformat(iso.replace("Z", "+00:00")).timestamp())
+
+
+# Generic and feed-specific parsers register themselves on import (after the
+# registry and helpers above exist).
+from worldwatch.ingest import feeds as _feeds  # noqa: E402,F401
+from worldwatch.ingest import generic as _generic  # noqa: E402,F401

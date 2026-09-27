@@ -1,0 +1,121 @@
+{
+ "type": "FeatureCollection",
+ "dataUpdatedTime": "2026-09-27T19:07:50Z",
+ "features": [
+  {
+   "mmsi": 100000000,
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     28.30216,
+     59.671858
+    ]
+   },
+   "properties": {
+    "mmsi": 100000000,
+    "sog": 0.0,
+    "cog": 65.2,
+    "navStat": 5,
+    "rot": -128,
+    "posAcc": false,
+    "raim": true,
+    "heading": 511,
+    "timestamp": 13,
+    "timestampExternal": 1790524633843
+   }
+  },
+  {
+   "mmsi": 100000001,
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     18.679057,
+     59.300922
+    ]
+   },
+   "properties": {
+    "mmsi": 100000001,
+    "sog": 0.0,
+    "cog": 194.7,
+    "navStat": 0,
+    "rot": 0,
+    "posAcc": true,
+    "raim": false,
+    "heading": 122,
+    "timestamp": 8,
+    "timestampExternal": 1790535969130
+   }
+  },
+  {
+   "mmsi": 100000002,
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     17.210715,
+     60.68985
+    ]
+   },
+   "properties": {
+    "mmsi": 100000002,
+    "sog": 0.0,
+    "cog": 360.0,
+    "navStat": 0,
+    "rot": 0,
+    "posAcc": true,
+    "raim": true,
+    "heading": 109,
+    "timestamp": 32,
+    "timestampExternal": 1790512832364
+   }
+  },
+  {
+   "mmsi": 100000003,
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     18.702945,
+     59.43339
+    ]
+   },
+   "properties": {
+    "mmsi": 100000003,
+    "sog": 0.0,
+    "cog": 212.3,
+    "navStat": 0,
+    "rot": -128,
+    "posAcc": false,
+    "raim": false,
+    "heading": 511,
+    "timestamp": 58,
+    "timestampExternal": 1790490239453
+   }
+  },
+  {
+   "mmsi": 100000004,
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     24.960172,
+     59.492533
+    ]
+   },
+   "properties": {
+    "mmsi": 100000004,
+    "sog": 0.0,
+    "cog": 187.4,
+    "navStat": 5,
+    "rot": 0,
+    "posAcc": false,
+    "raim": false,
+    "heading": 131,
+    "timestamp": 24,
+    "timestampExternal": 1790535986448
+   }
+  }
+ ]
+}

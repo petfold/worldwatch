@@ -1,0 +1,1689 @@
+# Batch 1 of the 2026-09-27 source review (doc/source-review-2026-09.md): keyless,
+# live or near-live sources. All start in the nursery.
+
+# --- official warnings near the Gulf (CAP) ---------------------------------------
+# The UAE's own met service publishes no CAP feed; these are the neighbours'.
+
+[cap_saudi]
+class            = "cap_alert_feed"
+modality         = "physical"
+topic_tags       = ["weather", "hazard", "official"]
+flavor           = "count"
+endpoint         = "https://ncm.gov.sa/en/cap-alerts"
+cadence_seconds  = 600
+status           = "nursery"
+notes            = "Official CAP warnings, Saudi Arabia: National Center for Meteorology (NCM), Saudi Arabia; CC BY 4.0"
+
+[cap_saudi.fetch]
+kind             = "linked_get"
+link_pattern     = 'https://www\.ncm\.gov\.sa/cap/en/alerts/[^<\s]+\.xml'
+max_items        = 40
+
+[cap_saudi.parse]
+format           = "cap_alerts"
+
+[cap_saudi.geocode]
+h3_resolution    = 3
+country          = "SA"    # alerts without coordinates
+
+[cap_saudi.model]
+native_seconds   = 3600
+
+[cap_saudi.display]
+label            = "Official warnings, Saudi Arabia"
+about            = "Warnings from National Center for Meteorology (NCM), Saudi Arabia, in the common alerting format (CAP): dust, heat, rain, floods, storms."
+unit             = "warnings"
+max_prefix       = "severity "
+
+[cap_saudi.context]
+fields           = ["event", "headline", "severity", "urgency", "certainty", "sender", "area", "url"]
+text             = "{event}| ({severity})|: {area}"
+link             = "url"
+
+[cap_saudi.alerts]
+tail             = "upper"
+reach_km         = 300
+# harm (ADR 0004): the CAP severity (Minor 1 ... Extreme 4); an Extreme warning skips the budget
+harm_levels      = [[4, "an Extreme warning"]]
+harm_floor       = false
+harm_confirmed   = 1
+
+[cap_kuwait]
+class            = "cap_alert_feed"
+modality         = "physical"
+topic_tags       = ["weather", "hazard", "official"]
+flavor           = "count"
+endpoint         = "https://www.met.gov.kw/rss_eng/kuwait_cap.xml"
+cadence_seconds  = 600
+status           = "nursery"
+notes            = "Official CAP warnings, Kuwait: Kuwait Meteorological Department; public domain"
+
+[cap_kuwait.fetch]
+kind             = "linked_get"
+link_pattern     = 'https://www\.met\.gov\.kw/XML/[^<\s]+\.xml'
+max_items        = 40
+
+[cap_kuwait.parse]
+format           = "cap_alerts"
+
+[cap_kuwait.geocode]
+h3_resolution    = 3
+country          = "KW"    # alerts without coordinates
+
+[cap_kuwait.model]
+native_seconds   = 3600
+
+[cap_kuwait.display]
+label            = "Official warnings, Kuwait"
+about            = "Warnings from Kuwait Meteorological Department, in the common alerting format (CAP): dust, heat, rain, floods, storms."
+unit             = "warnings"
+max_prefix       = "severity "
+
+[cap_kuwait.context]
+fields           = ["event", "headline", "severity", "urgency", "certainty", "sender", "area", "url"]
+text             = "{event}| ({severity})|: {area}"
+link             = "url"
+
+[cap_kuwait.alerts]
+tail             = "upper"
+reach_km         = 300
+# harm (ADR 0004): the CAP severity (Minor 1 ... Extreme 4); an Extreme warning skips the budget
+harm_levels      = [[4, "an Extreme warning"]]
+harm_floor       = false
+harm_confirmed   = 1
+
+[cap_qatar]
+class            = "cap_alert_feed"
+modality         = "physical"
+topic_tags       = ["weather", "hazard", "official"]
+flavor           = "count"
+endpoint         = "https://cap-sources.s3.amazonaws.com/qa-caa-en/rss.xml"
+cadence_seconds  = 600
+status           = "nursery"
+notes            = "Official CAP warnings, Qatar: Qatar Civil Aviation Authority (met); public domain"
+
+[cap_qatar.fetch]
+kind             = "linked_get"
+link_pattern     = 'https://cap-sources\.s3\.amazonaws\.com/qa-caa-en/[^<\s]+\.xml'
+max_items        = 40
+
+[cap_qatar.parse]
+format           = "cap_alerts"
+
+[cap_qatar.geocode]
+h3_resolution    = 3
+country          = "QA"    # alerts without coordinates
+
+[cap_qatar.model]
+native_seconds   = 3600
+
+[cap_qatar.display]
+label            = "Official warnings, Qatar"
+about            = "Warnings from Qatar Civil Aviation Authority (met), in the common alerting format (CAP): dust, heat, rain, floods, storms."
+unit             = "warnings"
+max_prefix       = "severity "
+
+[cap_qatar.context]
+fields           = ["event", "headline", "severity", "urgency", "certainty", "sender", "area", "url"]
+text             = "{event}| ({severity})|: {area}"
+link             = "url"
+
+[cap_qatar.alerts]
+tail             = "upper"
+reach_km         = 300
+# harm (ADR 0004): the CAP severity (Minor 1 ... Extreme 4); an Extreme warning skips the budget
+harm_levels      = [[4, "an Extreme warning"]]
+harm_floor       = false
+harm_confirmed   = 1
+
+[cap_bahrain]
+class            = "cap_alert_feed"
+modality         = "physical"
+topic_tags       = ["weather", "hazard", "official"]
+flavor           = "count"
+endpoint         = "https://cap-sources.s3.amazonaws.com/bh-meteo-en/rss.xml"
+cadence_seconds  = 600
+status           = "nursery"
+notes            = "Official CAP warnings, Bahrain: Bahrain Meteorological Directorate; public domain"
+
+[cap_bahrain.fetch]
+kind             = "linked_get"
+link_pattern     = 'https://cap-sources\.s3\.amazonaws\.com/bh-meteo-en/[^<\s]+\.xml'
+max_items        = 40
+
+[cap_bahrain.parse]
+format           = "cap_alerts"
+
+[cap_bahrain.geocode]
+h3_resolution    = 3
+country          = "BH"    # alerts without coordinates
+
+[cap_bahrain.model]
+native_seconds   = 3600
+
+[cap_bahrain.display]
+label            = "Official warnings, Bahrain"
+about            = "Warnings from Bahrain Meteorological Directorate, in the common alerting format (CAP): dust, heat, rain, floods, storms."
+unit             = "warnings"
+max_prefix       = "severity "
+
+[cap_bahrain.context]
+fields           = ["event", "headline", "severity", "urgency", "certainty", "sender", "area", "url"]
+text             = "{event}| ({severity})|: {area}"
+link             = "url"
+
+[cap_bahrain.alerts]
+tail             = "upper"
+reach_km         = 300
+# harm (ADR 0004): the CAP severity (Minor 1 ... Extreme 4); an Extreme warning skips the budget
+harm_levels      = [[4, "an Extreme warning"]]
+harm_floor       = false
+harm_confirmed   = 1
+
+[cap_iran]
+class            = "cap_alert_feed"
+modality         = "physical"
+topic_tags       = ["weather", "hazard", "official"]
+flavor           = "count"
+endpoint         = "https://cap-sources.s3.amazonaws.com/ir-irimo-en/rss.xml"
+cadence_seconds  = 600
+status           = "nursery"
+notes            = "Official CAP warnings, Iran: Iran Meteorological Organization (IRIMO); public domain"
+
+[cap_iran.fetch]
+kind             = "linked_get"
+link_pattern     = 'https://cap-sources\.s3\.amazonaws\.com/ir-irimo-en/[^<\s]+\.xml'
+max_items        = 40
+
+[cap_iran.parse]
+format           = "cap_alerts"
+
+[cap_iran.geocode]
+h3_resolution    = 3
+country          = "IR"    # alerts without coordinates
+
+[cap_iran.model]
+native_seconds   = 3600
+
+[cap_iran.display]
+label            = "Official warnings, Iran"
+about            = "Warnings from Iran Meteorological Organization (IRIMO), in the common alerting format (CAP): dust, heat, rain, floods, storms."
+unit             = "warnings"
+max_prefix       = "severity "
+
+[cap_iran.context]
+fields           = ["event", "headline", "severity", "urgency", "certainty", "sender", "area", "url"]
+text             = "{event}| ({severity})|: {area}"
+link             = "url"
+
+[cap_iran.alerts]
+tail             = "upper"
+reach_km         = 300
+# harm (ADR 0004): the CAP severity (Minor 1 ... Extreme 4); an Extreme warning skips the budget
+harm_levels      = [[4, "an Extreme warning"]]
+harm_floor       = false
+harm_confirmed   = 1
+
+[cap_pakistan]
+class            = "cap_alert_feed"
+modality         = "physical"
+topic_tags       = ["weather", "hazard", "official"]
+flavor           = "count"
+endpoint         = "https://cap-sources.s3.amazonaws.com/pk-pmd-en/rss.xml"
+cadence_seconds  = 600
+status           = "nursery"
+notes            = "Official CAP warnings, Pakistan: Pakistan Meteorological Department; public domain"
+
+[cap_pakistan.fetch]
+kind             = "linked_get"
+link_pattern     = 'https://cap-sources\.s3\.amazonaws\.com/pk-pmd-en/[^<\s]+\.xml'
+max_items        = 40
+
+[cap_pakistan.parse]
+format           = "cap_alerts"
+
+[cap_pakistan.geocode]
+h3_resolution    = 3
+country          = "PK"    # alerts without coordinates
+
+[cap_pakistan.model]
+native_seconds   = 3600
+
+[cap_pakistan.display]
+label            = "Official warnings, Pakistan"
+about            = "Warnings from Pakistan Meteorological Department, in the common alerting format (CAP): dust, heat, rain, floods, storms."
+unit             = "warnings"
+max_prefix       = "severity "
+
+[cap_pakistan.context]
+fields           = ["event", "headline", "severity", "urgency", "certainty", "sender", "area", "url"]
+text             = "{event}| ({severity})|: {area}"
+link             = "url"
+
+[cap_pakistan.alerts]
+tail             = "upper"
+reach_km         = 300
+# harm (ADR 0004): the CAP severity (Minor 1 ... Extreme 4); an Extreme warning skips the budget
+harm_levels      = [[4, "an Extreme warning"]]
+harm_floor       = false
+harm_confirmed   = 1
+
+[cap_india_imd]
+class            = "cap_alert_feed"
+modality         = "physical"
+topic_tags       = ["weather", "hazard", "official"]
+flavor           = "count"
+endpoint         = "https://cap-sources.s3.amazonaws.com/in-imd-en/rss.xml"
+cadence_seconds  = 600
+status           = "nursery"
+notes            = "Official CAP warnings, India (IMD): India Meteorological Department; public domain"
+
+[cap_india_imd.fetch]
+kind             = "linked_get"
+link_pattern     = 'https://cap-sources\.s3\.amazonaws\.com/in-imd-en/[^<\s]+\.xml'
+max_items        = 40
+
+[cap_india_imd.parse]
+format           = "cap_alerts"
+
+[cap_india_imd.geocode]
+h3_resolution    = 3
+country          = "IN"    # alerts without coordinates
+
+[cap_india_imd.model]
+native_seconds   = 3600
+
+[cap_india_imd.display]
+label            = "Official warnings, India (IMD)"
+about            = "Warnings from India Meteorological Department, in the common alerting format (CAP): dust, heat, rain, floods, storms."
+unit             = "warnings"
+max_prefix       = "severity "
+
+[cap_india_imd.context]
+fields           = ["event", "headline", "severity", "urgency", "certainty", "sender", "area", "url"]
+text             = "{event}| ({severity})|: {area}"
+link             = "url"
+
+[cap_india_imd.alerts]
+tail             = "upper"
+reach_km         = 300
+# harm (ADR 0004): the CAP severity (Minor 1 ... Extreme 4); an Extreme warning skips the budget
+harm_levels      = [[4, "an Extreme warning"]]
+harm_floor       = false
+harm_confirmed   = 1
+
+[cap_india_ndma]
+class            = "cap_alert_feed"
+modality         = "physical"
+topic_tags       = ["weather", "hazard", "official"]
+flavor           = "count"
+endpoint         = "https://sachet.ndma.gov.in/cap_public_website/rss/rss_india.xml"
+cadence_seconds  = 600
+status           = "nursery"
+notes            = "Official CAP warnings, India (NDMA): India's National Disaster Management Authority (Sachet); public"
+
+[cap_india_ndma.fetch]
+kind             = "linked_get"
+link_pattern     = 'https://sachet\.ndma\.gov\.in/cap_public_website/FetchXMLFile\?identifier=\d+'
+max_items        = 40
+
+[cap_india_ndma.parse]
+format           = "cap_alerts"
+
+[cap_india_ndma.geocode]
+h3_resolution    = 3
+country          = "IN"    # alerts without coordinates
+
+[cap_india_ndma.model]
+native_seconds   = 3600
+
+[cap_india_ndma.display]
+label            = "Official warnings, India (NDMA)"
+about            = "Warnings from India's National Disaster Management Authority (Sachet), in the common alerting format (CAP): dust, heat, rain, floods, storms."
+unit             = "warnings"
+max_prefix       = "severity "
+
+[cap_india_ndma.context]
+fields           = ["event", "headline", "severity", "urgency", "certainty", "sender", "area", "url"]
+text             = "{event}| ({severity})|: {area}"
+link             = "url"
+
+[cap_india_ndma.alerts]
+tail             = "upper"
+reach_km         = 300
+# harm (ADR 0004): the CAP severity (Minor 1 ... Extreme 4); an Extreme warning skips the budget
+harm_levels      = [[4, "an Extreme warning"]]
+harm_floor       = false
+harm_confirmed   = 1
+
+# --- tropical cyclones, tsunamis --------------------------------------------------
+
+[jtwc_cyclones]
+class            = "cyclone_warnings"
+modality         = "physical"
+topic_tags       = ["cyclone", "hazard", "official"]
+flavor           = "count"
+endpoint         = "https://www.metoc.navy.mil/jtwc/rss/jtwc.rss"
+cadence_seconds  = 1800
+status           = "nursery"
+notes            = "JTWC tropical cyclone warnings: NW Pacific, North Indian Ocean (Arabian Sea, Bay of Bengal), southern hemisphere; US government, public domain"
+
+[jtwc_cyclones.fetch]
+kind             = "linked_get"
+link_pattern     = 'https://www\.metoc\.navy\.mil/jtwc/products/[a-z]{2}\d{4}web\.txt'
+max_items        = 12
+
+[jtwc_cyclones.parse]
+format           = "jtwc_warnings"
+
+[jtwc_cyclones.geocode]
+h3_resolution    = 3
+
+[jtwc_cyclones.model]
+native_seconds   = 21600
+
+[jtwc_cyclones.display]
+label            = "Tropical cyclones (JTWC)"
+about            = "Warnings from the US Joint Typhoon Warning Center, including the Arabian Sea: each storm's position and strongest sustained wind."
+unit             = "warnings"
+max_prefix       = ""
+
+[jtwc_cyclones.context]
+fields           = ["name", "wind_kt", "position", "url"]
+text             = "{name}|: {wind_kt} kt| at {position}"
+link             = "url"
+
+[jtwc_cyclones.alerts]
+tail             = "upper"
+reach_km         = 500
+# harm: maximum sustained wind (kt); 100 kt+ confirmed may wake where it can reach
+harm_levels      = [[64, "cyclone strength (64 kt+)"], [100, "a very severe cyclone (100 kt+)"]]
+harm_below       = "below cyclone strength"
+harm_floor       = false
+harm_confirmed   = 2
+harm_extreme     = 2
+
+
+[nhc_storms]
+class            = "cyclone_warnings"
+modality         = "physical"
+topic_tags       = ["cyclone", "hazard", "official"]
+flavor           = "count"
+endpoint         = "https://www.nhc.noaa.gov/CurrentStorms.json"
+cadence_seconds  = 1800
+status           = "nursery"
+notes            = "NOAA NHC active storms (Atlantic, E/C Pacific): one row per advisory; public domain"
+
+[nhc_storms.parse]
+format           = "records"
+records          = "activeStorms"
+time_field       = "lastUpdate"
+value_field      = "intensity"
+id_fields        = ["id"]
+id_spread        = 60
+
+[nhc_storms.geocode]
+strategy         = "coords"
+lat_field        = "latitudeNumeric"
+lon_field        = "longitudeNumeric"
+h3_resolution    = 3
+
+[nhc_storms.model]
+native_seconds   = 21600
+
+[nhc_storms.display]
+label            = "Hurricanes (NHC)"
+about            = "Active Atlantic and eastern Pacific storms from the US National Hurricane Center, each advisory with the storm's strongest wind."
+unit             = "advisories"
+
+[nhc_storms.context]
+fields           = ["name", "classification", "intensity", "pressure", "publicAdvisory.url"]
+text             = "{name}| ({classification})|: {intensity} kt"
+link             = "publicAdvisory.url"
+
+[nhc_storms.alerts]
+tail             = "upper"
+reach_km         = 500
+harm_levels      = [[64, "hurricane strength (64 kt+)"], [96, "a major hurricane (Category 3+)"]]
+harm_below       = "below hurricane strength"
+harm_floor       = false
+harm_confirmed   = 2
+harm_extreme     = 2
+
+[tsunami_ptwc]
+class            = "tsunami_warnings"
+modality         = "physical"
+topic_tags       = ["tsunami", "hazard", "official"]
+flavor           = "count"
+endpoint         = "https://www.tsunami.gov/events/xml/PHEBAtom.xml"
+cadence_seconds  = 300
+status           = "nursery"
+notes            = "tsunami.gov bulletins, Pacific Tsunami Warning Center; watches and warnings only; public domain"
+
+[tsunami_ptwc.fetch]
+kind             = "text_get"
+
+[tsunami_ptwc.parse]
+format           = "tsunami_atom"
+min_level        = 2       # watches and warnings (information statements and advisories dropped)
+
+[tsunami_ptwc.geocode]
+h3_resolution    = 3
+
+[tsunami_ptwc.display]
+label            = "Tsunami warnings (PTWC)"
+about            = "Tsunami watches and warnings from the US Pacific Tsunami Warning Center."
+unit             = "bulletins"
+
+[tsunami_ptwc.context]
+fields           = ["category", "region", "magnitude", "url"]
+text             = "Tsunami {category}| for {region}| (M{magnitude})"
+link             = "url"
+
+[tsunami_ptwc.alerts]
+every_event      = true    # authoritative: each watch or warning alerts (ADR 0001)
+severity         = 0.95
+fresh_seconds    = 7200
+push_score       = 15      # confirmed, and extreme: may wake where it can reach
+reach_km         = 1000
+
+[tsunami_ntwc]
+class            = "tsunami_warnings"
+modality         = "physical"
+topic_tags       = ["tsunami", "hazard", "official"]
+flavor           = "count"
+endpoint         = "https://www.tsunami.gov/events/xml/PAAQAtom.xml"
+cadence_seconds  = 300
+status           = "nursery"
+notes            = "tsunami.gov bulletins, National Tsunami Warning Center (Alaska); watches and warnings only; public domain"
+
+[tsunami_ntwc.fetch]
+kind             = "text_get"
+
+[tsunami_ntwc.parse]
+format           = "tsunami_atom"
+min_level        = 2       # watches and warnings (information statements and advisories dropped)
+
+[tsunami_ntwc.geocode]
+h3_resolution    = 3
+
+[tsunami_ntwc.display]
+label            = "Tsunami warnings (NTWC)"
+about            = "Tsunami watches and warnings from the US National Tsunami Warning Center (Alaska)."
+unit             = "bulletins"
+
+[tsunami_ntwc.context]
+fields           = ["category", "region", "magnitude", "url"]
+text             = "Tsunami {category}| for {region}| (M{magnitude})"
+link             = "url"
+
+[tsunami_ntwc.alerts]
+every_event      = true    # authoritative: each watch or warning alerts (ADR 0001)
+severity         = 0.95
+fresh_seconds    = 7200
+push_score       = 15      # confirmed, and extreme: may wake where it can reach
+reach_km         = 1000
+
+# --- space weather (NOAA SWPC): one cell, "SPACE", apart from Earth's streams -----
+
+[swpc_kp]
+class            = "space_weather"
+modality         = "physical"
+topic_tags       = ["space-weather", "geomagnetic"]
+flavor           = "continuous"
+endpoint         = "https://services.swpc.noaa.gov/json/planetary_k_index_1m.json"
+cadence_seconds  = 600
+status           = "nursery"
+notes            = "NOAA SWPC estimated planetary K index, 1-min; public domain"
+
+[swpc_kp.parse]
+format           = "records"
+time_field       = "time_tag"
+value_field      = "estimated_kp"
+
+[swpc_kp.geocode]
+cell             = "SPACE"
+
+[swpc_kp.model]
+obs_scale        = 0.3
+level_var        = 1e-3
+time_scale       = 3600.0
+
+[swpc_kp.display]
+label            = "Geomagnetic activity (Kp, NOAA)"
+about            = "How disturbed Earth's magnetic field is (Kp 0-9), every minute. Storms (Kp 5+) disturb GPS, radio and, when severe, power grids."
+digits           = 1
+
+[swpc_kp.alerts]
+tail             = "upper"
+reach_km         = "global"
+harm_levels      = [[5, "a geomagnetic storm (G1, Kp 5+)"], [7, "a strong storm (G3, Kp 7+)"], [8, "a severe storm (G4, Kp 8+): grid and GPS trouble likely"], [9, "an extreme storm (G5, Kp 9)"]]
+harm_below       = "below storm level (Kp < 5)"
+harm_value       = "max"
+harm_confirmed   = 3
+
+
+[swpc_xray]
+class            = "space_weather"
+modality         = "physical"
+topic_tags       = ["space-weather", "solar-flare"]
+flavor           = "continuous"
+endpoint         = "https://services.swpc.noaa.gov/json/goes/primary/xrays-6-hour.json"
+cadence_seconds  = 600
+status           = "nursery"
+notes            = "GOES primary X-ray flux 0.1-0.8 nm, 1-min; value = log(W/m2); public domain"
+
+[swpc_xray.parse]
+format           = "records"
+time_field       = "time_tag"
+value_field      = "flux"
+transform        = "log"
+where            = { energy = ["0.1-0.8nm"] }
+
+[swpc_xray.geocode]
+cell             = "SPACE"
+
+[swpc_xray.model]
+obs_scale        = 0.2
+level_var        = 1e-2
+time_scale       = 3600.0
+
+[swpc_xray.display]
+label            = "Solar X-rays (GOES)"
+about            = "The Sun's X-ray brightness, every minute: flares. M- and X-class flares black out HF radio on the day side of Earth."
+unit             = " W/m²"
+inverse          = "exp"
+digits           = 7
+
+[swpc_xray.alerts]
+tail             = "upper"
+reach_km         = "global"
+harm_levels      = [[1e-5, "an M-class flare: HF radio blackouts"], [1e-4, "an X-class flare: strong radio blackouts"]]
+harm_below       = "below flare level (M1)"
+harm_confirmed   = 2
+
+
+[swpc_solar_wind]
+class            = "space_weather"
+modality         = "physical"
+topic_tags       = ["space-weather", "solar-wind"]
+flavor           = "continuous"
+endpoint         = "https://services.swpc.noaa.gov/products/summary/solar-wind-speed.json"
+cadence_seconds  = 300
+status           = "nursery"
+notes            = "NOAA SWPC real-time solar wind speed (km/s); public domain"
+
+[swpc_solar_wind.parse]
+format           = "records"
+time_field       = "time_tag"
+value_field      = "proton_speed"
+transform        = "log"
+
+[swpc_solar_wind.geocode]
+cell             = "SPACE"
+
+[swpc_solar_wind.model]
+obs_scale        = 0.05
+level_var        = 1e-3
+time_scale       = 3600.0
+
+[swpc_solar_wind.display]
+label            = "Solar wind speed (NOAA)"
+about            = "How fast the solar wind reaches Earth; a jump comes before geomagnetic storms."
+unit             = " km/s"
+inverse          = "exp"
+
+[swpc_solar_wind.alerts]
+tail             = "upper"
+reach_km         = "global"
+
+# --- volcanic ash, fires ---------------------------------------------------------
+
+[sigmet_volcanic_ash]
+class            = "aviation_hazard"
+modality         = "physical"
+topic_tags       = ["volcano", "aviation", "hazard"]
+flavor           = "count"
+endpoint         = "https://aviationweather.gov/api/data/isigmet?format=json"
+cadence_seconds  = 900
+status           = "nursery"
+notes            = "International SIGMETs for volcanic ash (aviationweather.gov); counted per ash area; public domain"
+
+[sigmet_volcanic_ash.parse]
+format           = "records"
+time_field       = "validTimeFrom"
+time_format      = "epoch"
+where            = { hazard = ["VA"] }
+id_fields        = ["icaoId", "seriesId"]
+
+[sigmet_volcanic_ash.geocode]
+strategy         = "coords"
+polygon_field    = "coords"
+h3_resolution    = 3
+
+[sigmet_volcanic_ash.model]
+native_seconds   = 3600
+
+[sigmet_volcanic_ash.display]
+label            = "Volcanic ash warnings (SIGMET)"
+about            = "Warnings to aircraft of volcanic ash clouds, issued by the world's flight information regions."
+unit             = "warnings"
+
+[sigmet_volcanic_ash.context]
+fields           = ["firName", "hazard", "qualifier", "top", "rawSigmet"]
+text             = "Volcanic ash| in {firName}| up to {top} ft"
+
+[sigmet_volcanic_ash.alerts]
+tail             = "upper"
+reach_km         = 500
+
+[firms_viirs_noaa21]
+class            = "fire_hotspots"
+modality         = "physical"
+topic_tags       = ["fire", "hazard", "satellite"]
+flavor           = "count"
+endpoint         = "https://firms.modaps.eosdis.nasa.gov/data/active_fire/noaa-21-viirs-c2/csv/J2_VIIRS_C2_Global_24h.csv"
+cadence_seconds  = 10800
+status           = "nursery"
+notes            = "NASA FIRMS VIIRS active fire, NOAA-21, NRT global 24 h file (~7.5 MB, If-Modified-Since); value = fire radiative power (MW)"
+
+[firms_viirs_noaa21.fetch]
+kind             = "text_get"
+timeout          = 180
+
+[firms_viirs_noaa21.parse]
+format           = "records"
+text_format      = "csv"
+time_fields      = ["acq_date", "acq_time"]
+time_format      = "%Y-%m-%d %H%M"
+value_field      = "frp"
+where            = { confidence = ["nominal", "high"] }
+id_fields        = ["latitude", "longitude"]
+id_spread        = 60
+
+[firms_viirs_noaa21.geocode]
+strategy         = "coords"
+lat_field        = "latitude"
+lon_field        = "longitude"
+h3_resolution    = 3
+
+[firms_viirs_noaa21.model]
+native_seconds   = 10800
+
+[firms_viirs_noaa21.display]
+label            = "Fires from space (FIRMS, NOAA-21)"
+about            = "Fire hotspots seen by the VIIRS instrument on NOAA-21, a few hours after the pass: wildfires, industrial and conflict fires, gas flares."
+unit             = "hotspots"
+max_prefix       = "FRP "
+
+[firms_viirs_noaa21.alerts]
+tail             = "upper"
+reach_km         = 100
+
+[firms_viirs_noaa20]
+class            = "fire_hotspots"
+modality         = "physical"
+topic_tags       = ["fire", "hazard", "satellite"]
+flavor           = "count"
+endpoint         = "https://firms.modaps.eosdis.nasa.gov/data/active_fire/noaa-20-viirs-c2/csv/J1_VIIRS_C2_Global_24h.csv"
+cadence_seconds  = 10800
+status           = "nursery"
+notes            = "NASA FIRMS VIIRS active fire, NOAA-20, NRT global 24 h file (~7.5 MB, If-Modified-Since); value = fire radiative power (MW)"
+
+[firms_viirs_noaa20.fetch]
+kind             = "text_get"
+timeout          = 180
+
+[firms_viirs_noaa20.parse]
+format           = "records"
+text_format      = "csv"
+time_fields      = ["acq_date", "acq_time"]
+time_format      = "%Y-%m-%d %H%M"
+value_field      = "frp"
+where            = { confidence = ["nominal", "high"] }
+id_fields        = ["latitude", "longitude"]
+id_spread        = 60
+
+[firms_viirs_noaa20.geocode]
+strategy         = "coords"
+lat_field        = "latitude"
+lon_field        = "longitude"
+h3_resolution    = 3
+
+[firms_viirs_noaa20.model]
+native_seconds   = 10800
+
+[firms_viirs_noaa20.display]
+label            = "Fires from space (FIRMS, NOAA-20)"
+about            = "Fire hotspots seen by the VIIRS instrument on NOAA-20, a few hours after the pass: wildfires, industrial and conflict fires, gas flares."
+unit             = "hotspots"
+max_prefix       = "FRP "
+
+[firms_viirs_noaa20.alerts]
+tail             = "upper"
+reach_km         = 100
+
+# --- air quality ------------------------------------------------------------------
+# harm (ADR 0004), PM2.5 in µg/m³: the US EPA AQI breakpoints (2024), read on the hour's
+# value (the AQI proper uses a 24-h mean)
+
+[sensor_community_pm25]
+class            = "air_quality_citizen"
+modality         = "physical"
+topic_tags       = ["air-quality", "smoke", "pollution"]
+flavor           = "continuous"
+endpoint         = "https://data.sensor.community/airrohr/v1/filter/type=SDS011"
+cadence_seconds  = 1800
+status           = "nursery"
+notes            = "Sensor.Community citizen PM sensors (SDS011, last 5 min, gzip ~0.8 MB); the median per H3 res-4 cell of 3+ outdoor sensors; ODbL. Sensor ids and positions dropped at the door"
+
+[sensor_community_pm25.parse]
+format           = "cell_aggregate"
+aggregate        = "median"
+value_field      = "sensordatavalues[value_type=P2].value"
+max_value        = 500     # the SDS011 saturates near 1000
+where            = { "location.indoor" = [0] }
+min_records      = 3
+record_time_field = "timestamp"
+bucket_seconds   = 1800
+transform        = "log1p"
+
+[sensor_community_pm25.geocode]
+strategy         = "coords"
+lat_field        = "location.latitude"
+lon_field        = "location.longitude"
+h3_resolution    = 4
+
+[sensor_community_pm25.model]
+obs_scale        = 0.2
+level_var        = 1e-2
+time_scale       = 3600.0
+periods_seconds  = [86400]
+
+[sensor_community_pm25.display]
+label            = "Fine particles, citizen sensors (Sensor.Community)"
+about            = "PM2.5, the smoke and dust particles that reach the lungs, from volunteers' sensors, mostly in Europe: the median of the sensors in each area."
+unit             = " µg/m³"
+inverse          = "expm1"
+digits           = 1
+
+[sensor_community_pm25.alerts]
+tail             = "upper"
+reach_km         = 100
+harm_levels      = [[35.5, "unhealthy for sensitive groups (US AQI 101+)"], [55.5, "unhealthy (US AQI 151+)"], [125.5, "very unhealthy (US AQI 201+)"], [225.5, "hazardous (US AQI 301+)"]]
+harm_below       = "below the US 'unhealthy for sensitive groups' level"
+harm_value       = "mean"
+harm_confirmed   = 3
+
+
+[airnow_pm25]
+class            = "air_quality_regulatory"
+modality         = "physical"
+topic_tags       = ["air-quality", "smoke", "pollution"]
+flavor           = "continuous"
+endpoint         = "https://files.airnowtech.org/airnow/{start_dt:%Y/%Y%m%d}/HourlyAQObs_{start_dt:%Y%m%d%H}.dat"
+cadence_seconds  = 1800
+status           = "nursery"
+notes            = "US EPA AirNow hourly observations (US, Canada, Mexico, US embassies), ~1 MB/h; PM2.5 per monitor"
+
+[airnow_pm25.fetch]
+kind             = "text_get"
+
+[airnow_pm25.parse]
+format           = "records"
+text_format      = "csv"
+lookback_seconds = 7200    # the hour's file appears ~40 min after it ends
+time_fields      = ["ValidDate", "ValidTime"]
+time_format      = "%m/%d/%Y %H:%M"
+value_field      = "PM25"
+where            = { PM25_Measured = ["1"] }
+transform        = "log1p"
+site_field       = "AQSID"
+
+[airnow_pm25.geocode]
+strategy         = "coords"
+lat_field        = "Latitude"
+lon_field        = "Longitude"
+h3_resolution    = 7
+
+[airnow_pm25.model]
+obs_scale        = 0.2
+level_var        = 1e-2
+time_scale       = 3600.0
+periods_seconds  = [86400]
+
+[airnow_pm25.display]
+label            = "Fine particles, North America (AirNow)"
+about            = "PM2.5 from official monitors in the US, Canada and Mexico (and US embassies), hourly."
+unit             = " µg/m³"
+inverse          = "expm1"
+digits           = 1
+
+[airnow_pm25.context]
+fields           = ["SiteName", "StateName", "CountryCode", "PM25", "PM25_AQI"]
+text             = "{SiteName}|, {StateName}|: PM2.5 {PM25} µg/m³| (AQI {PM25_AQI})"
+
+[airnow_pm25.alerts]
+tail             = "upper"
+reach_km         = 100
+harm_levels      = [[35.5, "unhealthy for sensitive groups (US AQI 101+)"], [55.5, "unhealthy (US AQI 151+)"], [125.5, "very unhealthy (US AQI 201+)"], [225.5, "hazardous (US AQI 301+)"]]
+harm_below       = "below the US 'unhealthy for sensitive groups' level"
+harm_value       = "mean"
+harm_confirmed   = 3
+
+# --- rivers and floods -------------------------------------------------------------
+
+[pegelonline_water]
+class            = "river_gauges"
+modality         = "physical"
+topic_tags       = ["water", "flood", "river"]
+flavor           = "continuous"
+endpoint         = "https://www.pegelonline.wsv.de/webservices/rest-api/v2/stations.json?includeTimeseries=true&includeCurrentMeasurement=true&timeseries=W"
+cadence_seconds  = 3600
+status           = "nursery"
+notes            = "German federal waterways, water level (cm) at ~740 gauges (PEGELONLINE); DL-DE Zero 2.0"
+
+[pegelonline_water.parse]
+format           = "records"
+time_field       = "timeseries.0.currentMeasurement.timestamp"
+value_field      = "timeseries.0.currentMeasurement.value"
+site_field       = "number"
+
+[pegelonline_water.geocode]
+strategy         = "coords"
+lat_field        = "latitude"
+lon_field        = "longitude"
+h3_resolution    = 8
+
+[pegelonline_water.model]
+obs_scale        = 5.0
+level_var        = 10.0
+time_scale       = 3600.0
+
+[pegelonline_water.display]
+label            = "River levels, Germany (PEGELONLINE)"
+about            = "Water levels on Germany's federal rivers and canals: floods, and low water that stops shipping."
+unit             = " cm"
+
+[pegelonline_water.context]
+fields           = ["shortname", "water.shortname", "timeseries.0.currentMeasurement.value", "timeseries.0.currentMeasurement.stateNswHsw"]
+text             = "{shortname}| on the {water.shortname}|: {timeseries.0.currentMeasurement.value} cm| ({timeseries.0.currentMeasurement.stateNswHsw})"
+
+[pegelonline_water.alerts]
+reach_km         = 100
+
+
+[ea_flood_warnings]
+class            = "flood_warnings"
+modality         = "physical"
+topic_tags       = ["water", "flood", "official"]
+flavor           = "count"
+endpoint         = "https://environment.data.gov.uk/flood-monitoring/id/floods?min-severity=2"
+cadence_seconds  = 900
+status           = "nursery"
+notes            = "Environment Agency flood warnings and severe flood warnings, England; OGL v3"
+
+[ea_flood_warnings.parse]
+format           = "records"
+records          = "items"
+time_field       = "timeRaised"
+id_fields        = ["floodAreaID"]
+where            = { severityLevel = [1, 2] }
+
+[ea_flood_warnings.geocode]
+strategy         = "fixed_latlon"
+lat              = 52.8
+lon              = -1.6
+h3_resolution    = 3
+
+[ea_flood_warnings.model]
+native_seconds   = 3600
+
+[ea_flood_warnings.display]
+label            = "Flood warnings, England (Environment Agency)"
+about            = "Flood warnings (flooding expected) and severe flood warnings (danger to life) in England."
+unit             = "warnings"
+
+[ea_flood_warnings.context]
+fields           = ["severity", "description", "eaAreaName", "floodArea.county"]
+text             = "{severity}|: {description}"
+
+[ea_flood_warnings.alerts]
+tail             = "upper"
+reach_km         = 300
+
+# --- power grids ---------------------------------------------------------------------
+
+[elexon_frequency]
+class            = "grid_frequency"
+modality         = "infrastructural"
+topic_tags       = ["power", "grid"]
+flavor           = "continuous"
+endpoint         = "https://data.elexon.co.uk/bmrs/api/v1/system/frequency?from={start_iso}&to={end_iso}&format=json"
+cadence_seconds  = 300
+status           = "nursery"
+notes            = "Great Britain system frequency, 15 s (Elexon Insights); Elexon open data licence"
+
+[elexon_frequency.parse]
+format           = "records"
+records          = "data"
+lookback_seconds = 900
+time_field       = "measurementTime"
+value_field      = "frequency"
+
+[elexon_frequency.geocode]
+strategy         = "fixed_latlon"
+lat              = 54.0
+lon              = -2.5
+h3_resolution    = 2
+
+[elexon_frequency.model]
+obs_scale        = 0.02
+level_var        = 1e-4
+time_scale       = 60.0
+
+[elexon_frequency.display]
+label            = "Grid frequency, Great Britain (Elexon)"
+about            = "The 50 Hz frequency of Britain's grid every 15 seconds: it dips when a big power station or link trips."
+unit             = " Hz"
+digits           = 3
+
+[elexon_frequency.alerts]
+tail             = "lower"
+reach_km         = 500
+harm_direction   = "below"
+harm_levels      = [[49.8, "below the normal operating range (49.8 Hz)"], [49.5, "below the statutory limit (49.5 Hz)"], [48.8, "at automatic load shedding (48.8 Hz)"]]
+harm_below       = "within the normal operating range"
+harm_value       = "mean"
+harm_confirmed   = 2
+harm_extreme     = 3
+
+
+[aemo_nem_demand]
+class            = "grid_load"
+modality         = "infrastructural"
+topic_tags       = ["power", "grid"]
+flavor           = "continuous"
+endpoint         = "https://visualisations.aemo.com.au/aemo/apps/api/report/ELEC_NEM_SUMMARY"
+cadence_seconds  = 300
+status           = "nursery"
+notes            = "Australia's National Electricity Market, 5-min demand per region (AEMO); value = log(MW)"
+
+[aemo_nem_demand.parse]
+format           = "records"
+records          = "ELEC_NEM_SUMMARY"
+time_field       = "SETTLEMENTDATE"
+time_tz          = "+10:00"    # NEM time: AEST all year
+value_field      = "TOTALDEMAND"
+transform        = "log"
+
+[aemo_nem_demand.geocode]
+strategy         = "points"
+key_field        = "REGIONID"
+points           = { NSW1 = [-33.87, 151.21], QLD1 = [-27.47, 153.03], VIC1 = [-37.81, 144.96], SA1 = [-34.93, 138.60], TAS1 = [-42.88, 147.33] }
+h3_resolution    = 3
+
+[aemo_nem_demand.model]
+obs_scale        = 0.02
+level_var        = 1e-3
+time_scale       = 3600.0
+periods_seconds  = [86400, 604800]
+
+[aemo_nem_demand.display]
+label            = "Power demand, eastern Australia (AEMO)"
+about            = "Electricity demand in each region of Australia's eastern grid, every 5 minutes: bushfires, storms and trips show as sudden drops."
+unit             = " MW"
+inverse          = "exp"
+
+[aemo_nem_demand.context]
+fields           = ["REGIONID", "TOTALDEMAND", "PRICE"]
+text             = "{REGIONID}|: {TOTALDEMAND} MW|, ${PRICE}/MWh"
+
+[aemo_nem_demand.alerts]
+reach_km         = 300
+
+
+[eia_demand]
+class            = "grid_load"
+modality         = "infrastructural"
+topic_tags       = ["power", "grid"]
+flavor           = "continuous"
+endpoint         = "https://api.eia.gov/v2/electricity/rto/region-data/data/?api_key={api_key}&frequency=hourly&data[0]=value&facets[type][]=D&facets[respondent][]=CAL&facets[respondent][]=CAR&facets[respondent][]=CENT&facets[respondent][]=FLA&facets[respondent][]=MIDA&facets[respondent][]=MIDW&facets[respondent][]=NE&facets[respondent][]=NY&facets[respondent][]=NW&facets[respondent][]=SE&facets[respondent][]=SW&facets[respondent][]=TEN&facets[respondent][]=TEX&sort[0][column]=period&sort[0][direction]=desc&length=130"
+cadence_seconds  = 3600
+status           = "nursery"
+notes            = "US EIA-930 hourly demand for the 13 US regions (~1.6 h behind); DEMO_KEY until a free key is registered; public domain"
+
+[eia_demand.parse]
+format           = "records"
+records          = "response.data"
+api_key          = "DEMO_KEY"   # EIA's public demo key (a personal free key has higher limits)
+time_field       = "period"
+time_format      = "%Y-%m-%dT%H"
+value_field      = "value"
+transform        = "log"
+skip_last        = true        # the newest hour is revised
+
+[eia_demand.geocode]
+strategy         = "points"
+key_field        = "respondent"
+points           = { CAL = [36.8, -119.4], CAR = [35.5, -79.5], CENT = [39.0, -97.0], FLA = [28.0, -81.8], MIDA = [39.9, -77.5], MIDW = [41.9, -88.0], NE = [42.5, -71.8], NY = [42.9, -75.5], NW = [44.5, -118.0], SE = [33.0, -86.5], SW = [33.8, -111.5], TEN = [35.8, -86.4], TEX = [31.0, -97.5] }
+h3_resolution    = 3
+
+[eia_demand.model]
+obs_scale        = 0.02
+level_var        = 1e-3
+time_scale       = 3600.0
+periods_seconds  = [86400, 604800]
+
+[eia_demand.display]
+label            = "Power demand, US regions (EIA)"
+about            = "Hourly electricity demand in the 13 regions of the US grid: storms and heat waves show here, as do outages."
+unit             = " MWh"
+inverse          = "exp"
+
+[eia_demand.alerts]
+reach_km         = 500
+
+# --- air and sea traffic -----------------------------------------------------------
+# Counts per area only: aircraft and ship identities never leave the parser.
+
+[opensky_aircraft]
+class            = "air_traffic"
+modality         = "economic"
+topic_tags       = ["aviation", "traffic"]
+flavor           = "continuous"
+endpoint         = "https://opensky-network.org/api/states/all"
+cadence_seconds  = 900
+status           = "nursery"
+notes            = "OpenSky Network state vectors, anonymous (400 credits/day; a global call costs 4): airborne aircraft per H3 res-2 cell; non-commercial use"
+
+[opensky_aircraft.parse]
+format           = "cell_aggregate"
+records          = "states"
+where            = { "8" = [false] }   # airborne
+time_field       = "time"
+time_format      = "epoch"
+bucket_seconds   = 900
+min_records      = 3
+transform        = "log1p"
+
+[opensky_aircraft.geocode]
+strategy         = "coords"
+lat_field        = "6"
+lon_field        = "5"
+h3_resolution    = 2
+
+[opensky_aircraft.model]
+obs_scale        = 0.2
+level_var        = 1e-2
+time_scale       = 3600.0
+periods_seconds  = [86400, 604800]
+
+[opensky_aircraft.display]
+label            = "Aircraft in the air (OpenSky)"
+about            = "How many aircraft are flying over each area, every 15 minutes: an airspace closing (conflict, ash, storms) empties it."
+unit             = " aircraft"
+inverse          = "expm1"
+
+[opensky_aircraft.alerts]
+tail             = "lower"   # fewer aircraft: a closure; more is harmless
+reach_km         = 500
+
+
+[adsb_emergency_squawks]
+class            = "air_traffic"
+modality         = "economic"
+topic_tags       = ["aviation", "emergency"]
+flavor           = "count"
+endpoint         = "https://api.adsb.lol/v2/sqk/{target}"
+cadence_seconds  = 300
+status           = "nursery"
+notes            = "adsb.lol aircraft squawking 7700 (emergency), 7600 (radio failure), 7500 (hijack): one event per aircraft and code per hour; ODbL"
+
+[adsb_emergency_squawks.fetch]
+kind             = "multi_get"
+pause_seconds    = 4.0
+targets          = { "7700" = "", "7600" = "", "7500" = "" }
+
+[adsb_emergency_squawks.parse]
+format           = "adsb_squawks"
+
+[adsb_emergency_squawks.geocode]
+h3_resolution    = 3
+
+[adsb_emergency_squawks.model]
+native_seconds   = 3600
+
+[adsb_emergency_squawks.display]
+label            = "Aircraft emergencies (adsb.lol)"
+about            = "Aircraft transmitting an emergency code: 7700 emergency, 7600 radio failure, 7500 hijack."
+unit             = "aircraft"
+
+[adsb_emergency_squawks.context]
+fields           = ["squawk", "meaning"]
+text             = "Squawk {squawk}| ({meaning})"
+
+[adsb_emergency_squawks.alerts]
+tail             = "upper"
+reach_km         = 300
+
+
+[adsb_gnss_interference]
+class            = "gnss_interference"
+modality         = "infrastructural"
+topic_tags       = ["gnss", "jamming", "aviation"]
+flavor           = "continuous"
+endpoint         = "https://api.adsb.lol/v2/{target}"
+cadence_seconds  = 600
+status           = "nursery"
+notes            = "adsb.lol aircraft within 250 nm of hotspots: the share with poor navigation accuracy (NACp < 8), GNSS jamming or spoofing (the gpsjam.org method); ODbL. adsb.lol rate-limits (429 after two quick requests): 6 s apart"
+
+[adsb_gnss_interference.fetch]
+kind             = "multi_get"
+pause_seconds    = 6.0
+targets          = { "lat/25.5/lon/55.0/dist/250" = "AE", "lat/26.5/lon/51.0/dist/250" = "QA", "lat/27.5/lon/57.5/dist/250" = "OM", "lat/33.5/lon/35.0/dist/250" = "LB", "lat/56.5/lon/21.0/dist/250" = "LV", "lat/59.5/lon/25.5/dist/250" = "EE", "lat/44.5/lon/34.0/dist/250" = "UA", "lat/15.0/lon/42.0/dist/250" = "YE" }
+
+[adsb_gnss_interference.parse]
+format           = "cell_aggregate"
+records          = "ac"
+aggregate        = "fraction"
+value_field      = "nac_p"
+fraction_below   = 8
+min_records      = 5
+time_field       = "now"
+time_format      = "epoch_ms"
+bucket_seconds   = 600
+
+[adsb_gnss_interference.geocode]
+strategy         = "coords"
+lat_field        = "lat"
+lon_field        = "lon"
+h3_resolution    = 3
+
+[adsb_gnss_interference.model]
+obs_scale        = 0.1
+level_var        = 1e-3
+time_scale       = 3600.0
+
+[adsb_gnss_interference.display]
+label            = "GPS interference (aircraft, adsb.lol)"
+about            = "The share of aircraft reporting poor position accuracy, in the Gulf, the eastern Mediterranean, the Baltic, the Black Sea and the Red Sea: GPS jamming or spoofing."
+percent          = true
+
+[adsb_gnss_interference.alerts]
+tail             = "upper"
+reach_km         = 300
+
+
+[digitraffic_ships]
+class            = "sea_traffic"
+modality         = "economic"
+topic_tags       = ["shipping", "traffic", "baltic"]
+flavor           = "continuous"
+endpoint         = "https://meri.digitraffic.fi/api/ais/v1/locations"
+cadence_seconds  = 900
+status           = "nursery"
+notes            = "Fintraffic Digitraffic AIS, the Baltic: ships per H3 res-3 cell (gzip ~50 KB); CC BY 4.0"
+
+[digitraffic_ships.parse]
+format           = "cell_aggregate"
+records          = "features"
+time_field       = "dataUpdatedTime"
+bucket_seconds   = 900
+transform        = "log1p"
+
+[digitraffic_ships.geocode]
+strategy         = "coords"
+lat_field        = "geometry.coordinates.1"
+lon_field        = "geometry.coordinates.0"
+h3_resolution    = 3
+
+[digitraffic_ships.model]
+obs_scale        = 0.2
+level_var        = 1e-2
+time_scale       = 3600.0
+periods_seconds  = [86400]
+
+[digitraffic_ships.display]
+label            = "Ships, Baltic (Digitraffic)"
+about            = "How many ships report their position in each area of the Baltic, every 15 minutes."
+unit             = " ships"
+inverse          = "expm1"
+
+[digitraffic_ships.alerts]
+reach_km         = 300
+
+# --- the internet --------------------------------------------------------------------
+
+[ooni_anomalies]
+class            = "censorship"
+modality         = "infrastructural"
+topic_tags       = ["internet", "censorship"]
+flavor           = "continuous"
+endpoint         = "https://api.ooni.io/api/v1/aggregation?since={start_date}&until={end_date}&time_grain=hour&axis_x=measurement_start_day&axis_y=probe_cc"
+cadence_seconds  = 1800
+status           = "nursery"
+notes            = "OONI censorship tests per country and hour: the share anomalous or confirmed blocked (hours with 30+ tests); CC BY-NC-SA 4.0"
+
+[ooni_anomalies.parse]
+format           = "records"
+records          = "result"
+lookback_seconds = 86400
+time_field       = "measurement_start_day"
+value_ratio      = [["anomaly_count", "confirmed_count"], "measurement_count"]
+min_denominator  = 30
+skip_last        = true    # the current hour is still filling
+
+[ooni_anomalies.geocode]
+strategy         = "country"
+country_field    = "probe_cc"
+h3_resolution    = 3
+
+[ooni_anomalies.model]
+obs_scale        = 0.05
+level_var        = 1e-3
+time_scale       = 3600.0
+
+[ooni_anomalies.display]
+label            = "Internet censorship tests (OONI)"
+about            = "Volunteers' tests of whether websites and apps can be reached in each country: the share that look blocked."
+percent          = true
+
+[ooni_anomalies.alerts]
+tail             = "upper"
+reach_km         = 300
+
+
+[ripe_atlas_probes]
+class            = "internet_health"
+modality         = "infrastructural"
+topic_tags       = ["internet", "power", "heartbeat"]
+flavor           = "continuous"
+endpoint         = "https://atlas.ripe.net/api/v2/probes/?status=1&page_size=500&fields=id,country_code"
+cadence_seconds  = 1800
+status           = "nursery"
+notes            = "RIPE Atlas probes connected, per country (~31 pages of 500); probe ids dropped at the door"
+
+[ripe_atlas_probes.fetch]
+kind             = "paged_get"
+max_pages        = 60
+pause_seconds    = 0.5
+
+[ripe_atlas_probes.parse]
+format           = "cell_aggregate"
+records          = "results"
+transform        = "log1p"
+
+[ripe_atlas_probes.geocode]
+strategy         = "country"
+country_field    = "country_code"
+h3_resolution    = 3
+
+[ripe_atlas_probes.model]
+obs_scale        = 0.05
+level_var        = 1e-3
+time_scale       = 3600.0
+
+[ripe_atlas_probes.display]
+label            = "Internet probes online (RIPE Atlas)"
+about            = "How many of RIPE Atlas's small measurement devices, kept by volunteers in homes and offices, are online in each country: a power or internet cut takes many offline at once."
+unit             = " probes"
+inverse          = "expm1"
+
+[ripe_atlas_probes.alerts]
+tail             = "lower"
+reach_km         = 300
+
+
+[cloudflare_pops]
+class            = "internet_health"
+modality         = "infrastructural"
+topic_tags       = ["internet", "cdn", "status"]
+flavor           = "count"
+endpoint         = "https://www.cloudflarestatus.com/api/v2/components.json"
+cadence_seconds  = 900
+status           = "nursery"
+notes            = "Cloudflare status page: data centres (points of presence) not operational, per country"
+
+[cloudflare_pops.parse]
+format           = "statuspage_components"
+country_aliases  = { "south korea" = "KR", "north korea" = "KP", "usa" = "US", "united states" = "US", "uk" = "GB", "united kingdom" = "GB", "russia" = "RU", "vietnam" = "VN", "czech republic" = "CZ", "czechia" = "CZ", "turkey" = "TR", "türkiye" = "TR", "taiwan" = "TW", "hong kong" = "HK", "macau" = "MO", "ivory coast" = "CI", "democratic republic of the congo" = "CD", "republic of the congo" = "CG", "bosnia and herzegovina" = "BA", "moldova" = "MD", "laos" = "LA", "palestine" = "PS", "iran" = "IR", "syria" = "SY", "bolivia" = "BO", "venezuela" = "VE", "tanzania" = "TZ" }
+
+[cloudflare_pops.geocode]
+h3_resolution    = 3
+
+[cloudflare_pops.model]
+native_seconds   = 3600
+
+[cloudflare_pops.display]
+label            = "Cloudflare data centres degraded"
+about            = "Cloudflare's own status page: which of its data centres, in some 300 cities, are not fully working."
+unit             = "data centres"
+
+[cloudflare_pops.context]
+fields           = ["component", "status"]
+text             = "{component}|: {status}"
+
+[cloudflare_pops.alerts]
+tail             = "upper"
+reach_km         = 300
+
+
+[wikipedia_languages]
+class            = "attention"
+modality         = "informational"
+topic_tags       = ["attention", "wikipedia"]
+flavor           = "continuous"
+endpoint         = "https://dumps.wikimedia.org/other/pageviews/{start_dt:%Y/%Y-%m}/projectviews-{start_dt:%Y%m%d-%H}0000"
+cadence_seconds  = 1800
+status           = "nursery"
+notes            = "Wikimedia hourly projectviews (26 KB): Wikipedia views per language (desktop + mobile); CC0"
+
+[wikipedia_languages.fetch]
+kind             = "text_get"
+
+[wikipedia_languages.parse]
+format           = "wiki_projectviews"
+lookback_seconds = 10800   # the hour's file appears 1.2-2 h after it ends
+languages        = ["ar", "fa", "he", "tr", "ur", "hi", "uk", "ru", "zh", "ja", "ko", "de", "fr", "es", "pt", "it", "pl", "id", "vi", "bn"]
+
+[wikipedia_languages.geocode]
+strategy         = "project_entity"
+
+[wikipedia_languages.model]
+obs_scale        = 0.05
+level_var        = 1e-3
+time_scale       = 3600.0
+periods_seconds  = [86400, 604800]
+
+[wikipedia_languages.display]
+label            = "Wikipedia reading, by language"
+about            = "How much each language's Wikipedia is read, hourly: a jump is attention; a sudden fall can be a country's internet going down."
+unit             = " views/h"
+inverse          = "expm1"
+
+[cf_radar_netflows_ae]
+class            = "internet_health"
+modality         = "infrastructural"
+topic_tags       = ["internet", "traffic", "infrastructure"]
+flavor           = "continuous"
+endpoint         = "https://api.cloudflare.com/client/v4/radar/netflows/timeseries?dateRange=7d&aggInterval=15m&format=json&location=AE"
+cadence_seconds  = 900
+auth_env_var     = "WW_CLOUDFLARE_TOKEN"
+status           = "nursery"
+notes            = "Cloudflare Radar UAE traffic; the country's label-point cell (res 3, as IODA and the prober); CC BY-NC 4.0"
+
+[cf_radar_netflows_ae.parse]
+format           = "cloudflare_radar_timeseries"
+
+[cf_radar_netflows_ae.geocode]
+strategy         = "fixed_latlon"
+lat              = 23.4663
+lon              = 54.5473
+h3_resolution    = 3
+
+[cf_radar_netflows_ae.display]
+label            = "Internet traffic, UAE"
+about            = "Internet traffic in UAE as seen by Cloudflare, every 15 minutes."
+unit             = "% of 7-day peak"
+percent          = true
+
+[cf_radar_netflows_ae.alerts]
+tail             = "lower"
+reach_km         = 300
+
+[cf_radar_netflows_sa]
+class            = "internet_health"
+modality         = "infrastructural"
+topic_tags       = ["internet", "traffic", "infrastructure"]
+flavor           = "continuous"
+endpoint         = "https://api.cloudflare.com/client/v4/radar/netflows/timeseries?dateRange=7d&aggInterval=15m&format=json&location=SA"
+cadence_seconds  = 900
+auth_env_var     = "WW_CLOUDFLARE_TOKEN"
+status           = "nursery"
+notes            = "Cloudflare Radar Saudi Arabia traffic; the country's label-point cell (res 3, as IODA and the prober); CC BY-NC 4.0"
+
+[cf_radar_netflows_sa.parse]
+format           = "cloudflare_radar_timeseries"
+
+[cf_radar_netflows_sa.geocode]
+strategy         = "fixed_latlon"
+lat              = 23.8069
+lon              = 44.6996
+h3_resolution    = 3
+
+[cf_radar_netflows_sa.display]
+label            = "Internet traffic, Saudi Arabia"
+about            = "Internet traffic in Saudi Arabia as seen by Cloudflare, every 15 minutes."
+unit             = "% of 7-day peak"
+percent          = true
+
+[cf_radar_netflows_sa.alerts]
+tail             = "lower"
+reach_km         = 300
+
+[cf_radar_netflows_qa]
+class            = "internet_health"
+modality         = "infrastructural"
+topic_tags       = ["internet", "traffic", "infrastructure"]
+flavor           = "continuous"
+endpoint         = "https://api.cloudflare.com/client/v4/radar/netflows/timeseries?dateRange=7d&aggInterval=15m&format=json&location=QA"
+cadence_seconds  = 900
+auth_env_var     = "WW_CLOUDFLARE_TOKEN"
+status           = "nursery"
+notes            = "Cloudflare Radar Qatar traffic; the country's label-point cell (res 3, as IODA and the prober); CC BY-NC 4.0"
+
+[cf_radar_netflows_qa.parse]
+format           = "cloudflare_radar_timeseries"
+
+[cf_radar_netflows_qa.geocode]
+strategy         = "fixed_latlon"
+lat              = 25.2374
+lon              = 51.1435
+h3_resolution    = 3
+
+[cf_radar_netflows_qa.display]
+label            = "Internet traffic, Qatar"
+about            = "Internet traffic in Qatar as seen by Cloudflare, every 15 minutes."
+unit             = "% of 7-day peak"
+percent          = true
+
+[cf_radar_netflows_qa.alerts]
+tail             = "lower"
+reach_km         = 300
+
+[cf_radar_netflows_kw]
+class            = "internet_health"
+modality         = "infrastructural"
+topic_tags       = ["internet", "traffic", "infrastructure"]
+flavor           = "continuous"
+endpoint         = "https://api.cloudflare.com/client/v4/radar/netflows/timeseries?dateRange=7d&aggInterval=15m&format=json&location=KW"
+cadence_seconds  = 900
+auth_env_var     = "WW_CLOUDFLARE_TOKEN"
+status           = "nursery"
+notes            = "Cloudflare Radar Kuwait traffic; the country's label-point cell (res 3, as IODA and the prober); CC BY-NC 4.0"
+
+[cf_radar_netflows_kw.parse]
+format           = "cloudflare_radar_timeseries"
+
+[cf_radar_netflows_kw.geocode]
+strategy         = "fixed_latlon"
+lat              = 29.4136
+lon              = 47.314
+h3_resolution    = 3
+
+[cf_radar_netflows_kw.display]
+label            = "Internet traffic, Kuwait"
+about            = "Internet traffic in Kuwait as seen by Cloudflare, every 15 minutes."
+unit             = "% of 7-day peak"
+percent          = true
+
+[cf_radar_netflows_kw.alerts]
+tail             = "lower"
+reach_km         = 300
+
+[cf_radar_netflows_bh]
+class            = "internet_health"
+modality         = "infrastructural"
+topic_tags       = ["internet", "traffic", "infrastructure"]
+flavor           = "continuous"
+endpoint         = "https://api.cloudflare.com/client/v4/radar/netflows/timeseries?dateRange=7d&aggInterval=15m&format=json&location=BH"
+cadence_seconds  = 900
+auth_env_var     = "WW_CLOUDFLARE_TOKEN"
+status           = "nursery"
+notes            = "Cloudflare Radar Bahrain traffic; the country's label-point cell (res 3, as IODA and the prober); CC BY-NC 4.0"
+
+[cf_radar_netflows_bh.parse]
+format           = "cloudflare_radar_timeseries"
+
+[cf_radar_netflows_bh.geocode]
+strategy         = "fixed_latlon"
+lat              = 26.056
+lon              = 50.5548
+h3_resolution    = 3
+
+[cf_radar_netflows_bh.display]
+label            = "Internet traffic, Bahrain"
+about            = "Internet traffic in Bahrain as seen by Cloudflare, every 15 minutes."
+unit             = "% of 7-day peak"
+percent          = true
+
+[cf_radar_netflows_bh.alerts]
+tail             = "lower"
+reach_km         = 300
+
+[cf_radar_netflows_om]
+class            = "internet_health"
+modality         = "infrastructural"
+topic_tags       = ["internet", "traffic", "infrastructure"]
+flavor           = "continuous"
+endpoint         = "https://api.cloudflare.com/client/v4/radar/netflows/timeseries?dateRange=7d&aggInterval=15m&format=json&location=OM"
+cadence_seconds  = 900
+auth_env_var     = "WW_CLOUDFLARE_TOKEN"
+status           = "nursery"
+notes            = "Cloudflare Radar Oman traffic; the country's label-point cell (res 3, as IODA and the prober); CC BY-NC 4.0"
+
+[cf_radar_netflows_om.parse]
+format           = "cloudflare_radar_timeseries"
+
+[cf_radar_netflows_om.geocode]
+strategy         = "fixed_latlon"
+lat              = 22.1204
+lon              = 57.3366
+h3_resolution    = 3
+
+[cf_radar_netflows_om.display]
+label            = "Internet traffic, Oman"
+about            = "Internet traffic in Oman as seen by Cloudflare, every 15 minutes."
+unit             = "% of 7-day peak"
+percent          = true
+
+[cf_radar_netflows_om.alerts]
+tail             = "lower"
+reach_km         = 300
+
+[cf_radar_netflows_ir]
+class            = "internet_health"
+modality         = "infrastructural"
+topic_tags       = ["internet", "traffic", "infrastructure"]
+flavor           = "continuous"
+endpoint         = "https://api.cloudflare.com/client/v4/radar/netflows/timeseries?dateRange=7d&aggInterval=15m&format=json&location=IR"
+cadence_seconds  = 900
+auth_env_var     = "WW_CLOUDFLARE_TOKEN"
+status           = "nursery"
+notes            = "Cloudflare Radar Iran traffic; the country's label-point cell (res 3, as IODA and the prober); CC BY-NC 4.0"
+
+[cf_radar_netflows_ir.parse]
+format           = "cloudflare_radar_timeseries"
+
+[cf_radar_netflows_ir.geocode]
+strategy         = "fixed_latlon"
+lat              = 32.1662
+lon              = 54.9315
+h3_resolution    = 3
+
+[cf_radar_netflows_ir.display]
+label            = "Internet traffic, Iran"
+about            = "Internet traffic in Iran as seen by Cloudflare, every 15 minutes."
+unit             = "% of 7-day peak"
+percent          = true
+
+[cf_radar_netflows_ir.alerts]
+tail             = "lower"
+reach_km         = 300
+
+[cf_radar_netflows_il]
+class            = "internet_health"
+modality         = "infrastructural"
+topic_tags       = ["internet", "traffic", "infrastructure"]
+flavor           = "continuous"
+endpoint         = "https://api.cloudflare.com/client/v4/radar/netflows/timeseries?dateRange=7d&aggInterval=15m&format=json&location=IL"
+cadence_seconds  = 900
+auth_env_var     = "WW_CLOUDFLARE_TOKEN"
+status           = "nursery"
+notes            = "Cloudflare Radar Israel traffic; the country's label-point cell (res 3, as IODA and the prober); CC BY-NC 4.0"
+
+[cf_radar_netflows_il.parse]
+format           = "cloudflare_radar_timeseries"
+
+[cf_radar_netflows_il.geocode]
+strategy         = "fixed_latlon"
+lat              = 30.9111
+lon              = 34.8479
+h3_resolution    = 3
+
+[cf_radar_netflows_il.display]
+label            = "Internet traffic, Israel"
+about            = "Internet traffic in Israel as seen by Cloudflare, every 15 minutes."
+unit             = "% of 7-day peak"
+percent          = true
+
+[cf_radar_netflows_il.alerts]
+tail             = "lower"
+reach_km         = 300
+
+# --- the UAE -------------------------------------------------------------------------
+
+[uae_air_defence]
+class            = "security_reports"
+modality         = "physical"
+topic_tags       = ["security", "military", "uae"]
+flavor           = "count"
+endpoint         = "https://uaedefensemonitor.com/mod-reports.json"
+cadence_seconds  = 3600
+status           = "nursery"
+notes            = "UAE Defense Monitor (unofficial; publishes this JSON as a dataset): daily drones and cruise and ballistic missiles engaged by UAE air defences, from the UAE Ministry of Defence's statements; one row per day with engagements. Daily, not live"
+
+[uae_air_defence.parse]
+format           = "records"
+time_field       = "date"
+time_format      = "%Y-%m-%d"
+time_tz          = "+04:00"
+value_sum        = ["daily_uavs_engaged", "daily_cruise_missiles_engaged", "daily_ballistic_missiles_engaged"]
+min_value        = 1
+
+[uae_air_defence.geocode]
+strategy         = "fixed_latlon"
+lat              = 24.45
+lon              = 54.38
+h3_resolution    = 3
+
+[uae_air_defence.model]
+native_seconds   = 86400
+
+[uae_air_defence.display]
+label            = "UAE air defence engagements (MoD, via UAE Defense Monitor)"
+about            = "Drones and missiles the UAE's air defences engaged each day, from the Ministry of Defence's statements as compiled by the unofficial UAE Defense Monitor. Daily, a day behind: a record, not a warning."
+unit             = "engaged"
+
+[uae_air_defence.context]
+fields           = ["date", "daily_uavs_engaged", "daily_cruise_missiles_engaged", "daily_ballistic_missiles_engaged", "tweet_text", "source_url"]
+text             = "{date}|: {daily_uavs_engaged} drones|, {daily_cruise_missiles_engaged} cruise|, {daily_ballistic_missiles_engaged} ballistic missiles engaged"
+link             = "source_url"
+
+[uae_air_defence.alerts]
+every_event      = true    # each day with engagements is reported, once
+severity         = 0.8
+fresh_seconds    = 172800  # a day's statement comes the next day
+push_score       = 12      # among the most serious for someone in the UAE; not a wake-up (a day late)
+reach_km         = 300

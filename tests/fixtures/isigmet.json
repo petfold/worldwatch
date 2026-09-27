@@ -1,0 +1,134 @@
+[
+ {
+  "icaoId": "WAAA",
+  "firId": "WAAF",
+  "firName": "WAAF UJUNG PANDANG",
+  "receiptTime": "2026-09-27T13:20:28.928Z",
+  "validTimeFrom": 1790515200,
+  "validTimeTo": 1790536800,
+  "seriesId": "11",
+  "hazard": "VA",
+  "qualifier": "DUKONO",
+  "base": 0,
+  "top": 7000,
+  "geom": "AREA",
+  "coords": [
+   {
+    "lon": 127.867,
+    "lat": 1.667
+   },
+   {
+    "lon": 127.45,
+    "lat": 2.15
+   },
+   {
+    "lon": 128,
+    "lat": 2.333
+   },
+   {
+    "lon": 127.967,
+    "lat": 1.7
+   },
+   {
+    "lon": 127.867,
+    "lat": 1.667
+   }
+  ],
+  "dir": "NW",
+  "spd": "10",
+  "chng": "NC",
+  "rawSigmet": "WVID21 WAAA 271320\nWAAF SIGMET 11 VALID 271320/271920 WAAA-\nWAAF UJUNG PANDANG  FIR VA\nERUPTION MT DUKONO PSN N0142 E12754 VA CLD OBS AT 1300Z WI N0140\nE12752 - N0209 E12727 - N0220 E12800 - N0142 E12758 - N0140 E12752\nSFC/FL070 MOV NW 10KT NC="
+ },
+ {
+  "icaoId": "SEQU",
+  "firId": "SEFG",
+  "firName": "SEFG GUAYAQUIL",
+  "receiptTime": "2026-09-27T14:15:32.064Z",
+  "validTimeFrom": 1790518500,
+  "validTimeTo": 1790540100,
+  "seriesId": "3",
+  "hazard": "VA",
+  "qualifier": "REVENTADOR",
+  "base": 0,
+  "top": 16000,
+  "geom": "AREA",
+  "coords": [
+   {
+    "lon": -78,
+    "lat": 0
+   },
+   {
+    "lon": -77.633,
+    "lat": -0.067
+   },
+   {
+    "lon": -77.667,
+    "lat": -0.083
+   },
+   {
+    "lon": -78.017,
+    "lat": -0.05
+   },
+   {
+    "lon": -78,
+    "lat": 0
+   }
+  ],
+  "dir": "W",
+  "spd": "10",
+  "chng": null,
+  "rawSigmet": "WVEQ31 SEQU 271415\nSEFG SIGMET 3 VALID 271415/272015 SEGU-\nSEFG GUAYAQUIL FIR VA ERUPTION MT REVENTADOR PSN S0004 W07739\nVA CLD OBS AT 1330Z WI S0000 W07800 - S0004 W07738 - S0005 W07740 - \nS0003 W07801 - S0000 W07800 SFC/FL160 MOV W 10KT \nFCST AT 1930Z WI N0002 W07806 - S0004 W07739 - S0005 W07740 - S0002 \nW07807 - N0002 W07806="
+ },
+ {
+  "icaoId": "SBGL",
+  "firId": "SBCW",
+  "firName": "SBCW CURITIBA",
+  "receiptTime": "2026-09-27T14:39:56.395Z",
+  "validTimeFrom": 1790523000,
+  "validTimeTo": 1790537400,
+  "seriesId": "10",
+  "hazard": "TS",
+  "qualifier": "EMBD",
+  "base": null,
+  "top": 48000,
+  "geom": "AREA",
+  "coords": [
+   {
+    "lon": -57.45,
+    "lat": -30.25
+   },
+   {
+    "lon": -54.117,
+    "lat": -31.883
+   },
+   {
+    "lon": -53.967,
+    "lat": -32.267
+   },
+   {
+    "lon": -51.65,
+    "lat": -30.483
+   },
+   {
+    "lon": -50.317,
+    "lat": -28.133
+   },
+   {
+    "lon": -53.317,
+    "lat": -26.75
+   },
+   {
+    "lon": -55.367,
+    "lat": -28.317
+   },
+   {
+    "lon": -57.45,
+    "lat": -30.25
+   }
+  ],
+  "dir": "ENE",
+  "spd": "10",
+  "chng": "NC",
+  "rawSigmet": "WSBZ23 SBGL 271525\nSBCW SIGMET 10 VALID 271530/271930 SBCW - SBCW CURITIBA FIR EMBD TS FCST WI S3015 W05727 - S3153 W05407 - S3216 W05358 - S3029 W05139 - S2808 W05019 - S2645 W05319 - S2819 W05522 - S3015 W05727 TOP FL480 MOV ENE 10KT NC="
+ }
+]
