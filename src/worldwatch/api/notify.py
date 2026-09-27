@@ -42,6 +42,7 @@ class NtfyConfig:
     extreme_score: float = 15.0  # extreme (may wake, priority 5): at least this, confirmed
     extreme_per_week: int = 1  # and at most this many a week
     silent_until: int | None = None  # before this (epoch s), every push is silent (priority <= 2)
+    home: tuple[tuple[float, float], ...] = ()  # the operator's places: only events reaching one may wake
 
     def silent(self, now: float | None = None) -> bool:
         return self.silent_until is not None and (time.time() if now is None else now) < self.silent_until
@@ -61,7 +62,49 @@ class NtfyConfig:
             extreme_score=float(os.environ.get("WW_PUSH_EXTREME_SCORE", "15")),
             extreme_per_week=int(os.environ.get("WW_PUSH_EXTREME_PER_WEEK", "1")),
             silent_until=_parse_until(os.environ.get("WW_PUSH_SILENT_UNTIL")),
+            home=_parse_home(os.environ.get("WW_HOME")),
         )
+
+
+def _parse_home(value: str | None) -> tuple[tuple[float, float], ...]:
+    """WW_HOME: 'lat,lon' or several, 'lat,lon; lat,lon'."""
+    out = []
+    for part in (value or "").split(";"):
+        if part.strip():
+            lat, lon = (float(x) for x in part.split(","))
+            out.append((lat, lon))
+    return tuple(out)
+
+
+def in_reach(evidence: list[dict], sources: dict[str, SourceConfig] | None,
+             home: tuple[tuple[float, float], ...]) -> bool:
+    """Whether the event can affect one of the operator's places: a member whose
+    stanza gives a reach ([alerts] reach_km: km from its cell, or "global") that covers
+    one. global_sensors: that many independent cells of the stream agreeing make it
+    global (many radiation stations at once: a release, not a detector). Streams with
+    no reach (attention, news, markets) never do. No home configured: every event."""
+    import h3
+
+    from worldwatch.alerts.engine import policy
+
+    if not home:
+        return True
+    cells: dict[str, set[str]] = {}
+    for e in evidence:
+        cells.setdefault(e.get("stream_id", ""), set()).add(e.get("cell") or "")
+    for sid, cs in cells.items():
+        pol = policy((sources or {}).get(sid))
+        reach = pol.get("reach_km")
+        if reach is None:
+            continue
+        if reach == "global" or len(cs) >= int(pol.get("global_sensors", 10**9)):
+            return True
+        for c in cs:
+            if h3.is_valid_cell(c) and any(
+                    h3.great_circle_distance(h3.cell_to_latlng(c), p, unit="km") <= float(reach)
+                    for p in home):
+                return True
+    return False
 
 
 def _parse_until(value: str | None) -> int | None:
@@ -327,7 +370,9 @@ async def notify_alerts(
     The priority follows the alert's stage: unconfirmed (one modality) 3, confirmed
     (two or more, or a stanza marked extreme) 4, extreme (confirmed, scoring at least
     extreme_score) 5, which wakes, at most extreme_per_week a week (then 4). Extreme
-    ones skip the budget. An alert already pushed is pushed again, skipping the budget,
+    ones skip the budget. With cfg.home set, only events that can reach one of the
+    operator's places (in_reach) wake or go above 3: an earthquake across the world is
+    news, not an emergency. An alert already pushed is pushed again, skipping the budget,
     only when escalation has raised its stage: an early unconfirmed push, then an
     update at the higher priority as confirmation comes in."""
     if not alert_ids:
@@ -365,8 +410,12 @@ async def notify_alerts(
                     or _pushes_since(conn, ("alert", "extreme"), now - 86400) >= 2 * cfg.per_day):
                 held += 1
                 continue
-            priority = 5 if extreme else min(STAGE_PRIORITY[stage], 4)
-            prefix = STAGE_PREFIX[stage] if extreme or stage < 2 else "Confirmed"
+            near = in_reach(evidence, sources, cfg.home)
+            extreme = extreme and near  # waking is for what can reach you
+            priority = 5 if extreme else min(STAGE_PRIORITY[stage], 4 if near else 3)
+            prefix = STAGE_PREFIX[stage]
+            if not near:
+                prefix += ", far away"  # no distance: the push must not locate the operator
             if pushed is not None:
                 prefix += " (update)"
             try:

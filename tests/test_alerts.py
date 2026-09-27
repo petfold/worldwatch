@@ -389,3 +389,13 @@ def test_very_strong_readings_everywhere_are_our_vantage_point(db, sources):
     assert run_alerts(db, src, now=NOW) == []
     assert db.execute("SELECT detail FROM health WHERE component = 'net' AND event = 'vantage_suspect'"
                       ).fetchone()[0] == "regions=6"
+
+
+def test_news_never_escalates_an_alert(db, sources):
+    src = {"quake": _src(sources, "quake", "physical"),
+           "news": _with_policy(sources, "news", "informational", {"role": "context"})}
+    _surprise(db, "quake", _cellA(), 3, NOW, q=1 - 1e-11)
+    run_alerts(db, src, now=NOW)
+    _anomalous_series(db, "news", _cell_near_A(), q=1 - 1e-9)
+    assert run_alerts(db, src, now=NOW + BW) == []
+    assert db.execute("SELECT stage FROM alerts").fetchone()[0] == 0

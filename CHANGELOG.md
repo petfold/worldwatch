@@ -54,6 +54,25 @@ sibling projects, where the tag is what publishes.
   budget, at most once per stage. An alert held at first is pushed when
   confirmation lifts it into the budget. Schema v9 adds `alerts.stage`,
   `alerts.escalated_at` and `push_log.stage`.
+- **Reach: only what can affect you wakes you.** `WW_HOME` (one or more
+  places, in the server's env file only) and a `reach_km` per stanza's
+  `[alerts]`: km from the event's cell (quakes 300, weather warnings 200,
+  GDACS 500, a country's internet 300), or `"global"`. With `WW_HOME` set, an
+  extreme alert wakes (priority 5) only if an event in it reaches one of your
+  places; otherwise it is pushed at 3 at most, "far away" (no distance: the
+  push must not locate you). Streams with no reach (attention, news, markets)
+  never make an event near. Radiation networks reach 500 km, or everywhere
+  when 5 or more stations agree (`global_sensors`: a release, not a
+  detector).
+- **Authoritative sources can be extreme on their own.** `extreme = true` for
+  GDACS red (now `push_score` 15) and the radiation networks (independent
+  stations confirm each other). Until now nothing but two modalities could
+  wake, so neither a cyclone heading for home nor a radiation release could.
+
+### Fixed (unreleased features)
+
+- The escalation pass let news candidates confirm an alert; news is context,
+  never evidence (ADR 0001).
 
 ### Added
 

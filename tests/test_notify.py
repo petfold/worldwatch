@@ -365,3 +365,72 @@ async def test_an_early_alert_skips_the_ranking_but_not_the_daily_cap(db):
     cfg = NtfyConfig(server="http://n", topic="t", per_day=1)
     async with _client(lambda r: httpx.Response(200)) as client:
         assert await notify_alerts(db, [1, 2, 3], client=client, cfg=cfg, now=10_000) == 2
+
+
+# --- reach: only what can affect the operator may wake them
+
+
+def _reach_sources(sources):
+    import dataclasses
+
+    def with_alerts(sid, modality, pol):
+        base = sources["usgs_m45"]
+        return dataclasses.replace(base, stream_id=sid, modality=modality, extra={**base.extra, "alerts": pol})
+
+    return {
+        "quake": with_alerts("quake", "physical", {"reach_km": 300}),
+        "net": with_alerts("net", "infrastructural", {"reach_km": 300}),
+        "wiki": with_alerts("wiki", "informational", {}),
+        "rad": with_alerts("rad", "physical", {"reach_km": 500, "global_sensors": 5, "extreme": True}),
+    }
+
+
+DUBAI = ((25.2, 55.3),)
+
+
+def _cell(lat, lng, res=3):
+    import h3
+
+    return h3.latlng_to_cell(lat, lng, res)
+
+
+def test_in_reach(sources):
+    from worldwatch.api.notify import in_reach
+
+    src = _reach_sources(sources)
+    tokyo, bandar_abbas = _cell(35.7, 139.7), _cell(27.2, 56.3)  # 12 000 km, 250 km from Dubai
+    assert not in_reach([{"stream_id": "quake", "cell": tokyo}], src, DUBAI)
+    assert in_reach([{"stream_id": "quake", "cell": bandar_abbas}], src, DUBAI)
+    assert in_reach([{"stream_id": "quake", "cell": tokyo}], src, ())  # no home: everything
+    assert not in_reach([{"stream_id": "wiki", "cell": bandar_abbas}], src, DUBAI)  # attention has no reach
+    europe = [{"stream_id": "rad", "cell": _cell(50 + i / 10, 10 + i / 10, 10)} for i in range(5)]
+    assert not in_reach(europe[:4], src, DUBAI)  # a few stations: local
+    assert in_reach(europe, src, DUBAI)  # many at once: a release, worldwide
+
+
+async def test_an_extreme_event_far_away_does_not_wake(db, sources):
+    seen = []
+
+    def handler(request):
+        seen.append((int(request.headers["priority"]), request.headers["title"].split(":")[0]))
+        return httpx.Response(200)
+
+    src = _reach_sources(sources)
+    for aid, (lat, lng) in ((1, (35.7, 139.7)), (2, (27.2, 56.3))):  # Tokyo, then near Dubai
+        ev = [{"stream_id": s, "cell": _cell(lat, lng), "modality": m, "q_value": 1 - 1e-9, "presence_q": 1.0}
+              for s, m in (("quake", "physical"), ("net", "infrastructural"))]  # 2 x 17.4: extreme
+        db.execute("INSERT INTO alerts (alert_id, opened_at, status, severity, cell, scale, evidence, stage) "
+                   "VALUES (?, 10000, 'open', 0.95, ?, 0, ?, 2)", (aid, _cell(lat, lng), json.dumps(ev)))
+    db.commit()
+    cfg = NtfyConfig(server="http://n", topic="t", home=DUBAI)
+    async with _client(handler) as client:
+        assert await notify_alerts(db, [1, 2], client=client, cfg=cfg, sources=src, now=10_000) == 2
+    assert seen == [(3, "EXTREME, far away"), (5, "EXTREME")]  # Tokyo: news; the far one keeps the week's wake-up
+
+
+def test_home_parses_one_or_several_places(monkeypatch):
+    monkeypatch.setenv("WW_NTFY_TOPIC", "t")
+    monkeypatch.setenv("WW_HOME", "25.2,55.3; 47.5, 19.0")
+    assert NtfyConfig.from_env().home == ((25.2, 55.3), (47.5, 19.0))
+    monkeypatch.delenv("WW_HOME")
+    assert NtfyConfig.from_env().home == ()

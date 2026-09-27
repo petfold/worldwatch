@@ -482,6 +482,7 @@ def _escalations(
         ev = json.loads(r["evidence"])
         have = {(e.get("stream_id"), e.get("cell")) for e in ev}
         extra = [_member(c) for c in candidates if c.q_value is not None
+                 and policy(sources.get(c.stream_id)).get("role") != "context"  # news: never evidence
                  and (c.stream_id, c.cell) not in have and _within(c.cell, r["cell"])]
         if not extra:
             continue

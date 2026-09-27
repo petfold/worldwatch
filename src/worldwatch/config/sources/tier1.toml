@@ -185,6 +185,9 @@ fields           = ["event", "headline", "severity", "urgency", "certainty", "ar
 text             = "{event}| ({severity})|: {areaDesc}"
 # NWS alert ids are API URLs (JSON), not pages for people, so no link field
 
+[nws_severe_alerts.alerts]
+reach_km         = 200     # a warned area
+
 
 [safecast_radiation]
 class            = "radiation_station"
@@ -281,6 +284,9 @@ label            = "Internet traffic, world"
 unit             = "% of 7-day peak"
 percent          = true
 
+[cf_radar_netflows_global.alerts]
+reach_km         = "global"
+
 
 [cf_radar_netflows_gb]
 class            = "internet_health"
@@ -306,6 +312,9 @@ h3_resolution    = 2
 label            = "Internet traffic, UK"
 unit             = "% of 7-day peak"
 percent          = true
+
+[cf_radar_netflows_gb.alerts]
+reach_km         = 300
 
 
 [cf_radar_netflows_us]
@@ -333,6 +342,9 @@ label            = "Internet traffic, US"
 unit             = "% of 7-day peak"
 percent          = true
 
+[cf_radar_netflows_us.alerts]
+reach_km         = 300
+
 
 [cf_radar_netflows_jp]
 class            = "internet_health"
@@ -358,6 +370,9 @@ h3_resolution    = 2
 label            = "Internet traffic, Japan"
 unit             = "% of 7-day peak"
 percent          = true
+
+[cf_radar_netflows_jp.alerts]
+reach_km         = 300
 
 
 # --- Night lights: NASA Black Marble VNP46A2 ---------------------------------
@@ -402,6 +417,9 @@ unit             = " nW/cm²/sr"
 inverse          = "expm1"
 digits           = 1
 
+[night_lights_h17v03.alerts]
+reach_km         = 300     # a power outage
+
 
 [night_lights_h18v04]
 class            = "night_lights"
@@ -428,6 +446,9 @@ label            = "Night lights, France to N. Italy"
 unit             = " nW/cm²/sr"
 inverse          = "expm1"
 digits           = 1
+
+[night_lights_h18v04.alerts]
+reach_km         = 300
 
 
 [night_lights_h10v05]
@@ -456,6 +477,9 @@ unit             = " nW/cm²/sr"
 inverse          = "expm1"
 digits           = 1
 
+[night_lights_h10v05.alerts]
+reach_km         = 300
+
 
 [night_lights_h31v05]
 class            = "night_lights"
@@ -482,6 +506,9 @@ label            = "Night lights, Japan"
 unit             = " nW/cm²/sr"
 inverse          = "expm1"
 digits           = 1
+
+[night_lights_h31v05.alerts]
+reach_km         = 300
 
 
 # --- Radiation: EURDEP + German ODL (BfS open data, WFS GeoJSON) ------------
@@ -538,6 +565,9 @@ rank             = "value"
 text             = "{name}| ({id})|: {value} {unit}"
 
 [eurdep_gamma.alerts]
+reach_km         = 500
+global_sensors   = 5       # this many stations at once: a release, reach worldwide
+extreme          = true    # independent stations confirm each other
 single_source    = true
 min_sensors      = 2      # independent stations agreeing at once (ADR 0002 §C)
 q_tail           = 1e-4   # per reading; ~25k neighbour pairs x p^2 ≈ one false alarm / 6 months
@@ -583,6 +613,9 @@ rank             = "value"
 text             = "{name}| ({id})|: {value} {unit}"
 
 [bfs_odl_gamma.alerts]
+reach_km         = 500
+global_sensors   = 5
+extreme          = true
 single_source    = true
 min_sensors      = 2      # independent stations agreeing at once (ADR 0002 §C)
 q_tail           = 1e-4   # per reading; ~25k neighbour pairs x p^2 ≈ one false alarm / 6 months
@@ -624,6 +657,7 @@ text             = "M{mag}| {place}|, depth {depth_km:.0f} km|, PAGER {alert}|, 
 link             = "url"
 
 [usgs_significant.alerts]
+reach_km         = 300
 every_event      = true
 severity         = 0.95
 push_score       = 9   # significant earthquakes (USGS): usually pushed
@@ -657,6 +691,7 @@ fields           = ["event", "headline", "severity", "urgency", "certainty", "ar
 text             = "{event}| ({severity})|: {areaDesc}"
 
 [nws_extreme.alerts]
+reach_km         = 200
 every_event      = true
 severity         = 0.8   # priority 4: shown, but doesn't wake you
 push_score       = 6   # US-only warnings: the dashboard, not pushed
@@ -741,6 +776,7 @@ text             = "{country}| internet outage ({datasource})|, score {score}|, 
 link             = "url"
 
 [ioda_outage_events.alerts]
+reach_km         = 300
 every_event      = true
 severity         = 0.8   # priority 4: shown, doesn't wake
 fresh_seconds    = 3600  # long events are re-listed; alert only on newly started ones
@@ -778,6 +814,9 @@ unit             = "alerts"
 [ioda_alerts.context]
 fields           = ["country", "cc", "datasource", "level", "ratio"]
 text             = "{country}| {datasource} {level}|, at {ratio} of normal"
+
+[ioda_alerts.alerts]
+reach_km         = 300     # a country's internet
 
 
 # --- Our own active prober (ADR 0002 §E) -------------------------------------
@@ -822,6 +861,7 @@ label            = "Reachability (own probes)"
 unit             = "unreachable"
 
 [probe_reachability.alerts]
+reach_km         = 300
 single_source    = true     # our own measurement; confirmation is across a country's targets
 min_sensors      = 1        # one country cell already aggregates ~12 independent targets
 q_tail           = 1e-4
@@ -869,6 +909,9 @@ rank             = "mag"
 text             = "M{mag}| {place}|, depth {depth_km:.0f} km"
 link             = "url"
 
+[usgs_m45.alerts]
+reach_km         = 300     # strong shaking: a few hundred km from a large quake
+
 
 [emsc_m45]
 class            = "seismic_feed"
@@ -905,6 +948,9 @@ rank             = "mag"
 text             = "M{mag}| {flynn_region}|, depth {depth:.0f} km|, {auth}"
 link             = "url"
 
+[emsc_m45.alerts]
+reach_km         = 300
+
 
 # --- Global disasters: GDACS (EU JRC / UN OCHA) -----------------------------
 # Alert levels come from modelled population impact — authoritative. Red
@@ -939,10 +985,12 @@ text             = "{level}|: {name}"
 link             = "url"
 
 [gdacs_red.alerts]
+reach_km         = 500
+extreme          = true    # authoritative: confirmed; with push_score 15, may wake if near
 every_event      = true
 severity         = 0.95
 fresh_seconds    = 21600   # GDACS may publish hours after an event starts
-push_score       = 12   # a major international disaster: always among the most serious
+push_score       = 15   # a major international disaster: always among the most serious; extreme
 
 
 [gdacs_orange]
@@ -973,6 +1021,7 @@ text             = "{level}|: {name}"
 link             = "url"
 
 [gdacs_orange.alerts]
+reach_km         = 500     # a cyclone, a flood basin
 every_event      = true
 severity         = 0.8
 fresh_seconds    = 21600
@@ -1019,3 +1068,6 @@ unit             = "warnings"
 fields           = ["country", "cc", "title", "event", "level", "severity", "area", "url"]
 text             = "{title}"
 link             = "url"
+
+[meteoalarm_warnings.alerts]
+reach_km         = 200
