@@ -35,7 +35,10 @@ class NtfyConfig:
     topic: str
     token: str | None = None
     dashboard_url: str | None = None  # public dashboard; the push deep-links into it
-    max_per_hour: int = 10  # pushes in any rolling hour; then one digest, then quiet
+    per_day: int = 2  # the push budget: about this many a day, the most serious (never 2x in 24 h)
+    min_score: float = 8.0  # and never an alert scoring less (alerts.engine.alert_score)
+    extreme_score: float = 15.0  # extreme (may wake, priority 5): at least this, confirmed
+    extreme_per_week: int = 1  # and at most this many a week
     silent_until: int | None = None  # before this (epoch s), every push is silent (priority <= 2)
 
     def silent(self, now: float | None = None) -> bool:
@@ -51,7 +54,10 @@ class NtfyConfig:
             topic=topic,
             token=os.environ.get("WW_NTFY_TOKEN"),
             dashboard_url=(os.environ.get("WW_DASHBOARD_URL") or "").rstrip("/") or None,
-            max_per_hour=int(os.environ.get("WW_PUSH_MAX_PER_HOUR", "10")),
+            per_day=int(os.environ.get("WW_PUSH_PER_DAY", "2")),
+            min_score=float(os.environ.get("WW_PUSH_MIN_SCORE", "8")),
+            extreme_score=float(os.environ.get("WW_PUSH_EXTREME_SCORE", "15")),
+            extreme_per_week=int(os.environ.get("WW_PUSH_EXTREME_PER_WEEK", "1")),
             silent_until=_parse_until(os.environ.get("WW_PUSH_SILENT_UNTIL")),
         )
 
@@ -242,9 +248,13 @@ async def send_ntfy(
     alert: sqlite3.Row,
     conn: sqlite3.Connection | None = None,
     sources: dict[str, SourceConfig] | None = None,
+    extreme: bool | None = None,
 ) -> bool:
-    """Publish one alert to ntfy. Returns True on success."""
+    """Publish one alert to ntfy. Returns True on success. extreme: whether it may wake
+    the operator (priority 5); others are pushed at 3 at most (None: as formatted)."""
     title, message, priority, tags = format_alert(alert, conn, sources)
+    if extreme is not None:
+        priority = 5 if extreme else min(priority, 3)
     if cfg.silent():  # ntfy 2: no sound, no vibration; still listed
         priority = min(priority, 2)
     headers = {
@@ -274,25 +284,23 @@ async def send_ntfy(
     return True
 
 
-async def send_digest(client: httpx.AsyncClient, cfg: NtfyConfig, held: int) -> bool:
-    """The one push that says pushes are paused (the rate limit was reached)."""
-    headers = {"Title": "Worldwatch: pushes paused", "Priority": "2" if cfg.silent() else "3",
-               "Tags": "hourglass"}
-    if cfg.dashboard_url:
-        headers["Click"] = cfg.dashboard_url
-    if cfg.token:
-        headers["Authorization"] = f"Bearer {cfg.token}"
-    message = (f"More than {cfg.max_per_hour} alerts within an hour ({held} held back so far). "
-               "Further alerts are on the dashboard; pushes resume when the rate falls.")
-    resp = await client.post(f"{cfg.server}/{cfg.topic}", content=message.encode(),
-                             headers=headers, timeout=15.0)
-    resp.raise_for_status()
-    return True
+def _pushes_since(conn: sqlite3.Connection, kinds: tuple[str, ...], since: int) -> int:
+    marks = ",".join("?" * len(kinds))
+    return int(conn.execute(f"SELECT COUNT(*) FROM push_log WHERE kind IN ({marks}) AND ts >= ?",
+                            (*kinds, since)).fetchone()[0])
 
 
-def _pushes_since(conn: sqlite3.Connection, kind: str, since: int) -> int:
-    return int(conn.execute("SELECT COUNT(*) FROM push_log WHERE kind = ? AND ts >= ?",
-                            (kind, since)).fetchone()[0])
+def _budget_threshold(conn: sqlite3.Connection, cfg: NtfyConfig,
+                      sources: dict[str, SourceConfig] | None, now: int) -> float:
+    """The score an alert needs to be pushed: the floor, or the week's (per_day × 7)-th
+    highest alert score if that is higher, so that about per_day a day go out, the most
+    serious, however many alerts there are."""
+    from worldwatch.alerts.engine import alert_score
+
+    scores = sorted((alert_score(json.loads(r["evidence"]), sources)[0] for r in conn.execute(
+        "SELECT evidence FROM alerts WHERE opened_at >= ?", (now - 7 * 86400,))), reverse=True)
+    k = cfg.per_day * 7
+    return max(cfg.min_score, scores[k - 1] if len(scores) >= k else cfg.min_score)
 
 
 async def notify_alerts(
@@ -303,10 +311,15 @@ async def notify_alerts(
     sources: dict[str, SourceConfig] | None = None,
     now: int | None = None,
 ) -> int:
-    """Push each alert id. Returns the count delivered. No-op (health-logged)
-    when no channel is configured. At most cfg.max_per_hour alert pushes in any
-    rolling hour; the first alert past that sends one digest instead ("pushes
-    paused"), the rest are held (recorded, and on the dashboard, not pushed)."""
+    """Push the alerts that make the budget. Returns the count delivered. No-op
+    (health-logged) when no channel is configured.
+
+    The budget: an alert is pushed only if its score (alerts.engine.alert_score) is
+    among the most serious, at least _budget_threshold (about cfg.per_day a day), and
+    fewer than 2 × per_day went out in the last 24 h. Extreme ones (confirmed by two
+    modalities or a stanza marked extreme, scoring at least extreme_score) are pushed
+    at priority 5, at most extreme_per_week a week; the rest at 3 at most. The others
+    are held: recorded, and on the dashboard, not pushed."""
     if not alert_ids:
         return 0
     cfg = cfg or NtfyConfig.from_env()
@@ -319,27 +332,26 @@ async def notify_alerts(
         alert_ids,
     ).fetchall()
 
+    from worldwatch.alerts.engine import alert_score
+
     now = int(time.time()) if now is None else now
     owns_client = client is None
     client = client or httpx.AsyncClient()
     delivered = held = 0
     try:
         for alert in rows:
-            if _pushes_since(conn, "alert", now - 3600) >= cfg.max_per_hour:
+            score, _, eligible = alert_score(json.loads(alert["evidence"]), sources)
+            extreme = (eligible and score >= cfg.extreme_score
+                       and _pushes_since(conn, ("extreme",), now - 7 * 86400) < cfg.extreme_per_week)
+            if not extreme and (score < _budget_threshold(conn, cfg, sources, now)
+                                or _pushes_since(conn, ("alert", "extreme"), now - 86400) >= 2 * cfg.per_day):
                 held += 1
-                if _pushes_since(conn, "digest", now - 3600) == 0:
-                    try:
-                        await send_digest(client, cfg, held)
-                        conn.execute("INSERT INTO push_log (ts, alert_id, kind) VALUES (?, NULL, 'digest')", (now,))
-                        conn.commit()
-                    except httpx.HTTPError as e:
-                        record_health(conn, "notify", "push_error", f"digest: {e}")
                 continue
             try:
-                if await send_ntfy(client, cfg, alert, conn, sources):
+                if await send_ntfy(client, cfg, alert, conn, sources, extreme=extreme):
                     delivered += 1
-                    conn.execute("INSERT INTO push_log (ts, alert_id, kind) VALUES (?, ?, 'alert')",
-                                 (now, alert["alert_id"]))
+                    conn.execute("INSERT INTO push_log (ts, alert_id, kind) VALUES (?, ?, ?)",
+                                 (now, alert["alert_id"], "extreme" if extreme else "alert"))
                     conn.commit()
             except httpx.HTTPError as e:
                 record_health(conn, "notify", "push_error", f"alert={alert['alert_id']}: {e}")

@@ -403,3 +403,37 @@ def _insert_alert(
         (now, min(1.0, severity), region, scale, evidence),
     )
     return int(cur.lastrowid)  # type: ignore[arg-type]
+
+
+# --- how serious an alert is: what the push budget ranks by ---------------------------------
+
+SCORE_P_FLOOR = 1e-15  # q_values this extreme are indistinguishable anyway
+
+
+def alert_score(evidence: list[dict], sources: dict[str, SourceConfig] | None) -> tuple[float, int, bool]:
+    """(score, modalities, extreme-eligible) of an alert's evidence.
+
+    score: how improbable the evidence is under normal conditions, −log10 of each
+    independent cell's two-sided tail p (the strongest per stream and cell), summed;
+    an every-item feed's member counts its stanza's push_score instead (default 5).
+    Confirmation by independent kinds of measurement multiplies it: × the number of
+    modalities, when two or more. extreme-eligible: two modalities or more, or a
+    member whose stanza says extreme = true (score thresholds are the notifier's).
+    """
+    per_cell: dict[tuple[str, str], float] = {}
+    feed = 0.0
+    extreme = False
+    for e in evidence:
+        pol = policy((sources or {}).get(e.get("stream_id", "")))
+        extreme = extreme or bool(pol.get("extreme"))
+        q = e.get("q_value")
+        if q is None:
+            if e.get("kind") == "source_alert":
+                feed += float(pol.get("push_score", 5.0))
+            continue
+        p = max(2.0 * min(float(q), 1.0 - float(q)), SCORE_P_FLOOR)
+        key = (e.get("stream_id", ""), e.get("cell", ""))
+        per_cell[key] = max(per_cell.get(key, 0.0), -math.log10(p))
+    modalities = len({e.get("modality") for e in evidence})
+    score = (sum(per_cell.values()) + feed) * (modalities if modalities >= 2 else 1)
+    return score, modalities, extreme or modalities >= 2

@@ -25,10 +25,19 @@ sibling projects, where the tag is what publishes.
     taken for our vantage point, a `vantage_suspect` health record instead of
     alerts (the prober: 5);
   - every-item feeds may set `cooldown_seconds` too (IODA: 6 h);
-  - pushes are capped at `WW_PUSH_MAX_PER_HOUR` (10) in any rolling hour; the
-    first past it sends one "pushes paused" digest, the rest stay on the
-    dashboard (a `push_log` table, schema v9).
-  Replayed over that day's alerts: 29 pushes instead of 387.
+  - a push budget: an alert is pushed only if it is among the most serious,
+    by `alert_score` (how improbable its evidence is, −log10 p over independent
+    cells, times the number of modalities confirming it; every-item feeds by
+    their stanza's `push_score`): at least `WW_PUSH_MIN_SCORE` (8) and the
+    week's (`WW_PUSH_PER_DAY` × 7)-th highest score, so about 2 a day, and never
+    more than twice that in 24 h. The rest stay on the dashboard (a `push_log`
+    table, schema v9).
+  - priority 5 (the one that may wake the operator) only for extreme alerts:
+    confirmed by two modalities (or a stanza marked `extreme`) and scoring at
+    least `WW_PUSH_EXTREME_SCORE` (15), at most `WW_PUSH_EXTREME_PER_WEEK` (1);
+    every other push at priority 3 at most.
+  Replayed over the alerts so far (395 in about 20 hours): 3 pushes, no
+  wake-up.
 
 ### Added
 

@@ -175,7 +175,7 @@ async def test_notify_alerts_delivers(db):
         count["n"] += 1
         return httpx.Response(200)
 
-    cfg = NtfyConfig(server="https://n", topic="t")
+    cfg = NtfyConfig(server="https://n", topic="t", min_score=0)  # delivery, not the budget
     async with _client(handler) as client:
         delivered = await notify_alerts(db, [5, 6], client=client, cfg=cfg)
 
@@ -200,7 +200,7 @@ async def test_notify_alerts_handles_push_error(db):
     def handler(request):
         return httpx.Response(500)
 
-    cfg = NtfyConfig(server="https://n", topic="t")
+    cfg = NtfyConfig(server="https://n", topic="t", min_score=0)  # delivery, not the budget
     async with _client(handler) as client:
         delivered = await notify_alerts(db, [7], client=client, cfg=cfg)
 
@@ -226,22 +226,64 @@ def test_ntfy_config_from_env(monkeypatch):
 # --- limits: the rate cap with one digest, and silent pushes (2026-09-27: 387 pushes in a day)
 
 
-async def test_pushes_beyond_the_hourly_limit_send_one_digest_then_nothing(db):
+def _value_alert(db, alert_id, q, modalities=("physical",), opened_at=10_000):
+    ev = [{"stream_id": f"s{m}", "cell": f"c{k}", "modality": m, "q_value": q, "presence_q": 1.0}
+          for k, m in enumerate(modalities)]
+    db.execute("INSERT INTO alerts (alert_id, opened_at, status, severity, cell, scale, evidence) "
+               "VALUES (?, ?, 'open', 0.85, '8226', 0, ?)", (alert_id, opened_at, json.dumps(ev)))
+    db.commit()
+
+
+async def test_only_the_most_serious_alerts_are_pushed(db):
     posts = []
 
     def handler(request):
-        posts.append(dict(request.headers))
+        posts.append(int(request.headers["priority"]))
         return httpx.Response(200)
 
-    for i in range(1, 8):
-        _alert(db, i, f"82{i:02d}", 0.8, [{"stream_id": "quake", "modality": "physical", "q_value": 0.999}])
-    cfg = NtfyConfig(server="http://n", topic="t", max_per_hour=3)
+    # scores: -log10 of the two-sided tail p; the floor is 8
+    for i, q in enumerate([1 - 1e-3, 1 - 1e-5, 1 - 1e-7, 1 - 1e-9, 1 - 1e-10], start=1):
+        _value_alert(db, i, q)
+    cfg = NtfyConfig(server="http://n", topic="t")
     async with _client(handler) as client:
-        assert await notify_alerts(db, [1, 2, 3, 4, 5], client=client, cfg=cfg, now=10_000) == 3
-        assert await notify_alerts(db, [6], client=client, cfg=cfg, now=10_600) == 0  # still held
-        assert await notify_alerts(db, [7], client=client, cfg=cfg, now=10_000 + 3601) == 1  # an hour on
-    titles = [p["title"] for p in posts]
-    assert titles.count("Worldwatch: pushes paused") == 1 and len(posts) == 5
+        assert await notify_alerts(db, [1, 2, 3, 4, 5], client=client, cfg=cfg, now=10_000) == 2
+    assert posts == [3, 3]  # the two above the floor, at normal priority: no waking
+
+
+async def test_the_daily_cap_holds_even_serious_alerts(db):
+    for i in range(1, 7):
+        _value_alert(db, i, 1 - 1e-10)
+    cfg = NtfyConfig(server="http://n", topic="t", per_day=2)
+    async with _client(lambda r: httpx.Response(200)) as client:
+        assert await notify_alerts(db, list(range(1, 7)), client=client, cfg=cfg, now=10_000) == 4
+        assert await notify_alerts(db, [], client=client, cfg=cfg, now=10_000) == 0
+
+
+async def test_the_budget_threshold_rises_on_a_busy_week(db):
+    """A week of 30 strong alerts: only about per_day × 7 of the strongest can be pushed."""
+    for i in range(1, 31):
+        _value_alert(db, i, 1 - 10.0 ** -(9 + i / 10), opened_at=10_000 - i * 3600)
+    from worldwatch.api.notify import _budget_threshold
+
+    cfg = NtfyConfig(server="http://n", topic="t", per_day=2)
+    thr = _budget_threshold(db, cfg, None, now=10_000)
+    assert 9 < thr < 12  # the 14th highest of scores 9.1 .. 12.0, above the floor of 8
+
+
+async def test_extreme_alerts_wake_only_when_confirmed_and_rarely(db):
+    posts = []
+
+    def handler(request):
+        posts.append(int(request.headers["priority"]))
+        return httpx.Response(200)
+
+    _value_alert(db, 1, 1 - 1e-12)  # one modality, score 12: pushed, not waking
+    _value_alert(db, 2, 1 - 1e-9, modalities=("physical", "infrastructural"))  # 2 x 2 x 9 = 36: extreme
+    _value_alert(db, 3, 1 - 1e-9, modalities=("physical", "infrastructural"))  # extreme, but the week's one is used
+    cfg = NtfyConfig(server="http://n", topic="t")
+    async with _client(handler) as client:
+        await notify_alerts(db, [1, 2, 3], client=client, cfg=cfg, now=10_000)
+    assert posts == [3, 5, 3]
 
 
 async def test_silent_until_caps_the_priority(db):

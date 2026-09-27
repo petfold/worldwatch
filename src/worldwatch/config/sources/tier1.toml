@@ -626,6 +626,7 @@ link             = "url"
 [usgs_significant.alerts]
 every_event      = true
 severity         = 0.95
+push_score       = 9   # significant earthquakes (USGS): usually pushed
 
 
 [nws_extreme]
@@ -658,6 +659,7 @@ text             = "{event}| ({severity})|: {areaDesc}"
 [nws_extreme.alerts]
 every_event      = true
 severity         = 0.8   # priority 4: shown, but doesn't wake you
+push_score       = 6   # US-only warnings: the dashboard, not pushed
 
 
 # --- Earthquakes, pushed: EMSC seismicportal WebSocket ----------------------
@@ -743,6 +745,7 @@ every_event      = true
 severity         = 0.8   # priority 4: shown, doesn't wake
 fresh_seconds    = 3600  # long events are re-listed; alert only on newly started ones
 cooldown_seconds = 21600    # one alert per region per outage (6 h): IODA re-reports an ongoing one
+push_score       = 5   # outage events: the dashboard; the prober's own evidence scores
 
 
 # IODA's per-signal alerts, as a count stream per country: corroborating
@@ -939,6 +942,7 @@ link             = "url"
 every_event      = true
 severity         = 0.95
 fresh_seconds    = 21600   # GDACS may publish hours after an event starts
+push_score       = 12   # a major international disaster: always among the most serious
 
 
 [gdacs_orange]
@@ -972,6 +976,7 @@ link             = "url"
 every_event      = true
 severity         = 0.8
 fresh_seconds    = 21600
+push_score       = 8   # GDACS orange: pushed when the day is quiet
 
 
 # --- European severe weather: MeteoAlarm (EUMETNET) --------------------------
