@@ -64,6 +64,17 @@ sibling projects, where the tag is what publishes.
   never make an event near. Radiation networks reach 500 km, or everywhere
   when 5 or more stations agree (`global_sensors`: a release, not a
   detector).
+- **Alerts are about harm (ADR 0004).** A stanza's `tail = "upper"` or
+  `"lower"` makes the harmless direction no evidence: radiation, unreachable
+  probes, earthquake and warning counts count only upwards, internet traffic
+  only downwards; night lights both ways (dark: power cuts; bright: fires).
+  `harm_levels` in the source's units, judged by the notifier from the
+  observed value: a signal below its floor does not count for pushing (an
+  alert of nothing else stays on the dashboard, never pushed), and a confirmed
+  level raises the stage and skips the budget. Radiation: 0.3 µSv/h (above
+  natural background), 1, 100, 1000 µSv/h (the IAEA levels for restricting
+  food, relocation, evacuation). Earthquakes: M6, M7 (M7+ may wake where it
+  can reach). Pushes and reports show each signal's harm level.
 - **A report page per alert**, `/alert/<id>`; tapping a push opens it (and
   the dashboard's alert card links to it). Rendered on request from the
   database, nothing stored: what and where (country or sea by name), when,

@@ -33,6 +33,8 @@ from worldwatch.alerts.engine import (
     DEFAULT_RECENT_SECONDS,
     Anomaly,
     cusum_step,
+    tail_extremity,
+    tail_of,
 )
 from worldwatch.config.loader import SourceConfig
 from worldwatch.ingest.models import Observation
@@ -248,7 +250,7 @@ class LiveScorer:
             out.append(Anomaly(
                 stream_id=sid, cell=cell, scale=NATIVE_SCALE, bin_start=st.last_bin,
                 q_value=st.last_q, presence_q=1.0, precision=1.0, modality=cfg.modality,
-                extremity=max(st.last_q, 1 - st.last_q), evidence=st.s,
+                extremity=tail_extremity(st.last_q, tail_of(cfg)), evidence=st.s,
                 bin_seconds=native_seconds(cfg),
             ))
         return out
@@ -257,7 +259,7 @@ class LiveScorer:
 
     def _observe(self, sid: str, cell: str, bin_start: int, q: float) -> None:
         st = self._series.setdefault((sid, cell), _Series())
-        st.s = cusum_step(st.s, q, self.k)
+        st.s = cusum_step(st.s, q, self.k, tail_of(self.sources.get(sid)))
         st.last_bin, st.last_q = bin_start, q
 
     def _restore_cusum(self, now: int) -> None:

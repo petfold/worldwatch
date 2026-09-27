@@ -191,6 +191,7 @@ text             = "{event}| ({severity})|: {areaDesc}"
 # NWS alert ids are API URLs (JSON), not pages for people, so no link field
 
 [nws_severe_alerts.alerts]
+tail             = "upper"   # fewer is harmless: only a rise is evidence
 reach_km         = 200     # a warned area
 
 
@@ -293,6 +294,7 @@ unit             = "% of 7-day peak"
 percent          = true
 
 [cf_radar_netflows_global.alerts]
+tail             = "lower"   # a drop is the outage: only a fall is evidence
 reach_km         = "global"
 
 
@@ -323,6 +325,7 @@ unit             = "% of 7-day peak"
 percent          = true
 
 [cf_radar_netflows_gb.alerts]
+tail             = "lower"   # a drop is the outage: only a fall is evidence
 reach_km         = 300
 
 
@@ -353,6 +356,7 @@ unit             = "% of 7-day peak"
 percent          = true
 
 [cf_radar_netflows_us.alerts]
+tail             = "lower"   # a drop is the outage: only a fall is evidence
 reach_km         = 300
 
 
@@ -383,6 +387,7 @@ unit             = "% of 7-day peak"
 percent          = true
 
 [cf_radar_netflows_jp.alerts]
+tail             = "lower"   # a drop is the outage: only a fall is evidence
 reach_km         = 300
 
 
@@ -581,6 +586,14 @@ rank             = "value"
 text             = "{name}| ({id})|: {value} {unit}"
 
 [eurdep_gamma.alerts]
+# harm (ADR 0004): dose rate, µSv/h. Below 0.3 is natural background almost everywhere
+# (this network: median 0.09, 99% below 0.20); 1, 100 and 1000 are the IAEA default
+# operational intervention levels (GSG-2): restrict local food, relocate, evacuate.
+harm_levels      = [[0.3, "above natural background"], [1.0, "above 1 µSv/h, the IAEA level for restricting local food"], [100.0, "above 100 µSv/h, the IAEA level for relocation"], [1000.0, "above 1000 µSv/h, the IAEA level for evacuation"]]
+harm_below       = "within natural background"
+harm_confirmed   = 2       # 1 µSv/h at min_sensors stations: Confirmed, past the budget
+harm_extreme     = 3       # 100 µSv/h: Extreme
+tail             = "upper"   # fewer is harmless: only a rise is evidence
 reach_km         = 500
 global_sensors   = 5       # this many stations at once: a release, reach worldwide
 extreme          = true    # independent stations confirm each other
@@ -630,6 +643,14 @@ rank             = "value"
 text             = "{name}| ({id})|: {value} {unit}"
 
 [bfs_odl_gamma.alerts]
+# harm (ADR 0004): dose rate, µSv/h. Below 0.3 is natural background almost everywhere
+# (this network: median 0.09, 99% below 0.20); 1, 100 and 1000 are the IAEA default
+# operational intervention levels (GSG-2): restrict local food, relocate, evacuate.
+harm_levels      = [[0.3, "above natural background"], [1.0, "above 1 µSv/h, the IAEA level for restricting local food"], [100.0, "above 100 µSv/h, the IAEA level for relocation"], [1000.0, "above 1000 µSv/h, the IAEA level for evacuation"]]
+harm_below       = "within natural background"
+harm_confirmed   = 2       # 1 µSv/h at min_sensors stations: Confirmed, past the budget
+harm_extreme     = 3       # 100 µSv/h: Extreme
+tail             = "upper"   # fewer is harmless: only a rise is evidence
 reach_km         = 500
 global_sensors   = 5
 extreme          = true
@@ -838,6 +859,7 @@ fields           = ["country", "cc", "datasource", "level", "ratio"]
 text             = "{country}| {datasource} {level}|, at {ratio} of normal"
 
 [ioda_alerts.alerts]
+tail             = "upper"   # fewer is harmless: only a rise is evidence
 reach_km         = 300     # a country's internet
 
 
@@ -884,6 +906,7 @@ about            = "Worldwatch's own probes: whether time servers and RIPE Atlas
 unit             = "unreachable"
 
 [probe_reachability.alerts]
+tail             = "upper"   # fewer is harmless: only a rise is evidence
 reach_km         = 300
 single_source    = true     # our own measurement; confirmation is across a country's targets
 min_sensors      = 1        # one country cell already aggregates ~12 independent targets
@@ -934,6 +957,15 @@ text             = "M{mag}| {place}|, depth {depth_km:.0f} km"
 link             = "url"
 
 [usgs_m45.alerts]
+# harm (ADR 0004): magnitude of the largest quake in the bin. Below M6 a count is still
+# evidence (swarms come before main shocks), so no floor; M7+ confirmed skips the budget,
+# and may wake where it can reach (reach_km).
+harm_levels      = [[6.0, "M6+, can be damaging"], [7.0, "M7+, a major earthquake"]]
+harm_below       = "below M6"
+harm_floor       = false
+harm_confirmed   = 2
+harm_extreme     = 2
+tail             = "upper"   # fewer is harmless: only a rise is evidence
 reach_km         = 300     # strong shaking: a few hundred km from a large quake
 
 
@@ -974,6 +1006,15 @@ text             = "M{mag}| {flynn_region}|, depth {depth:.0f} km|, {auth}"
 link             = "url"
 
 [emsc_m45.alerts]
+# harm (ADR 0004): magnitude of the largest quake in the bin. Below M6 a count is still
+# evidence (swarms come before main shocks), so no floor; M7+ confirmed skips the budget,
+# and may wake where it can reach (reach_km).
+harm_levels      = [[6.0, "M6+, can be damaging"], [7.0, "M7+, a major earthquake"]]
+harm_below       = "below M6"
+harm_floor       = false
+harm_confirmed   = 2
+harm_extreme     = 2
+tail             = "upper"   # fewer is harmless: only a rise is evidence
 reach_km         = 300
 
 
@@ -1098,4 +1139,5 @@ text             = "{title}"
 link             = "url"
 
 [meteoalarm_warnings.alerts]
+tail             = "upper"   # fewer is harmless: only a rise is evidence
 reach_km         = 200

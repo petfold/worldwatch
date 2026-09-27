@@ -96,14 +96,37 @@ class Anomaly:
     bin_seconds: int | None = None
 
 
-def surprisal(q: float) -> float:
-    """−ln of the two-sided tail p-value of a PIT q_value (Exp(1) under H0)."""
-    p = 2.0 * min(q, 1.0 - q)
-    return -math.log(min(1.0, max(p, 1e-300)))
+def tail_of(cfg: SourceConfig | None) -> str:
+    """The stanza's [alerts] tail: "upper" or "lower" when only that direction can do
+    harm (a dose rate, unreachable targets; night lights, traffic), else "both"."""
+    return str(policy(cfg).get("tail", "both"))
 
 
-def cusum_step(s: float, q: float, k: float = DEFAULT_CUSUM_DRIFT) -> float:
-    return max(0.0, s + surprisal(q) - k)
+def tail_p(q: float, tail: str = "both") -> float:
+    """The tail p-value of a PIT q_value in the direction that counts: one-sided for
+    "upper"/"lower" (a reading in the other direction is evidence of nothing), else
+    two-sided. Uniform under H0 either way, so the CUSUM stays calibrated."""
+    p = 1.0 - q if tail == "upper" else q if tail == "lower" else 2.0 * min(q, 1.0 - q)
+    return min(1.0, max(p, 1e-300))
+
+
+def one_sided_p(q: float, tail: str = "both") -> float:
+    """The p-value of the tail the reading is in (for "both", the nearer tail)."""
+    return tail_p(q, tail) if tail != "both" else min(q, 1.0 - q)
+
+
+def tail_extremity(q: float, tail: str = "both") -> float:
+    """Tail depth 0.5..1 in the direction that counts."""
+    return max(0.5, q) if tail == "upper" else max(0.5, 1.0 - q) if tail == "lower" else max(q, 1.0 - q)
+
+
+def surprisal(q: float, tail: str = "both") -> float:
+    """−ln of the tail p-value of a PIT q_value (Exp(1) under H0)."""
+    return -math.log(tail_p(q, tail))
+
+
+def cusum_step(s: float, q: float, k: float = DEFAULT_CUSUM_DRIFT, tail: str = "both") -> float:
+    return max(0.0, s + surprisal(q, tail) - k)
 
 
 def single_source_threshold(pol: dict, k: float = DEFAULT_CUSUM_DRIFT) -> float:
@@ -178,12 +201,13 @@ def candidates_from_rows(
         silence = [r for r in rs if r["q_value"] is None]
         if data:
             s = 0.0
+            tail = tail_of(cfg)
             for r in data:
-                s = cusum_step(s, float(r["q_value"]), k)
+                s = cusum_step(s, float(r["q_value"]), k, tail)
             latest = data[-1]
             if s >= h and latest["bin_start"] >= now - recent_seconds:
                 q = float(latest["q_value"])
-                out.append(_anomaly(cfg, cell, scale, latest, max(q, 1 - q), s))
+                out.append(_anomaly(cfg, cell, scale, latest, tail_extremity(q, tail), s))
         if silence and silence[-1]["presence_q"] >= presence_tail:
             if sum(r["presence_q"] >= presence_tail for r in silence) >= persist_n:
                 out.append(_anomaly(cfg, cell, scale, silence[-1], float(silence[-1]["presence_q"])))
@@ -539,13 +563,14 @@ def alert_score(evidence: list[dict], sources: dict[str, SourceConfig] | None) -
         q = e.get("q_value")
         if e.get("kind") == "source_alert":
             issued = True
-        elif pol.get("extreme") and q is not None and min(float(q), 1.0 - float(q)) <= float(pol.get("q_tail", 1e-4)):
+        elif pol.get("extreme") and q is not None and one_sided_p(float(q), str(pol.get("tail", "both"))) \
+                <= float(pol.get("q_tail", 1e-4)):
             strong[e.get("stream_id", "")].add(e.get("cell") or "")
         if q is None:
             if e.get("kind") == "source_alert":
                 feed += float(pol.get("push_score", 5.0))
             continue
-        p = max(2.0 * min(float(q), 1.0 - float(q)), SCORE_P_FLOOR)
+        p = max(tail_p(float(q), str(pol.get("tail", "both"))), SCORE_P_FLOOR)
         key = (e.get("stream_id", ""), e.get("cell", ""))
         per_cell[key] = max(per_cell.get(key, 0.0), -math.log10(p))
     modalities = len({e.get("modality") for e in evidence})

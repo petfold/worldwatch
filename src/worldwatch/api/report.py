@@ -46,16 +46,16 @@ def render_report(conn: sqlite3.Connection, alert_id: int,
                   sources: dict[str, SourceConfig] | None) -> str | None:
     from worldwatch.alerts.engine import alert_score, stage_of
     from worldwatch.api.notify import (STAGE_PREFIX, _news_in_area, _parse_home, _stories,
-                                       certainty, format_alert, in_reach)
+                                       certainty, effective, format_alert, in_reach)
 
     row = conn.execute("SELECT * FROM alerts WHERE alert_id = ?", (alert_id,)).fetchone()
     if row is None:
         return None
     sources = sources or {}
     ev = json.loads(row["evidence"])
-    stage = int(row["stage"])
+    stage, _, hm = effective(conn, ev, sources)
     title, _, _, _ = format_alert(row, conn, sources)
-    score, kinds, _ = alert_score(ev, sources)
+    score, kinds, _ = alert_score(hm.kept or ev, sources)
     home = _parse_home(os.environ.get("WW_HOME"))
     pushes = conn.execute("SELECT ts, kind, stage FROM push_log WHERE alert_id = ? ORDER BY ts",
                           (alert_id,)).fetchall()
@@ -73,14 +73,15 @@ def render_report(conn: sqlite3.Connection, alert_id: int,
         ("When", f"opened {_e(_t(row['opened_at']))}" + (
             f"<br>last escalated {_e(_t(row['escalated_at']))}" if row["escalated_at"] else "")),
         ("Certainty", f"<b class=stage{stage}>{_e(STAGE_PREFIX.get(stage, '?'))}</b> — "
-                      f"{_e(certainty(ev, sources, stage).split(': ', 1)[-1])}<br><span class=muted>"
+                      f"{_e(certainty(hm.kept or ev, sources, stage).split(': ', 1)[-1])}<br><span class=muted>"
                       f"{_e(_next_step(stage))}</span>"),
         ("Surprise", f"score {score:.1f} <span class=muted>— the sum over independent signals of "
                      f"−log10 p (p: the chance of a reading this extreme in normal times), × the "
                      f"number of kinds of measurement when two or more ({kinds} here)</span>"),
         ("Severity", f"{sev:.2f} <span class=muted>(0–1: how far into the tails the signals are and "
                      f"how many kinds agree; not a measure of harm)</span>"),
-        ("Reach", _e(("can reach your places" if in_reach(ev, sources, home) else
+        ("Harm", _harm_text(hm)),
+        ("Reach", _e(("can reach your places" if in_reach(hm.kept or ev, sources, home) else
                       "far from your places: it will not wake you") if home else
                      "no home set (WW_HOME): any extreme alert may wake")),
         ("Status", _e(row["status"]) + (f", labelled {_e(row['label'])}" if row["label"] else "")),
@@ -101,10 +102,11 @@ def render_report(conn: sqlite3.Connection, alert_id: int,
 
     # --- signals
     cards = []
-    for e in ev:
+    for i, e in enumerate(ev):
         cfg = sources.get(e["stream_id"])
         disp = context.display_for(e["stream_id"], cfg)
         facts = []
+        mh = hm.members.get(i)
         if e.get("kind") == "source_alert":
             facts.append("issued by the source")
         elif e.get("q_value") is None:
@@ -117,6 +119,9 @@ def render_report(conn: sqlite3.Connection, alert_id: int,
                 usual = context.typical(conn, e["stream_id"], cfg, e["cell"], e.get("bin_start"))
                 if usual:
                     facts.append(f"usually {_e(usual)}")
+            if mh is not None:
+                facts.append(f"harm: <b>{_e(mh.label)}</b>" + (" <span class=muted>(does not count for alerting)</span>"
+                                                               if e in hm.dropped else ""))
             facts.append(f"<span class=muted>q {e['q_value']:.6g}"
                          + (f", accumulated evidence {e['evidence']}" if e.get("evidence") is not None else "")
                          + "</span>")
@@ -146,8 +151,21 @@ def render_report(conn: sqlite3.Connection, alert_id: int,
     )
 
 
+def _harm_text(hm) -> str:
+    if not hm.members:
+        return "<span class=muted>no harm levels for these sources: judged on surprise alone</span>"
+    out = _e(hm.label)
+    if hm.peak > hm.level:
+        out += f"<br><span class=muted>one reading: {_e(hm.peak_label)} (not confirmed by other sensors)</span>"
+    if hm.dropped:
+        out += (f"<br><span class=muted>{len(hm.dropped)} signal(s) below harm levels: unusual, "
+                f"but not counted for alerting</span>")
+    return out
+
+
 def _next_step(stage: int) -> str:
-    return {0: "Becomes Confirmed when an independent kind of measurement agrees in the same region.",
+    return {-1: "Every reading is below the level where it could do harm: kept for the record, never pushed.",
+            0: "Becomes Confirmed when an independent kind of measurement agrees in the same region.",
             1: "Becomes Extreme if the confirmed evidence grows very improbable by chance.",
             2: "The highest stage: only these may wake you, and only if they can reach your places."}.get(stage, "")
 

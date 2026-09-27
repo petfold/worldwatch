@@ -399,3 +399,30 @@ def test_news_never_escalates_an_alert(db, sources):
     _anomalous_series(db, "news", _cell_near_A(), q=1 - 1e-9)
     assert run_alerts(db, src, now=NOW + BW) == []
     assert db.execute("SELECT stage FROM alerts").fetchone()[0] == 0
+
+
+# --- tail direction: for what can only harm one way, the other way is no evidence
+
+
+def test_a_one_sided_stream_ignores_the_harmless_direction(db, sources):
+    up = _with_policy(sources, "rad", "physical", {"tail": "upper"})
+    net = _with_policy(sources, "net", "infrastructural", {})
+    src = {"rad": up, "net": net}
+    _anomalous_series(db, "rad", _cellA(), q=0.001)  # unusually low dose: not evidence
+    _anomalous_series(db, "net", _cell_near_A())
+    assert run_alerts(db, src, now=NOW) == []
+    db.execute("DELETE FROM surprise")
+    _anomalous_series(db, "rad", _cellA(), q=0.999)  # unusually high: evidence
+    _anomalous_series(db, "net", _cell_near_A())
+    assert len(run_alerts(db, src, now=NOW + BW)) == 1
+
+
+def test_one_sided_tails_stay_calibrated():
+    import random
+
+    from worldwatch.alerts.engine import surprisal
+
+    rng = random.Random(1)
+    for tail in ("upper", "lower", "both"):
+        m = sum(surprisal(rng.random(), tail) for _ in range(20000)) / 20000
+        assert abs(m - 1.0) < 0.03  # Exp(1) under H0 either way

@@ -28,7 +28,24 @@ STORIES_PER_SIGNAL = 2
 MAX_MESSAGE_BYTES = 3900  # ntfy's limit is 4096; leave room for the footer
 MAX_ACTIONS = 3  # ntfy allows three buttons
 STAGE_PRIORITY = {0: 3, 1: 4, 2: 5}  # unconfirmed, confirmed, extreme (5 wakes)
-STAGE_PREFIX = {0: "Unconfirmed", 1: "Confirmed", 2: "EXTREME"}
+STAGE_PREFIX = {-1: "Below harm levels", 0: "Unconfirmed", 1: "Confirmed", 2: "EXTREME"}
+
+
+def effective(conn: sqlite3.Connection | None, evidence: list[dict],
+              sources: dict[str, SourceConfig] | None, extreme_score: float | None = None):
+    """(stage, score, harm) of an alert as a person should see it: the evidence that
+    counts (harm.assess drops signals below their harm floor), its stage from that,
+    raised by a confirmed harm level. Stage -1: nothing left, below harm levels."""
+    from worldwatch.alerts.engine import alert_score, extreme_score as env_extreme
+    from worldwatch.api import harm as harm_mod
+
+    h = harm_mod.assess(conn, evidence, sources)
+    if not h.kept:
+        return -1, 0.0, h
+    score, _, confirmed = alert_score(h.kept, sources)
+    limit = env_extreme() if extreme_score is None else extreme_score
+    stage = (2 if score >= limit else 1) if confirmed else 0
+    return max(stage, h.stage), score, h
 
 
 @dataclass(frozen=True)
@@ -135,9 +152,7 @@ def format_alert(
     evidence = json.loads(alert["evidence"])
     severity = float(alert["severity"])
     sources = sources or {}
-    from worldwatch.alerts.engine import stage_of
-
-    stage = max(int(alert["stage"]) if "stage" in alert.keys() else 0, stage_of(evidence, sources))
+    stage, _, hm = effective(conn, evidence, sources)
     is_silence = (bool(evidence) and all(e.get("q_value") is None for e in evidence)
                   and not any(e.get("kind") == "source_alert" for e in evidence))
 
@@ -152,7 +167,7 @@ def format_alert(
     title = _ascii_text(f"WW {prefix or STAGE_PREFIX.get(stage, 'Alert')}: {what} - {where}")
 
     lines = [
-        certainty(evidence, sources, stage) + f" (severity {severity:.2f})",
+        certainty(hm.kept or evidence, sources, stage) + f" (severity {severity:.2f})",
         f"Where: {context.place(cells[0])}",
     ]
     main = context.place_names(cells[:1])
@@ -163,8 +178,9 @@ def format_alert(
     if starts:
         lines.append(f"Latest data: {time.strftime('%Y-%m-%d %H:%M UTC', time.gmtime(max(starts)))}")
     lines.append("")
-    for e in evidence[:MAX_EVIDENCE_LINES]:
-        lines.append(_evidence_line(e, conn, sources))
+    for i, e in enumerate(evidence[:MAX_EVIDENCE_LINES]):
+        mh = hm.members.get(i)
+        lines.append(_evidence_line(e, conn, sources) + (f" [{mh.label}]" if mh else ""))
         for rec in _stories(e, conn, sources):
             cfg = sources.get(e["stream_id"])
             url = evstore.link(cfg, rec)
@@ -197,6 +213,8 @@ def certainty(evidence: list[dict], sources: dict[str, SourceConfig] | None, sta
     issued = [e for e in evidence if e.get("kind") == "source_alert"]
     streams = {e["stream_id"] for e in evidence}
     word = STAGE_PREFIX.get(stage, "Alert")
+    if stage == -1:
+        return f"{word}: unusual, but every reading is below the level where it could do harm"
     if issued:
         label = context.display_for(issued[0]["stream_id"], sources.get(issued[0]["stream_id"])).label
         why = f"issued by {label}"
@@ -370,10 +388,10 @@ def _budget_threshold(conn: sqlite3.Connection, cfg: NtfyConfig,
     """The score an alert needs to be pushed: the floor, or the week's (per_day × 7)-th
     highest alert score if that is higher, so that about per_day a day go out, the most
     serious, however many alerts there are."""
-    from worldwatch.alerts.engine import alert_score
-
-    scores = sorted((alert_score(json.loads(r["evidence"]), sources)[0] for r in conn.execute(
-        "SELECT evidence FROM alerts WHERE opened_at >= ?", (now - 7 * 86400,))), reverse=True)
+    scores = sorted((sc for r in conn.execute("SELECT evidence FROM alerts WHERE opened_at >= ?",
+                                             (now - 7 * 86400,))
+                     for st, sc, _ in [effective(conn, json.loads(r["evidence"]), sources, cfg.extreme_score)]
+                     if st >= 0), reverse=True)  # harmless alerts are not competition
     k = cfg.per_day * 7
     return max(cfg.min_score, scores[k - 1] if len(scores) >= k else cfg.min_score)
 
@@ -391,7 +409,9 @@ async def notify_alerts(
 
     The budget: an alert is pushed only if its score (alerts.engine.alert_score) is
     among the most serious, at least _budget_threshold (about cfg.per_day a day), and
-    fewer than 2 × per_day went out in the last 24 h. An early (unconfirmed) alert,
+    fewer than 2 × per_day went out in the last 24 h. Harm (api.harm) comes first:
+    signals below their harm floor do not count (an alert of nothing else is not
+    pushed), and a confirmed harm level raises the stage and skips the budget. An early (unconfirmed) alert,
     one very strong signal (alerts.engine.PROVISIONAL_SCORE), skips the score test but
     not the 24-h cap. The others are held: recorded, and on the dashboard, not pushed.
 
@@ -415,17 +435,19 @@ async def notify_alerts(
         alert_ids,
     ).fetchall()
 
-    from worldwatch.alerts.engine import alert_score
-
     now = int(time.time()) if now is None else now
     owns_client = client is None
     client = client or httpx.AsyncClient()
-    delivered = held = 0
+    delivered = held = harmless = 0
+    threshold = None  # the budget's, computed once, if needed
     try:
         for alert in rows:
-            evidence = json.loads(alert["evidence"])
-            score, _, confirmed = alert_score(evidence, sources)
-            stage = max(int(alert["stage"]), (2 if score >= cfg.extreme_score else 1) if confirmed else 0)
+            stage, score, hm = effective(conn, json.loads(alert["evidence"]), sources, cfg.extreme_score)
+            if stage < 0:
+                harmless += 1  # interesting, on the dashboard; not for alerting
+                continue
+            evidence = hm.kept
+            urgent = hm.stage >= 1  # a confirmed harm level: past the budget
             pushed = conn.execute("SELECT MAX(stage) FROM push_log WHERE alert_id = ?",
                                   (alert["alert_id"],)).fetchone()[0]
             if pushed is not None and stage <= pushed:
@@ -433,11 +455,13 @@ async def notify_alerts(
             extreme = (stage == 2
                        and _pushes_since(conn, ("extreme",), now - 7 * 86400) < cfg.extreme_per_week)
             early = stage == 0 and any(e.get("kind") == "provisional" for e in evidence)
-            if pushed is None and not extreme and (
-                    (not early and score < _budget_threshold(conn, cfg, sources, now))
-                    or _pushes_since(conn, ("alert", "extreme"), now - 86400) >= 2 * cfg.per_day):
-                held += 1
-                continue
+            if pushed is None and not extreme and not urgent:
+                if threshold is None and not early:
+                    threshold = _budget_threshold(conn, cfg, sources, now)
+                if ((not early and score < threshold)
+                        or _pushes_since(conn, ("alert", "extreme"), now - 86400) >= 2 * cfg.per_day):
+                    held += 1
+                    continue
             near = in_reach(evidence, sources, cfg.home)
             extreme = extreme and near  # waking is for what can reach you
             priority = 5 if extreme else min(STAGE_PRIORITY[stage], 4 if near else 3)
@@ -457,5 +481,6 @@ async def notify_alerts(
     finally:
         if owns_client:
             await client.aclose()
-    record_health(conn, "notify", "ok", f"delivered={delivered}" + (f" held={held}" if held else ""))
+    record_health(conn, "notify", "ok", f"delivered={delivered}" + (f" held={held}" if held else "")
+                  + (f" harmless={harmless}" if harmless else ""))
     return delivered

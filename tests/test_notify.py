@@ -447,3 +447,74 @@ def test_an_extreme_stanza_confirms_only_on_its_own_terms(sources):
     assert not alert_score(weak, src)[2]  # low readings, merged in: nothing confirmed
     assert not alert_score(one, src)[2]  # one station: could be the detector
     assert alert_score(two, src)[2]  # two independent stations beyond the network's threshold
+
+
+# --- harm levels: unusual is not the same as dangerous
+
+
+RAD_HARM = {"tail": "upper", "min_sensors": 2, "extreme": True, "q_tail": 1e-4, "harm_value": "max", "harm_floor": True,
+            "harm_levels": [[0.3, "above natural background"], [1.0, "restrict food"], [100.0, "relocate"]],
+            "harm_below": "within natural background", "harm_confirmed": 2, "harm_extreme": 3}
+
+
+def _rad_sources(sources):
+    import dataclasses
+
+    base = sources["eurdep_gamma"]
+    rad = dataclasses.replace(base, stream_id="rad", extra={**base.extra, "alerts": RAD_HARM})
+    net = dataclasses.replace(sources["usgs_m45"], stream_id="net", modality="infrastructural",
+                              extra={**sources["usgs_m45"].extra, "alerts": {}})
+    return {"rad": rad, "net": net}
+
+
+def _rad_alert(db, aid, doses, net=False):
+    import math
+
+    ev = []
+    for i, dose in enumerate(doses):
+        cell = _cell(40 + aid + i / 10, 10, 10)  # each alert its own stations
+        db.execute("INSERT INTO bins (stream_id, cell, scale, bin_start, n, vmin, vmax, vmean, m2) "
+                   "VALUES ('rad', ?, 0, 9000, 1, ?, ?, ?, 0)", (cell, math.log(dose), math.log(dose), math.log(dose)))
+        ev.append({"stream_id": "rad", "cell": cell, "scale": 0, "bin_start": 9000, "modality": "physical",
+                   "q_value": 1 - 1e-6, "presence_q": 1.0})
+    if net:
+        ev.append({"stream_id": "net", "cell": _cell(40 + aid, 10), "modality": "infrastructural",
+                   "q_value": 1 - 1e-6, "presence_q": 1.0})
+    db.execute("INSERT INTO alerts (alert_id, opened_at, status, severity, cell, scale, evidence) "
+               "VALUES (?, 10000, 'open', 0.9, ?, 0, ?)", (aid, _cell(40 + aid, 10), json.dumps(ev)))
+    db.commit()
+
+
+def test_harm_levels_of_a_radiation_alert(db, sources):
+    from worldwatch.api.notify import effective
+
+    src = _rad_sources(sources)
+    _rad_alert(db, 1, [0.12, 0.15])  # unusual, but natural background
+    _rad_alert(db, 2, [0.5, 0.6])  # above background: counts, like any signal (two stations: confirmed)
+    _rad_alert(db, 3, [1.5, 0.2])  # one station above the food level: could be the detector, unconfirmed
+    _rad_alert(db, 4, [1.5, 2.0])  # two: confirmed harm
+    _rad_alert(db, 5, [150.0, 200.0])  # relocation level: extreme
+    ev = lambda a: json.loads(db.execute("SELECT evidence FROM alerts WHERE alert_id = ?", (a,)).fetchone()[0])
+    stages = {a: effective(db, ev(a), src, 15.0)[0] for a in range(1, 6)}
+    assert stages == {1: -1, 2: 1, 3: 0, 4: 1, 5: 2}
+    h = effective(db, ev(3), src, 15.0)[2]
+    assert h.level == 0 and h.peak == 2 and len(h.dropped) == 1  # one station: its peak, not confirmed; the 0.2 drops
+    assert effective(db, ev(4), src, 15.0)[2].level == 2
+
+
+async def test_an_alert_below_harm_levels_is_not_pushed_and_harm_skips_the_budget(db, sources):
+    seen = []
+
+    def handler(request):
+        seen.append(request.headers["title"].split(":")[0])
+        return httpx.Response(200)
+
+    src = _rad_sources(sources)
+    _rad_alert(db, 1, [0.12, 0.15], net=True)  # the radiation drops out: one kind left, unconfirmed
+    _rad_alert(db, 2, [0.12, 0.15])  # nothing left
+    _rad_alert(db, 3, [1.5, 2.0])  # confirmed harm
+    cfg = NtfyConfig(server="http://n", topic="t", per_day=1, min_score=100)  # a budget nothing makes
+    async with _client(handler) as client:
+        assert await notify_alerts(db, [1, 2, 3], client=client, cfg=cfg, sources=src, now=10_000) == 1
+    assert seen == ["WW Confirmed"]
+    assert "harmless=1" in db.execute("SELECT detail FROM health WHERE component = 'notify'").fetchone()[0]
