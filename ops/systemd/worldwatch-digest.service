@@ -1,0 +1,9 @@
+[Unit]
+Description=Worldwatch weekly report (every significant deviation, an LLM's analysis)
+
+[Service]
+Slice=worldwatch.slice
+Type=oneshot
+User=worldwatch
+EnvironmentFile=/etc/worldwatch/worldwatch.env
+ExecStart=/opt/worldwatch/.venv/bin/python -m worldwatch digest

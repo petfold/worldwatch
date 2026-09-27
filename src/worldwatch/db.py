@@ -204,6 +204,17 @@ MIGRATIONS: list[str] = [
     ALTER TABLE alerts ADD COLUMN escalated_at INTEGER;
     CREATE INDEX IF NOT EXISTS push_log_ts ON push_log (ts);
     """,
+    # v10 — the weekly report (worldwatch.api.digest): the facts an LLM read, and its
+    # analysis; a few tens of KB a week.
+    """
+    CREATE TABLE IF NOT EXISTS digests (
+        week_end    INTEGER PRIMARY KEY,
+        created_at  INTEGER NOT NULL,
+        digest      TEXT NOT NULL,
+        analysis    TEXT,
+        model       TEXT
+    );
+    """,
 ]
 
 

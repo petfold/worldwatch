@@ -203,6 +203,17 @@ def create_app(
             raise HTTPException(status_code=404, detail="alert not found")
         return JSONResponse(_alert_dict(row, conn, cfgs))
 
+    @app.get("/digest")
+    @app.get("/digest/{week_end}")
+    def digest_page(week_end: int | None = None, conn: sqlite3.Connection = Depends(get_conn)) -> HTMLResponse:
+        """The weekly report (latest, or the week ending at week_end)."""
+        from worldwatch.api.digest import render_digest
+
+        page = render_digest(conn, week_end)
+        if page is None:
+            raise HTTPException(status_code=404, detail="no weekly report yet")
+        return HTMLResponse(page)
+
     @app.get("/alert/{alert_id}")
     def alert_report(alert_id: int, conn: sqlite3.Connection = Depends(get_conn)) -> HTMLResponse:
         """The alert's full report (a push's tap opens it)."""

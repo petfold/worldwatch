@@ -7,6 +7,8 @@
   detect       alert + notify sweep over the surprise archive (a timer; the
                safety net — scoring happens live in `poll`, ADR 0002)
   presence     one presence pass (a timer)
+  digest       the weekly report: every significant deviation, an LLM's analysis,
+               one silent push (a weekly timer; once per week)
   api          long-running: serve the dashboard + API (a service)
 
 The pass commands are idempotent and crash-safe, so timers can fire them
@@ -76,6 +78,12 @@ def cmd_consolidate(
 
 def live_stream_ids(sources: dict[str, SourceConfig]) -> set[str]:
     return {sid for sid, c in sources.items() if c.status != "retired" and c.flavor in SUPPORTED_FLAVORS}
+
+
+def cmd_digest(conn: sqlite3.Connection, sources: dict[str, SourceConfig]) -> int | None:
+    from worldwatch.api.digest import run_digest
+
+    return run_digest(conn, sources)
 
 
 def cmd_presence(conn: sqlite3.Connection, sources: dict[str, SourceConfig]) -> int:
@@ -152,7 +160,7 @@ def cmd_api() -> None:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="worldwatch")
     sub = parser.add_subparsers(dest="command", required=True)
-    for name in ("init", "poll", "consolidate", "detect", "presence", "api"):
+    for name in ("init", "poll", "consolidate", "detect", "presence", "digest", "api"):
         sub.add_parser(name)
     args = parser.parse_args(argv)
 
@@ -182,6 +190,9 @@ def main(argv: list[str] | None = None) -> int:
         print(f"silence rows: {cmd_presence(conn, sources)}")
     elif args.command == "detect":
         print(json.dumps(cmd_detect(conn, sources)))
+    elif args.command == "digest":
+        week = cmd_digest(conn, sources)
+        print(f"digest for the week to {week}" if week else "this week's digest exists")
     elif args.command == "poll":
         with contextlib.suppress(KeyboardInterrupt):
             asyncio.run(cmd_poll(conn, sources))

@@ -64,6 +64,16 @@ sibling projects, where the tag is what publishes.
   never make an event near. Radiation networks reach 500 km, or everywhere
   when 5 or more stations agree (`global_sensors`: a release, not a
   detector).
+- **A weekly report, read by an LLM.** Every Monday (`worldwatch digest`, a
+  weekly timer): every deviation of the week beyond 1 in 1,000, in both
+  directions and whether alerted or not (a drop in a pollutant can mean a
+  factory stopped), per stream against what chance alone gives, with what was
+  observed against the usual level, harm levels, the week's alerts by stage,
+  silences and feed health. With `WW_ANTHROPIC_API_KEY`, an LLM analyses it:
+  what stands out, explanations, coincidences, likely artifacts, what to
+  check. Stored in `digests` (schema v10, a few tens of KB a week), at
+  `/digest`, announced by one silent push. The past week's facts came to
+  17 KB (~5,000 tokens).
 - **Alerts are about harm (ADR 0004).** A stanza's `tail = "upper"` or
   `"lower"` makes the harmless direction no evidence: radiation, unreachable
   probes, earthquake and warning counts count only upwards, internet traffic
