@@ -278,3 +278,51 @@ def test_every_event_alerts_from_fresh_ingestion(db, sources):
     assert run_alerts(db, src, now=NOW + 300) == []  # one alert per observation
     write_observations(db, [Observation("sig", quake_cell, NOW, 5.9)], now=NOW + 400)
     assert len(run_alerts(db, src, now=NOW + 600)) == 1  # a new item alerts again
+
+
+# --- floods (2026-09-27: the prober re-alerted each round, and in 43 countries at once) --------
+
+PROBE = {"single_source": True, "min_sensors": 1, "q_tail": 1e-4, "region_resolution": 3}
+
+
+def test_a_persisting_single_source_anomaly_opens_one_alert_per_episode(db, sources):
+    src = {"probe": _with_policy(sources, "probe", "infrastructural", PROBE, status="active")}
+    cell = h3.latlng_to_cell(48.2, 16.4, 3)
+    opened = []
+    for i in range(30):  # a 2-minute round for an hour: each round re-scored, the window moving on
+        t = NOW + 120 * i
+        _surprise(db, "probe", cell, -1, t, q=1 - 1e-6)
+        opened += run_alerts(db, src, now=t)
+    assert len(opened) == 1
+    later = NOW + 7 * 3600  # past the 6-hour cooldown: a new episode may alert
+    _surprise(db, "probe", cell, -1, later, q=1 - 1e-6)
+    assert len(run_alerts(db, src, now=later)) == 1
+
+
+def test_failures_everywhere_at_once_are_our_vantage_point_not_alerts(db, sources):
+    src = {"probe": _with_policy(sources, "probe", "infrastructural", {**PROBE, "max_regions": 3},
+                                 status="active")}
+    places = [(48.2, 16.4), (40.4, -3.7), (52.5, 13.4), (35.7, 139.7), (-33.9, 151.2)]
+    for lat, lng in places:
+        _surprise(db, "probe", h3.latlng_to_cell(lat, lng, 3), -1, NOW, q=1 - 1e-6)
+    assert run_alerts(db, src, now=NOW) == []
+    assert db.execute("SELECT detail FROM health WHERE component = 'probe' AND event = 'vantage_suspect'"
+                      ).fetchone()[0] == "regions=5"
+    # a few at once are still real
+    db.execute("DELETE FROM surprise")
+    for lat, lng in places[:2]:
+        _surprise(db, "probe", h3.latlng_to_cell(lat, lng, 3), -1, NOW + 60, q=1 - 1e-6)
+    assert len(run_alerts(db, src, now=NOW + 60)) == 2
+
+
+def test_every_event_cooldown_holds_back_re_reports_of_one_ongoing_outage(db, sources):
+    pol = {"every_event": True, "severity": 0.8, "fresh_seconds": 3600, "cooldown_seconds": 21600}
+    src = {"ioda": _with_policy(sources, "ioda", "infrastructural", pol, status="active")}
+    cell = h3.latlng_to_cell(48.2, 16.4, 3)
+    opened = []
+    for i in range(6):  # the same outage reported again every 30 minutes
+        t = NOW + 1800 * i
+        db.execute("INSERT INTO seen (stream_id, cell, ts, first_seen) VALUES (?, ?, ?, ?)", ("ioda", cell, t, t))
+        db.commit()
+        opened += run_alerts(db, src, now=t)
+    assert len(opened) == 1

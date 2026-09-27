@@ -13,6 +13,29 @@ sibling projects, where the tag is what publishes.
 
 ### Fixed
 
+- **387 pushes in one day (2026-09-27; 8 the day before).** 370 were the
+  reachability prober's: its probes "failed" in up to 43 countries at once
+  (09:20-09:45 UTC), a fault at our end, and each country was re-alerted every
+  2-minute round (~7 alerts each), because a single-source alert was suppressed
+  only by one opened after the current evidence's window, which moves on each
+  round; IODA re-reported one ongoing outage every 30 minutes. Now:
+  - single-source streams alert once per region per episode: none again within
+    `cooldown_seconds` (default 6 h);
+  - `max_regions` in a single-source stanza: more regions alerting at once is
+    taken for our vantage point, a `vantage_suspect` health record instead of
+    alerts (the prober: 5);
+  - every-item feeds may set `cooldown_seconds` too (IODA: 6 h);
+  - pushes are capped at `WW_PUSH_MAX_PER_HOUR` (10) in any rolling hour; the
+    first past it sends one "pushes paused" digest, the rest stay on the
+    dashboard (a `push_log` table, schema v9).
+  Replayed over that day's alerts: 29 pushes instead of 387.
+
+### Added
+
+- `WW_PUSH_SILENT_UNTIL` (an ISO date/time, UTC, or epoch seconds): until then
+  every push goes out at ntfy priority 2 at most (no sound, no vibration;
+  still listed).
+
 - **Coinbase streams dropped together every hour or two** ("keepalive ping
   timeout"; our event loop was verified running, and reconnects met
   "connection reset by peer"): Coinbase doesn't answer pings reliably. Its

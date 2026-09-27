@@ -23,9 +23,16 @@ Two layers:
    - single_source = true: may alert alone when ≥ min_sensors distinct cells
      of the stream in one region each carry evidence of a single reading at
      p ≤ q_tail (h = −ln q_tail − k): "confirm in space before time".
-     Nursery streams are capped below waking severity.
+     Nursery streams are capped below waking severity. One alert per region
+     and stream per episode: none again within cooldown_seconds (6 h), however
+     the evidence's window moves on. max_regions: when more regions than that
+     alert at once, the fault is more likely at our end (a prober losing its
+     network fails everywhere at once) than in all of them: a health record
+     (vantage_suspect), no alerts.
    - every_event = true: authoritative feeds alert on each newly ingested
-     item (read from the `seen` keys), one alert per region per observation.
+     item (read from the `seen` keys), one alert per region per observation;
+     with cooldown_seconds, none again for the region within it (a feed that
+     re-reports one ongoing outage every poll).
 
 Check-then-insert runs under BEGIN IMMEDIATE, so the live path and the sweep
 can both run without opening the same alert twice (guardrail 7).
@@ -56,6 +63,7 @@ DEFAULT_CORR_RESOLUTION = 2
 DEFAULT_LOOKBACK_SECONDS = 24 * 3600
 DEFAULT_SINGLE_SOURCE_Q_TAIL = 1e-4
 DEFAULT_PER_STREAM_QUOTA = 3  # cells a stream may contribute to one region's evidence
+DEFAULT_COOLDOWN_SECONDS = 6 * 3600  # single-source: no second alert per region and stream within this
 
 
 @dataclass
@@ -257,15 +265,23 @@ def _single_source_alerts(
         by_region: dict[str, list[Anomaly]] = defaultdict(list)
         for c in own:
             by_region[coarsen(c.cell, int(pol.get("region_resolution", corr_resolution)))].append(c)
-        for region, members in sorted(by_region.items()):
-            if len({m.cell for m in members}) < int(pol.get("min_sensors", 2)):
-                continue
-            since = min(m.bin_start for m in members)
+        alerting = [(region, members) for region, members in sorted(by_region.items())
+                    if len({m.cell for m in members}) >= int(pol.get("min_sensors", 2))]
+        max_regions = pol.get("max_regions")
+        if max_regions is not None and len(alerting) > int(max_regions):
+            # everywhere at once: more likely our vantage point than every region
+            record_health(conn, sid, "vantage_suspect", f"regions={len(alerting)}", ts=now)
+            continue
+        cooldown = int(pol.get("cooldown_seconds", DEFAULT_COOLDOWN_SECONDS))
+        for region, members in alerting:
+            # the episode, not the latest window: a persisting anomaly re-scored every
+            # round must not open a new alert each round
+            since = min(min(m.bin_start for m in members), now - cooldown)
             severity = sum(m.extremity for m in members) / len(members)
             if cfg.status == "nursery":
                 # not yet proven calibrated: visible, but never priority 5
                 severity = min(severity, float(pol.get("nursery_severity_cap", 0.85)))
-            aid = _insert_unless(conn, lambda r=region, s=since: _alert_since_exists(conn, r, s),
+            aid = _insert_unless(conn, lambda r=region, s=since: _alert_since_exists(conn, r, s, sid),
                                  region, members, severity, now)
             if aid is not None:
                 created.append(aid)
@@ -286,6 +302,7 @@ def _every_event_alerts(
         if not pol.get("every_event") or cfg.status == "retired":
             continue
         fresh_window = int(pol.get("fresh_seconds", 6 * 3600))
+        cooldown = pol.get("cooldown_seconds")  # opt-in: distinct events may share a region
         for r in conn.execute(
             "SELECT cell, ts, first_seen FROM seen WHERE stream_id = ? AND first_seen >= ? "
             "AND ts >= ? ORDER BY ts",
@@ -297,9 +314,10 @@ def _every_event_alerts(
                 presence_q=1.0, precision=1.0, modality=cfg.modality, extremity=1.0,
                 bin_seconds=0,
             )
+            since = r["first_seen"] if cooldown is None else min(r["first_seen"], now - int(cooldown))
             aid = _insert_unless(
                 conn,
-                lambda rg=region, fs=r["first_seen"]: _alert_since_exists(conn, rg, fs, sid),
+                lambda rg=region, fs=since: _alert_since_exists(conn, rg, fs, sid),
                 region, [member], float(pol.get("severity", 0.9)), now, kind="source_alert",
             )
             if aid is not None:

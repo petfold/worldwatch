@@ -221,3 +221,46 @@ def test_ntfy_config_from_env(monkeypatch):
     cfg = NtfyConfig.from_env()
     assert cfg is not None
     assert cfg.topic == "mytopic" and cfg.server == "https://self.hosted"  # trailing / stripped
+
+
+# --- limits: the rate cap with one digest, and silent pushes (2026-09-27: 387 pushes in a day)
+
+
+async def test_pushes_beyond_the_hourly_limit_send_one_digest_then_nothing(db):
+    posts = []
+
+    def handler(request):
+        posts.append(dict(request.headers))
+        return httpx.Response(200)
+
+    for i in range(1, 8):
+        _alert(db, i, f"82{i:02d}", 0.8, [{"stream_id": "quake", "modality": "physical", "q_value": 0.999}])
+    cfg = NtfyConfig(server="http://n", topic="t", max_per_hour=3)
+    async with _client(handler) as client:
+        assert await notify_alerts(db, [1, 2, 3, 4, 5], client=client, cfg=cfg, now=10_000) == 3
+        assert await notify_alerts(db, [6], client=client, cfg=cfg, now=10_600) == 0  # still held
+        assert await notify_alerts(db, [7], client=client, cfg=cfg, now=10_000 + 3601) == 1  # an hour on
+    titles = [p["title"] for p in posts]
+    assert titles.count("Worldwatch: pushes paused") == 1 and len(posts) == 5
+
+
+async def test_silent_until_caps_the_priority(db):
+    seen = []
+
+    def handler(request):
+        seen.append(int(request.headers["priority"]))
+        return httpx.Response(200)
+
+    row = _alert(db, 1, "8226", 0.95, [{"stream_id": "quake", "modality": "physical", "q_value": 0.999}])
+    async with _client(handler) as client:
+        await send_ntfy(client, NtfyConfig(server="http://n", topic="t", silent_until=2**40), row)
+        await send_ntfy(client, NtfyConfig(server="http://n", topic="t", silent_until=1), row)
+    assert seen == [2, 5]  # silent (no sound, no vibration) until the date, then as usual
+
+
+def test_silent_until_parses_dates_and_epochs(monkeypatch):
+    monkeypatch.setenv("WW_NTFY_TOPIC", "t")
+    monkeypatch.setenv("WW_PUSH_SILENT_UNTIL", "2026-10-04")
+    assert NtfyConfig.from_env().silent_until == 1791072000  # 2026-10-04T00:00Z
+    monkeypatch.setenv("WW_PUSH_SILENT_UNTIL", "1791072000")
+    assert NtfyConfig.from_env().silent_until == 1791072000

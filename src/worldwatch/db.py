@@ -190,6 +190,15 @@ MIGRATIONS: list[str] = [
     """
     ALTER TABLE surprise ADD COLUMN q_detect REAL;
     """,
+    # v9 — the pushes sent, for the notifier's rate limit (kind: alert | digest).
+    """
+    CREATE TABLE IF NOT EXISTS push_log (
+        ts          INTEGER NOT NULL,
+        alert_id    INTEGER,
+        kind        TEXT NOT NULL CHECK (kind IN ('alert', 'digest'))
+    );
+    CREATE INDEX IF NOT EXISTS push_log_ts ON push_log (ts);
+    """,
 ]
 
 

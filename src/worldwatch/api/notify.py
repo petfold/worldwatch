@@ -35,6 +35,11 @@ class NtfyConfig:
     topic: str
     token: str | None = None
     dashboard_url: str | None = None  # public dashboard; the push deep-links into it
+    max_per_hour: int = 10  # pushes in any rolling hour; then one digest, then quiet
+    silent_until: int | None = None  # before this (epoch s), every push is silent (priority <= 2)
+
+    def silent(self, now: float | None = None) -> bool:
+        return self.silent_until is not None and (time.time() if now is None else now) < self.silent_until
 
     @classmethod
     def from_env(cls) -> NtfyConfig | None:
@@ -46,7 +51,22 @@ class NtfyConfig:
             topic=topic,
             token=os.environ.get("WW_NTFY_TOKEN"),
             dashboard_url=(os.environ.get("WW_DASHBOARD_URL") or "").rstrip("/") or None,
+            max_per_hour=int(os.environ.get("WW_PUSH_MAX_PER_HOUR", "10")),
+            silent_until=_parse_until(os.environ.get("WW_PUSH_SILENT_UNTIL")),
         )
+
+
+def _parse_until(value: str | None) -> int | None:
+    """WW_PUSH_SILENT_UNTIL: an ISO date or time (UTC), or epoch seconds."""
+    if not value:
+        return None
+    value = value.strip()
+    if value.isdigit():
+        return int(value)
+    from datetime import datetime, timezone
+
+    t = datetime.fromisoformat(value)
+    return int((t if t.tzinfo else t.replace(tzinfo=timezone.utc)).timestamp())
 
 
 def format_alert(
@@ -225,6 +245,8 @@ async def send_ntfy(
 ) -> bool:
     """Publish one alert to ntfy. Returns True on success."""
     title, message, priority, tags = format_alert(alert, conn, sources)
+    if cfg.silent():  # ntfy 2: no sound, no vibration; still listed
+        priority = min(priority, 2)
     headers = {
         "Title": title,
         "Priority": str(priority),
@@ -252,15 +274,39 @@ async def send_ntfy(
     return True
 
 
+async def send_digest(client: httpx.AsyncClient, cfg: NtfyConfig, held: int) -> bool:
+    """The one push that says pushes are paused (the rate limit was reached)."""
+    headers = {"Title": "Worldwatch: pushes paused", "Priority": "2" if cfg.silent() else "3",
+               "Tags": "hourglass"}
+    if cfg.dashboard_url:
+        headers["Click"] = cfg.dashboard_url
+    if cfg.token:
+        headers["Authorization"] = f"Bearer {cfg.token}"
+    message = (f"More than {cfg.max_per_hour} alerts within an hour ({held} held back so far). "
+               "Further alerts are on the dashboard; pushes resume when the rate falls.")
+    resp = await client.post(f"{cfg.server}/{cfg.topic}", content=message.encode(),
+                             headers=headers, timeout=15.0)
+    resp.raise_for_status()
+    return True
+
+
+def _pushes_since(conn: sqlite3.Connection, kind: str, since: int) -> int:
+    return int(conn.execute("SELECT COUNT(*) FROM push_log WHERE kind = ? AND ts >= ?",
+                            (kind, since)).fetchone()[0])
+
+
 async def notify_alerts(
     conn: sqlite3.Connection,
     alert_ids: list[int],
     client: httpx.AsyncClient | None = None,
     cfg: NtfyConfig | None = None,
     sources: dict[str, SourceConfig] | None = None,
+    now: int | None = None,
 ) -> int:
     """Push each alert id. Returns the count delivered. No-op (health-logged)
-    when no channel is configured."""
+    when no channel is configured. At most cfg.max_per_hour alert pushes in any
+    rolling hour; the first alert past that sends one digest instead ("pushes
+    paused"), the rest are held (recorded, and on the dashboard, not pushed)."""
     if not alert_ids:
         return 0
     cfg = cfg or NtfyConfig.from_env()
@@ -273,18 +319,32 @@ async def notify_alerts(
         alert_ids,
     ).fetchall()
 
+    now = int(time.time()) if now is None else now
     owns_client = client is None
     client = client or httpx.AsyncClient()
-    delivered = 0
+    delivered = held = 0
     try:
         for alert in rows:
+            if _pushes_since(conn, "alert", now - 3600) >= cfg.max_per_hour:
+                held += 1
+                if _pushes_since(conn, "digest", now - 3600) == 0:
+                    try:
+                        await send_digest(client, cfg, held)
+                        conn.execute("INSERT INTO push_log (ts, alert_id, kind) VALUES (?, NULL, 'digest')", (now,))
+                        conn.commit()
+                    except httpx.HTTPError as e:
+                        record_health(conn, "notify", "push_error", f"digest: {e}")
+                continue
             try:
                 if await send_ntfy(client, cfg, alert, conn, sources):
                     delivered += 1
+                    conn.execute("INSERT INTO push_log (ts, alert_id, kind) VALUES (?, ?, 'alert')",
+                                 (now, alert["alert_id"]))
+                    conn.commit()
             except httpx.HTTPError as e:
                 record_health(conn, "notify", "push_error", f"alert={alert['alert_id']}: {e}")
     finally:
         if owns_client:
             await client.aclose()
-    record_health(conn, "notify", "ok", f"delivered={delivered}")
+    record_health(conn, "notify", "ok", f"delivered={delivered}" + (f" held={held}" if held else ""))
     return delivered

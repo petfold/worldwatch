@@ -742,6 +742,7 @@ link             = "url"
 every_event      = true
 severity         = 0.8   # priority 4: shown, doesn't wake
 fresh_seconds    = 3600  # long events are re-listed; alert only on newly started ones
+cooldown_seconds = 21600    # one alert per region per outage (6 h): IODA re-reports an ongoing one
 
 
 # IODA's per-signal alerts, as a count stream per country: corroborating
@@ -822,6 +823,9 @@ single_source    = true     # our own measurement; confirmation is across a coun
 min_sensors      = 1        # one country cell already aggregates ~12 independent targets
 q_tail           = 1e-4
 region_resolution = 3
+max_regions      = 5        # more countries failing at once: our vantage point, not them
+                            # (2026-09-27: up to 43 at once, 370 pushes); a health record instead
+cooldown_seconds = 21600    # one alert per country per episode (6 h), not one per round
 
 
 # --- Coverage balance (ADR 0002 §G): uniform-magnitude earthquake detection --
