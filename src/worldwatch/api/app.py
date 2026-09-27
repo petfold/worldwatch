@@ -21,7 +21,7 @@ from pathlib import Path
 
 import h3
 from fastapi import Depends, FastAPI, HTTPException
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from pydantic import BaseModel
 
 from worldwatch import evidence
@@ -202,6 +202,16 @@ def create_app(
         if row is None:
             raise HTTPException(status_code=404, detail="alert not found")
         return JSONResponse(_alert_dict(row, conn, cfgs))
+
+    @app.get("/alert/{alert_id}")
+    def alert_report(alert_id: int, conn: sqlite3.Connection = Depends(get_conn)) -> HTMLResponse:
+        """The alert's full report (a push's tap opens it)."""
+        from worldwatch.api.report import render_report
+
+        page = render_report(conn, alert_id, cfgs)
+        if page is None:
+            raise HTTPException(status_code=404, detail="alert not found")
+        return HTMLResponse(page)
 
     @app.post("/api/alerts/{alert_id}/label")
     def label_alert(

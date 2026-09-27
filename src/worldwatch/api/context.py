@@ -17,6 +17,7 @@ import h3
 
 from worldwatch.cascade.bins import bin_width
 from worldwatch.config.loader import SourceConfig
+from worldwatch.config.places import cell_place
 
 
 @dataclass(frozen=True)
@@ -28,6 +29,7 @@ class Display:
     inverse: str = ""  # "expm1" / "exp" undo the parser's log1p / log transform
     percent: bool = False  # value is a 0..1 fraction; show as %
     max_prefix: str = ""  # count streams: also show the bin max (e.g. "M" magnitude)
+    about: str = ""  # what the source measures, in plain words (alert reports)
 
 
 def display_for(stream_id: str, cfg: SourceConfig | None) -> Display:
@@ -40,6 +42,7 @@ def display_for(stream_id: str, cfg: SourceConfig | None) -> Display:
         inverse=str(d.get("inverse", "")),
         percent=bool(d.get("percent", False)),
         max_prefix=str(d.get("max_prefix", "")),
+        about=str(d.get("about", "")),
     )
 
 
@@ -88,6 +91,12 @@ def rarity(q_value: float) -> tuple[str, str]:
     return odds, "high" if q > 0.5 else "low"
 
 
+def rarity_phrase(q_value: float) -> str:
+    """'unusually high (1 in 2,500)'."""
+    odds, direction = rarity(q_value)
+    return f"unusually {direction} ({odds.replace('1-in-', '1 in ')})"
+
+
 def surprise_word(q_value: float) -> str:
     """Plain summary for calm and not-calm alike: 'typical', 'unusual …', 'rare …'."""
     ext = max(q_value, 1 - q_value)
@@ -120,6 +129,26 @@ def where(cell: str) -> str:
     return fmt_latlon(*c) if c else cell
 
 
+def place(cell: str) -> str:
+    """'Japan (35.7N 139.7E)', 'Sea of Japan (38.5N 135.0E)'; 'worldwide' for GLOBAL."""
+    c = cell_center(cell)
+    if c is None:
+        return "worldwide" if cell == "GLOBAL" else cell
+    name = cell_place(cell)
+    return f"{name} ({fmt_latlon(*c)})" if name else fmt_latlon(*c)
+
+
+def place_names(cells: list[str], limit: int = 2) -> str:
+    """The distinct place names of some cells, in order: 'Finland, Estonia +1'."""
+    names: list[str] = []
+    for c in cells:
+        n = cell_place(c) or ("worldwide" if c == "GLOBAL" else "")
+        if n and n not in names:
+            names.append(n)
+    more = len(names) - limit
+    return ", ".join(names[:limit]) + (f" +{more}" if more > 0 else "")
+
+
 def map_url(cell: str) -> str | None:
     c = cell_center(cell)
     if c is None:
@@ -145,6 +174,27 @@ def bin_row(
         "ORDER BY bin_start DESC LIMIT 1",
         (stream_id, cell, start if start is not None else 2**62),
     ).fetchone()
+
+
+TYPICAL_SECONDS = 7 * 86400
+
+
+def typical(conn: sqlite3.Connection, stream_id: str, cfg: SourceConfig | None, cell: str,
+            before: int | None) -> str | None:
+    """The stream's usual level at this cell: the median of its bins (any scale: the
+    cascade's bins do not overlap) over the week before, in its own units ('0.10
+    µSv/h'); None for counts or without history."""
+    if cfg is None or cfg.flavor == "count" or before is None:
+        return None
+    vals = sorted(r[0] for r in conn.execute(
+        "SELECT vmean FROM bins WHERE stream_id = ? AND cell = ? AND bin_start < ? "
+        "AND bin_start >= ? AND vmean IS NOT NULL",
+        (stream_id, cell, before, before - TYPICAL_SECONDS)))
+    if len(vals) < 3:
+        return None
+    disp = display_for(stream_id, cfg)
+    v = natural_value(vals[len(vals) // 2], disp)
+    return None if v is None else f"{disp.prefix}{fmt_number(v, disp.digits)}{disp.unit}"
 
 
 def observed_at(row: sqlite3.Row | dict, now: int) -> int:

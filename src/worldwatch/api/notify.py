@@ -124,44 +124,44 @@ def format_alert(
     alert: sqlite3.Row,
     conn: sqlite3.Connection | None = None,
     sources: dict[str, SourceConfig] | None = None,
+    prefix: str | None = None,
 ) -> tuple[str, str, int, list[str]]:
     """(title, message, priority, tags) for an alert row.
 
-    With `conn`, each evidence line also says what was observed (from the
-    consolidated bin) — context for the reader only; the alert itself was
-    opened on q_values alone."""
+    Title: 'WW Confirmed: Radiation, Europe (EURDEP) + 1 - Finland' (ASCII: an HTTP
+    header); prefix overrides the stage word. With `conn`, each evidence line also
+    says what was observed (from the consolidated bin) and the usual level there —
+    context for the reader only; the alert itself was opened on q_values alone."""
     evidence = json.loads(alert["evidence"])
-    modalities = sorted({e["modality"] for e in evidence})
-    streams = [e["stream_id"] for e in evidence]
     severity = float(alert["severity"])
     sources = sources or {}
+    from worldwatch.alerts.engine import stage_of
 
-    level = "SEVERE" if severity >= 0.9 else "HIGH" if severity >= 0.7 else "notable"
-    # ASCII only (HTTP header)
-    title = f"Worldwatch {level} {severity:.2f} - {context.where(alert['cell'])}"
-    is_source_alert = any(e.get("kind") == "source_alert" for e in evidence)
-    is_silence = (
-        not is_source_alert and all(e.get("q_value") is None for e in evidence) and bool(evidence)
-    )
-    from worldwatch.alerts.engine import policy
+    stage = max(int(alert["stage"]) if "stage" in alert.keys() else 0, stage_of(evidence, sources))
+    is_silence = (bool(evidence) and all(e.get("q_value") is None for e in evidence)
+                  and not any(e.get("kind") == "source_alert" for e in evidence))
 
-    single = {e["stream_id"] for e in evidence}
-    if is_source_alert:
-        kind = "source alert"
-    elif len(single) == 1 and policy(sources.get(next(iter(single)))).get("single_source"):
-        n = len({e.get("cell") for e in evidence})
-        kind = f"single-network surprise ({n} independent sensor{'s' if n != 1 else ''})"
-    else:
-        kind = "multi-source silence" if is_silence else "corroborated surprise"
+    labels: list[str] = []
+    for e in evidence:
+        lab = context.display_for(e["stream_id"], sources.get(e["stream_id"])).label
+        if lab not in labels:
+            labels.append(lab)
+    what = labels[0] + (f" + {len(labels) - 1}" if len(labels) > 1 else "") if labels else "alert"
+    cells = [e["cell"] for e in evidence if e.get("cell")] or [alert["cell"]]
+    where = context.place_names(cells) or context.where(alert["cell"])
+    title = _ascii_text(f"WW {prefix or STAGE_PREFIX.get(stage, 'Alert')}: {what} - {where}")
 
     lines = [
-        f"{kind} (severity {severity:.2f})",
-        f"region {context.where(alert['cell'])} ({alert['cell']}) @ scale {alert['scale']}",
-        f"{len(streams)} signals across {len(modalities)} modalities: {', '.join(modalities)}",
+        certainty(evidence, sources, stage) + f" (severity {severity:.2f})",
+        f"Where: {context.place(cells[0])}",
     ]
+    main = context.place_names(cells[:1])
+    others = context.place_names([c for c in cells[1:] if context.place_names([c]) != main], limit=3)
+    if others:
+        lines.append(f"Also: {others}")
     starts = [e["bin_start"] for e in evidence if e.get("bin_start") is not None]
     if starts:
-        lines.append(f"latest bin {time.strftime('%Y-%m-%d %H:%M UTC', time.gmtime(max(starts)))}")
+        lines.append(f"Latest data: {time.strftime('%Y-%m-%d %H:%M UTC', time.gmtime(max(starts)))}")
     lines.append("")
     for e in evidence[:MAX_EVIDENCE_LINES]:
         lines.append(_evidence_line(e, conn, sources))
@@ -174,20 +174,51 @@ def format_alert(
     news = _news_in_area(alert, conn, sources)
     if news:
         lines.append("")
-        lines.append("news in the area (context, not evidence):")
+        lines.append("News in the area (context, not evidence):")
         for cfg, rec in news:
             url = evstore.link(cfg, rec)
             lines.append(f"  > {evstore.summary(cfg, rec)}" + (f" [{evstore.domain(url)}]" if url else ""))
-    lines.append("")
-    lines.append(f"streams: {', '.join(streams[:6])}")
     message = "\n".join(lines)
     while len(message.encode()) > MAX_MESSAGE_BYTES and len(lines) > 4:
-        lines.pop(-3)  # drop the last detail line, keep header and footer
-        message = "\n".join(lines[:-2] + ["(truncated)"] + lines[-2:])
+        lines.pop()  # drop the last detail line
+        message = "\n".join(lines + ["(truncated: the full report has everything)"])
 
     priority = 5 if severity >= 0.9 else 4 if severity >= 0.7 else 3
     tags = ["mute"] if is_silence else ["rotating_light"]
     return title, message, priority, tags
+
+
+def certainty(evidence: list[dict], sources: dict[str, SourceConfig] | None, stage: int) -> str:
+    """How sure the alert is, in words: its stage and why."""
+    from worldwatch.alerts.engine import policy
+
+    sources = sources or {}
+    kinds = sorted({e.get("modality") for e in evidence})
+    issued = [e for e in evidence if e.get("kind") == "source_alert"]
+    streams = {e["stream_id"] for e in evidence}
+    word = STAGE_PREFIX.get(stage, "Alert")
+    if issued:
+        label = context.display_for(issued[0]["stream_id"], sources.get(issued[0]["stream_id"])).label
+        why = f"issued by {label}"
+    elif len(kinds) >= 2:
+        why = f"{len(kinds)} independent kinds of measurement agree"
+    elif len(streams) == 1 and policy(sources.get(next(iter(streams)))).get("single_source"):
+        n = len({e.get("cell") for e in evidence})
+        why = f"{n} independent sensor{'s' if n != 1 else ''} of one network agree"
+    elif evidence and all(e.get("q_value") is None for e in evidence):
+        why = "sources that stopped reporting"
+    else:
+        why = "one kind of measurement so far"
+    if stage == 2:
+        why += ", and very improbable by chance"
+    return f"{word}: {why}"
+
+
+def _ascii_text(s: str) -> str:
+    """Plain ASCII for a header: accents folded ('Cote d'Ivoire'), the rest dropped."""
+    import unicodedata
+
+    return unicodedata.normalize("NFKD", s).encode("ascii", "ignore").decode()
 
 
 def _stories(
@@ -261,25 +292,24 @@ def story_links(
 def _evidence_line(
     e: dict, conn: sqlite3.Connection | None, sources: dict[str, SourceConfig]
 ) -> str:
-    """'- Earthquakes M4.5+ (USGS) [physical] 1-in-2,500 high: 1 quake, max M6.6 @ 21.3S 167.9E'"""
+    """'- Radiation, Europe (EURDEP): unusually high (1 in 2,500): 0.327 µSv/h,
+    usually 0.100 µSv/h @ Portugal (41.2N 8.2W)'"""
     cfg = sources.get(e["stream_id"])
     label = context.display_for(e["stream_id"], cfg).label
-    head = f"- {label} [{e['modality']}]"
+    at = f" @ {context.place(e['cell'])}" if e.get("cell") and context.cell_center(e["cell"]) else ""
     if e.get("kind") == "source_alert":
-        return f"{head} issued by the source" + (
-            f" @ {context.where(e['cell'])}" if e.get("cell") and context.cell_center(e["cell"]) else ""
-        )
+        return f"- {label}: issued by the source{at}"
     if e.get("q_value") is None:
-        return f"{head} silent (presence {e['presence_q']:.2f})"
-    odds, direction = context.rarity(e["q_value"])
-    line = f"{head} {odds} {direction}"
+        return f"- {label}: stopped reporting (presence {e['presence_q']:.2f}){at}"
+    line = f"- {label}: {context.rarity_phrase(e['q_value'])}"
     if conn is not None and e.get("cell"):
         row = context.bin_row(conn, e["stream_id"], e["cell"], e.get("scale"), e.get("bin_start"))
         if row is not None:
             line += f": {context.describe_bin(e['stream_id'], cfg, row)}"
-    if e.get("cell") and context.cell_center(e["cell"]):
-        line += f" @ {context.where(e['cell'])}"
-    return line
+            usual = context.typical(conn, e["stream_id"], cfg, e["cell"], e.get("bin_start"))
+            if usual:
+                line += f", usually {usual}"
+    return line + at
 
 
 def _ascii(s: str) -> str:
@@ -298,10 +328,8 @@ async def send_ntfy(
 ) -> bool:
     """Publish one alert to ntfy. Returns True on success. priority: overrides the
     formatted one (5 wakes the operator); prefix: goes before the title (ASCII)."""
-    title, message, formatted, tags = format_alert(alert, conn, sources)
+    title, message, formatted, tags = format_alert(alert, conn, sources, prefix=prefix)
     priority = formatted if priority is None else priority
-    if prefix:
-        title = f"{prefix}: {title}"
     if cfg.silent():  # ntfy 2: no sound, no vibration; still listed
         priority = min(priority, 2)
     headers = {
@@ -312,8 +340,8 @@ async def send_ntfy(
     map_url = context.map_url(alert["cell"])
     buttons = story_links(alert, conn, sources)  # tap straight to the source pages
     if cfg.dashboard_url:
-        # tapping the push opens this alert on the dashboard; the map is a button
-        headers["Click"] = f"{cfg.dashboard_url}/?alert={alert['alert_id']}"
+        # tapping the push opens the alert's full report; the map is a button
+        headers["Click"] = f"{cfg.dashboard_url}/alert/{alert['alert_id']}"
         if map_url:
             buttons.append(("Map", map_url))
     elif map_url:

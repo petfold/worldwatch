@@ -369,7 +369,7 @@
     }
 
     function showAlert(a) {
-      showDetail(`<b>${esc(a.title)}</b>\n\n${esc(a.text)}` +
+      showDetail(`<b>${esc(a.title)}</b>\n\n<a href="/alert/${a.alert_id}">full report →</a>\n\n${esc(a.text)}` +
         (a.map_url ? `\n\n<a href="${esc(a.map_url)}" target="_blank" rel="noopener">region on OpenStreetMap, new tab (without Worldwatch layers) ↗</a>` : ""));
       flyTo(a.center, 5);
     }

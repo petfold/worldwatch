@@ -212,8 +212,8 @@ def test_cell_detail(rich_client):
 
 def test_alert_carries_readable_text(client):
     a = client.get("/api/alerts/1").json()
-    assert a["title"].startswith("Worldwatch SEVERE 0.95")
-    assert "corroborated surprise" in a["text"]
+    assert a["title"] == "WW Unconfirmed: quake - United States"
+    assert "Unconfirmed: one kind of measurement so far" in a["text"]
 
 
 def test_about_page_is_served_and_linked(client):
@@ -276,3 +276,20 @@ def test_parse_bbox_normalizes_world_copies():
 def test_alerts_filtered_by_view(client):
     assert len(client.get("/api/alerts", params={"bbox": "-125,35,-120,40"}).json()["alerts"]) == 1
     assert client.get("/api/alerts", params={"bbox": "0,40,10,50"}).json()["alerts"] == []
+
+
+def test_alert_report_page(client):
+    r = client.get("/alert/1")
+    assert r.status_code == 200 and r.headers["content-type"].startswith("text/html")
+    page = r.text
+    assert "WW Unconfirmed: quake - United States" in page
+    for part in ("Certainty", "Surprise", "Severity", "Reach", "History", "Signals", "Opened as"):
+        assert part in page
+    assert client.get("/alert/999").status_code == 404
+
+
+def test_alert_report_escapes_what_sources_say(client, tmp_path):
+    from worldwatch.api.report import _link
+
+    assert "<script>" not in _link("javascript:alert(1)", "<script>x</script>")
+    assert 'href="https://a.b/?q=&quot;x&quot;"' in _link('https://a.b/?q="x"', "t")

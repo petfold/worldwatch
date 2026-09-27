@@ -490,6 +490,8 @@ def _escalations(
         stage = stage_of(merged, sources)
         if stage <= r["stage"]:
             continue
+        for e in extra:  # the alert's history, for its report
+            e.update(added_at=now, stage=stage)
         severity = max(float(r["severity"]), 0.95 if stage == 2 else 0.8)
         cur = conn.execute(
             "UPDATE alerts SET evidence = ?, stage = ?, severity = ?, escalated_at = ? "
@@ -522,20 +524,22 @@ def alert_score(evidence: list[dict], sources: dict[str, SourceConfig] | None) -
     independent cell's two-sided tail p (the strongest per stream and cell), summed;
     an every-item feed's member counts its stanza's push_score instead (default 5).
     Confirmation by independent kinds of measurement multiplies it: × the number of
-    modalities, when two or more. extreme-eligible: two modalities or more, or a stanza
-    that says extreme = true confirming it on its own terms: an item it issued, or at
-    least its min_sensors cells (default 1) beyond its q_tail (default 1e-4) — weak
-    readings of a radiation network merged into an alert confirm nothing (score
-    thresholds are the notifier's).
+    modalities, when two or more. extreme-eligible (confirmed): two modalities or more,
+    an item an authoritative feed issued (every_event), or a stanza that says extreme =
+    true confirming it on its own terms: at least its min_sensors cells (default 1)
+    beyond its q_tail (default 1e-4) — weak readings of a radiation network merged
+    into an alert confirm nothing (score thresholds are the notifier's).
     """
     per_cell: dict[tuple[str, str], float] = {}
     feed = 0.0
     strong: dict[str, set[str]] = defaultdict(set)  # extreme stanzas: their confirming cells
+    issued = False
     for e in evidence:
         pol = policy((sources or {}).get(e.get("stream_id", "")))
         q = e.get("q_value")
-        if pol.get("extreme") and (e.get("kind") == "source_alert" or (
-                q is not None and min(float(q), 1.0 - float(q)) <= float(pol.get("q_tail", 1e-4)))):
+        if e.get("kind") == "source_alert":
+            issued = True
+        elif pol.get("extreme") and q is not None and min(float(q), 1.0 - float(q)) <= float(pol.get("q_tail", 1e-4)):
             strong[e.get("stream_id", "")].add(e.get("cell") or "")
         if q is None:
             if e.get("kind") == "source_alert":
@@ -548,7 +552,7 @@ def alert_score(evidence: list[dict], sources: dict[str, SourceConfig] | None) -
     score = (sum(per_cell.values()) + feed) * (modalities if modalities >= 2 else 1)
     extreme = any(len(cells) >= int(policy((sources or {}).get(sid)).get("min_sensors", 1))
                   for sid, cells in strong.items())
-    return score, modalities, extreme or modalities >= 2
+    return score, modalities, issued or extreme or modalities >= 2
 
 
 def extreme_score() -> float:

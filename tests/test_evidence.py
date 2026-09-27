@@ -128,7 +128,7 @@ async def test_push_buttons_open_the_sources(db, sources):
         await send_ntfy(client, cfg, _alert_row(db), db, sources)
     assert seen["actions"].startswith("view, earthquake.usgs.gov, https://earthquake.usgs.gov/e/1000")
     assert "view, Map, https://www.openstreetmap.org/" in seen["actions"]
-    assert seen["click"] == "https://example.org:8001/?alert=7"
+    assert seen["click"] == "https://example.org:8001/alert/7"
 
 
 def test_dashboard_shows_stories(tmp_path, sources):
@@ -176,8 +176,8 @@ def test_source_alert_push_names_the_event_and_the_news_around_it(db, sources):
     (aid,) = run_alerts(db, sources, now=now)
     row = db.execute("SELECT * FROM alerts WHERE alert_id = ?", (aid,)).fetchone()
     title, message, priority, _ = format_alert(row, db, sources)
-    assert "source alert" in message and priority == 5
-    assert "Significant earthquakes (USGS) [physical] issued by the source" in message
+    assert "Confirmed: issued by Significant earthquakes (USGS)" in message and priority == 5
+    assert "- Significant earthquakes (USGS): issued by the source @ Coral Sea, off New Caledonia" in message
     assert "> M6.6 80 km ENE of Tadine, New Caledonia, depth 10 km [earthquake.usgs.gov]" in message
-    assert "news in the area (context, not evidence):" in message
+    assert "News in the area (context, not evidence):" in message
     assert "Strong quake shakes new caledonia - Public statement, Noumea, New Caledonia [rnz.co.nz]" in message

@@ -34,8 +34,8 @@ def test_format_value_alert(db):
     )
     title, message, priority, tags = format_alert(row)
     assert "8226" in title
-    assert "corroborated surprise" in message
-    assert "informational, physical" in message  # modalities sorted
+    assert "Confirmed: 2 independent kinds of measurement agree" in message
+    assert "informational" not in message  # the sources by name, not their category
     assert priority == 5  # severity >= 0.9
     assert tags == ["rotating_light"]
 
@@ -57,10 +57,10 @@ def test_format_alert_with_observed_context(db, sources):
     ]
     row = _alert(db, 3, h3.cell_to_parent(cell, 2), 0.95, ev)
     title, message, priority, _ = format_alert(row, db, sources)
-    assert title.startswith("Worldwatch SEVERE 0.95 - 21.") and title.isascii()
-    assert "Earthquakes, all magnitudes (USGS) [physical] 1-in-2,500 high: 3 quakes, max M6.6" in message
-    assert "News events (GDELT) [informational] 1-in-333 high" in message
-    assert "latest bin 1970-01-01 01:23 UTC" in message
+    assert title == "WW Confirmed: Earthquakes, all magnitudes (USGS) + 1 - Coral Sea, off New Caledonia"
+    assert "- Earthquakes, all magnitudes (USGS): unusually high (1 in 2,500): 3 quakes, max M6.6 @ Coral Sea" in message
+    assert "- News events (GDELT): unusually high (1 in 333) @ Coral Sea" in message
+    assert "Latest data: 1970-01-01 01:23 UTC" in message
     assert priority == 5
 
 
@@ -94,7 +94,7 @@ async def test_send_ntfy_deep_links_dashboard_when_configured(db):
     cfg = NtfyConfig(server="http://n", topic="t", dashboard_url="https://example.org:8001")
     async with _client(handler) as client:
         await send_ntfy(client, cfg, row)
-    assert seen["click"] == "https://example.org:8001/?alert=5"
+    assert seen["click"] == "https://example.org:8001/alert/5"
     assert seen["actions"].startswith("view, Map, https://www.openstreetmap.org/")
 
 
@@ -110,7 +110,7 @@ def test_format_silence_alert(db):
         ],
     )
     title, message, priority, tags = format_alert(row)
-    assert "multi-source silence" in message
+    assert "sources that stopped reporting" in message
     assert priority == 3  # 0.6 < 0.7
     assert tags == ["mute"]
 
@@ -330,7 +330,7 @@ async def test_an_alert_is_pushed_early_then_again_as_it_is_confirmed(db):
         db.commit()
         # escalated (2 modalities, 2 x 13.4 >= 15): re-pushed despite the cap, and it wakes
         assert await notify_alerts(db, [1], client=client, cfg=cfg, now=10_200) == 1
-    assert seen == [(3, "Unconfirmed"), (3, "Unconfirmed"), (5, "EXTREME (update)")]
+    assert seen == [(3, "WW Unconfirmed"), (3, "WW Unconfirmed"), (5, "WW EXTREME (update)")]
     assert [tuple(r) for r in db.execute("SELECT alert_id, kind, stage FROM push_log")] == [
         (1, "alert", 0), (2, "alert", 0), (1, "extreme", 2)]
 
@@ -425,7 +425,7 @@ async def test_an_extreme_event_far_away_does_not_wake(db, sources):
     cfg = NtfyConfig(server="http://n", topic="t", home=DUBAI)
     async with _client(handler) as client:
         assert await notify_alerts(db, [1, 2], client=client, cfg=cfg, sources=src, now=10_000) == 2
-    assert seen == [(3, "EXTREME, far away"), (5, "EXTREME")]  # Tokyo: news; the far one keeps the week's wake-up
+    assert seen == [(3, "WW EXTREME, far away"), (5, "WW EXTREME")]  # Tokyo: news; the far one keeps the week's wake-up
 
 
 def test_home_parses_one_or_several_places(monkeypatch):

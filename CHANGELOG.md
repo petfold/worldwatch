@@ -64,6 +64,25 @@ sibling projects, where the tag is what publishes.
   never make an event near. Radiation networks reach 500 km, or everywhere
   when 5 or more stations agree (`global_sensors`: a release, not a
   detector).
+- **A report page per alert**, `/alert/<id>`; tapping a push opens it (and
+  the dashboard's alert card links to it). Rendered on request from the
+  database, nothing stored: what and where (country or sea by name), when,
+  certainty (the stage, why, and what would raise it), surprise (the score),
+  severity, reach (whether it can reach your places; no distance), status,
+  the history (opened, each confirmation, each push), and every signal: what
+  the source measures, what it observed against its usual level, how rare that
+  is, a sparkline of its last 3 days, and the source pages behind it; the news
+  in the area; buttons to label it real, false alarm or unclear.
+- **Pushes say where and what in words.** Titles are `WW <stage>: <sources> -
+  <places>` ("WW Confirmed: Radiation, Europe (EURDEP) + 1 - Luxembourg,
+  Belgium"); each line names the source, says "unusually high (1 in 2,500)",
+  what was observed and the usual level there, and the place by name
+  ("Portugal (40.8N 7.4W)", "Coral Sea, off New Caledonia"). No more
+  categories ("physical", "infrastructural") or stream ids. Places come from
+  Natural Earth country and sea outlines (public domain; 0.45 MB,
+  `config/places.json.gz`, built by `tools/build_places.py`), looked up offline.
+- **An item an authoritative feed issued counts as confirmed** (a USGS
+  significant quake was "Unconfirmed").
 - **Authoritative sources can be extreme on their own.** `extreme = true` for
   GDACS red (now `push_score` 15) and the radiation networks (independent
   stations confirm each other). Until now nothing but two modalities could

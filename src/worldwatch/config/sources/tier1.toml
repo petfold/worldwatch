@@ -31,6 +31,7 @@ role             = "context"
 
 [usgs_seismic.display]
 label            = "Earthquakes, all magnitudes (USGS)"
+about            = "Every earthquake the US Geological Survey locates worldwide, counted per area and hour."
 unit             = "quakes"
 max_prefix       = "M"
 
@@ -75,6 +76,7 @@ level_var        = 1e-4
 
 [wikipedia_pageviews.display]
 label            = "English Wikipedia views"
+about            = "How many times English Wikipedia is read per hour: a gauge of world attention."
 unit             = " views/h"
 inverse          = "expm1"
 
@@ -115,6 +117,7 @@ level_var        = 2e-5
 
 [btc_usd.display]
 label            = "Bitcoin"
+about            = "The Bitcoin price in US dollars (Coinbase), tick by tick."
 prefix           = "$"
 inverse          = "expm1"
 
@@ -153,6 +156,7 @@ level_var        = 4e-5
 
 [eth_usd.display]
 label            = "Ether"
+about            = "The Ether price in US dollars (Coinbase), tick by tick."
 prefix           = "$"
 inverse          = "expm1"
 
@@ -178,6 +182,7 @@ h3_resolution    = 2       # a few samples of US weather are enough (coverage ba
 
 [nws_severe_alerts.display]
 label            = "US severe weather (NWS)"
+about            = "US National Weather Service warnings (storms, floods, fires), counted per area."
 unit             = "alerts"
 
 [nws_severe_alerts.context]
@@ -210,6 +215,7 @@ h3_resolution    = 4
 
 [safecast_radiation.display]
 label            = "Radiation (Safecast)"
+about            = "Radiation readings from Safecast's volunteer detectors."
 unit             = " cpm"
 
 
@@ -238,6 +244,7 @@ h3_resolution    = 3
 
 [gdelt_events.display]
 label            = "News events (GDELT)"
+about            = "News events worldwide as coded by GDELT from thousands of outlets, counted per area: context, never evidence."
 unit             = "events"
 
 # News is what the sensors race to beat, not independent confirmation of them:
@@ -281,6 +288,7 @@ cell             = "GLOBAL"
 
 [cf_radar_netflows_global.display]
 label            = "Internet traffic, world"
+about            = "Internet traffic worldwide as seen by Cloudflare, every 15 minutes."
 unit             = "% of 7-day peak"
 percent          = true
 
@@ -310,6 +318,7 @@ h3_resolution    = 2
 
 [cf_radar_netflows_gb.display]
 label            = "Internet traffic, UK"
+about            = "Internet traffic in the UK as seen by Cloudflare, every 15 minutes."
 unit             = "% of 7-day peak"
 percent          = true
 
@@ -339,6 +348,7 @@ h3_resolution    = 2
 
 [cf_radar_netflows_us.display]
 label            = "Internet traffic, US"
+about            = "Internet traffic in the US as seen by Cloudflare, every 15 minutes."
 unit             = "% of 7-day peak"
 percent          = true
 
@@ -368,6 +378,7 @@ h3_resolution    = 2
 
 [cf_radar_netflows_jp.display]
 label            = "Internet traffic, Japan"
+about            = "Internet traffic in Japan as seen by Cloudflare, every 15 minutes."
 unit             = "% of 7-day peak"
 percent          = true
 
@@ -413,6 +424,7 @@ h3_resolution    = 4
 
 [night_lights_h17v03.display]
 label            = "Night lights, UK + Ireland"
+about            = "Brightness of the ground at night from NASA's VIIRS satellite (UK and Ireland): power cuts darken it."
 unit             = " nW/cm²/sr"
 inverse          = "expm1"
 digits           = 1
@@ -443,6 +455,7 @@ h3_resolution    = 4
 
 [night_lights_h18v04.display]
 label            = "Night lights, France to N. Italy"
+about            = "Brightness of the ground at night from NASA's VIIRS satellite (France to northern Italy): power cuts darken it."
 unit             = " nW/cm²/sr"
 inverse          = "expm1"
 digits           = 1
@@ -473,6 +486,7 @@ h3_resolution    = 4
 
 [night_lights_h10v05.display]
 label            = "Night lights, US mid-Atlantic"
+about            = "Brightness of the ground at night from NASA's VIIRS satellite (US mid-Atlantic): power cuts darken it."
 unit             = " nW/cm²/sr"
 inverse          = "expm1"
 digits           = 1
@@ -503,6 +517,7 @@ h3_resolution    = 4
 
 [night_lights_h31v05.display]
 label            = "Night lights, Japan"
+about            = "Brightness of the ground at night from NASA's VIIRS satellite (Japan): power cuts darken it."
 unit             = " nW/cm²/sr"
 inverse          = "expm1"
 digits           = 1
@@ -555,6 +570,7 @@ time_scale       = 3600.0
 
 [eurdep_gamma.display]
 label            = "Radiation, Europe (EURDEP)"
+about            = "Gamma dose rate from Europe's official radiation monitoring stations (EURDEP), hourly. Each station is compared with its own normal level, which depends on local rock and weather."
 unit             = " µSv/h"
 inverse          = "exp"
 digits           = 3
@@ -603,6 +619,7 @@ time_scale       = 3600.0
 
 [bfs_odl_gamma.display]
 label            = "Radiation, Germany (BfS)"
+about            = "Gamma dose rate from Germany's official monitoring network (BfS, ~1,700 stations), hourly. Each station is compared with its own normal level."
 unit             = " µSv/h"
 inverse          = "exp"
 digits           = 3
@@ -647,6 +664,7 @@ h3_resolution    = 3
 
 [usgs_significant.display]
 label            = "Significant earthquakes (USGS)"
+about            = "Earthquakes the USGS rates significant (by magnitude, reported shaking and expected impact)."
 unit             = "quakes"
 max_prefix       = "M"
 
@@ -684,6 +702,7 @@ h3_resolution    = 3
 
 [nws_extreme.display]
 label            = "Extreme weather alerts (NWS)"
+about            = "US National Weather Service warnings of the highest severity, Extreme."
 unit             = "alerts"
 
 [nws_extreme.context]
@@ -731,6 +750,7 @@ role             = "context"   # small European quakes: detail, not evidence (se
 
 [emsc_seismic.display]
 label            = "Earthquakes, all magnitudes (EMSC)"
+about            = "Every earthquake the European-Mediterranean Seismological Centre reports, within seconds."
 unit             = "quakes"
 max_prefix       = "M"
 
@@ -767,6 +787,7 @@ h3_resolution    = 3        # res 2 merged 24 small neighbouring countries into 
 
 [ioda_outage_events.display]
 label            = "Internet outages (IODA events)"
+about            = "Internet outages per country detected by IODA (Georgia Tech) from routing, probing and background traffic."
 unit             = "outages"
 
 [ioda_outage_events.context]
@@ -809,6 +830,7 @@ native_seconds   = 600
 
 [ioda_alerts.display]
 label            = "Internet signal alerts (IODA)"
+about            = "IODA's per-country alerts: one of its internet signals fell below its usual level."
 unit             = "alerts"
 
 [ioda_alerts.context]
@@ -858,6 +880,7 @@ native_seconds   = 120      # one window per round
 
 [probe_reachability.display]
 label            = "Reachability (own probes)"
+about            = "Worldwatch's own probes: whether time servers and RIPE Atlas anchors in each country answer."
 unit             = "unreachable"
 
 [probe_reachability.alerts]
@@ -900,6 +923,7 @@ native_seconds   = 300
 
 [usgs_m45.display]
 label            = "Earthquakes M4.5+ (USGS)"
+about            = "Earthquakes of magnitude 4.5 and above worldwide (USGS), counted per area."
 unit             = "quakes"
 max_prefix       = "M"
 
@@ -939,6 +963,7 @@ native_seconds   = 300
 
 [emsc_m45.display]
 label            = "Earthquakes M4.5+ (EMSC)"
+about            = "Earthquakes of magnitude 4.5 and above worldwide (EMSC, within seconds), counted per area."
 unit             = "quakes"
 max_prefix       = "M"
 
@@ -977,6 +1002,7 @@ h3_resolution    = 3
 
 [gdacs_red.display]
 label            = "Disasters, Red (GDACS)"
+about            = "Red alerts from GDACS (UN and EU): a disaster likely to need international help (earthquake, cyclone, flood, volcano, drought, wildfire, tsunami)."
 unit             = "alerts"
 
 [gdacs_red.context]
@@ -1013,6 +1039,7 @@ h3_resolution    = 3
 
 [gdacs_orange.display]
 label            = "Disasters, Orange (GDACS)"
+about            = "Orange alerts from GDACS (UN and EU): a disaster that may need international help."
 unit             = "alerts"
 
 [gdacs_orange.context]
@@ -1062,6 +1089,7 @@ native_seconds   = 1800
 
 [meteoalarm_warnings.display]
 label            = "European severe weather (MeteoAlarm)"
+about            = "Orange and red weather warnings from 37 European national weather services (MeteoAlarm), per country."
 unit             = "warnings"
 
 [meteoalarm_warnings.context]
