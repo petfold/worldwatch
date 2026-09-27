@@ -73,6 +73,10 @@ sibling projects, where the tag is what publishes.
 
 - The escalation pass let news candidates confirm an alert; news is context,
   never evidence (ADR 0001).
+- A stanza marked `extreme` confirmed any alert it had a member in, even weak
+  readings merged in (radiation stations 1-in-30 low, 2026-09-27). It now
+  confirms only on its own terms: an item it issued, or `min_sensors` cells
+  beyond its `q_tail`.
 
 ### Added
 

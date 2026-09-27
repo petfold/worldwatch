@@ -434,3 +434,16 @@ def test_home_parses_one_or_several_places(monkeypatch):
     assert NtfyConfig.from_env().home == ((25.2, 55.3), (47.5, 19.0))
     monkeypatch.delenv("WW_HOME")
     assert NtfyConfig.from_env().home == ()
+
+
+def test_an_extreme_stanza_confirms_only_on_its_own_terms(sources):
+    from worldwatch.alerts.engine import alert_score
+
+    src = _reach_sources(sources)
+    src["rad"].extra["alerts"].update(min_sensors=2, q_tail=1e-4)
+    weak = [{"stream_id": "rad", "cell": f"c{i}", "modality": "physical", "q_value": 0.03} for i in range(3)]
+    one = [{"stream_id": "rad", "cell": "c0", "modality": "physical", "q_value": 1 - 1e-6}]
+    two = one + [{"stream_id": "rad", "cell": "c1", "modality": "physical", "q_value": 1e-5}]
+    assert not alert_score(weak, src)[2]  # low readings, merged in: nothing confirmed
+    assert not alert_score(one, src)[2]  # one station: could be the detector
+    assert alert_score(two, src)[2]  # two independent stations beyond the network's threshold

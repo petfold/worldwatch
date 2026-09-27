@@ -522,16 +522,21 @@ def alert_score(evidence: list[dict], sources: dict[str, SourceConfig] | None) -
     independent cell's two-sided tail p (the strongest per stream and cell), summed;
     an every-item feed's member counts its stanza's push_score instead (default 5).
     Confirmation by independent kinds of measurement multiplies it: × the number of
-    modalities, when two or more. extreme-eligible: two modalities or more, or a
-    member whose stanza says extreme = true (score thresholds are the notifier's).
+    modalities, when two or more. extreme-eligible: two modalities or more, or a stanza
+    that says extreme = true confirming it on its own terms: an item it issued, or at
+    least its min_sensors cells (default 1) beyond its q_tail (default 1e-4) — weak
+    readings of a radiation network merged into an alert confirm nothing (score
+    thresholds are the notifier's).
     """
     per_cell: dict[tuple[str, str], float] = {}
     feed = 0.0
-    extreme = False
+    strong: dict[str, set[str]] = defaultdict(set)  # extreme stanzas: their confirming cells
     for e in evidence:
         pol = policy((sources or {}).get(e.get("stream_id", "")))
-        extreme = extreme or bool(pol.get("extreme"))
         q = e.get("q_value")
+        if pol.get("extreme") and (e.get("kind") == "source_alert" or (
+                q is not None and min(float(q), 1.0 - float(q)) <= float(pol.get("q_tail", 1e-4)))):
+            strong[e.get("stream_id", "")].add(e.get("cell") or "")
         if q is None:
             if e.get("kind") == "source_alert":
                 feed += float(pol.get("push_score", 5.0))
@@ -541,6 +546,8 @@ def alert_score(evidence: list[dict], sources: dict[str, SourceConfig] | None) -
         per_cell[key] = max(per_cell.get(key, 0.0), -math.log10(p))
     modalities = len({e.get("modality") for e in evidence})
     score = (sum(per_cell.values()) + feed) * (modalities if modalities >= 2 else 1)
+    extreme = any(len(cells) >= int(policy((sources or {}).get(sid)).get("min_sensors", 1))
+                  for sid, cells in strong.items())
     return score, modalities, extreme or modalities >= 2
 
 
