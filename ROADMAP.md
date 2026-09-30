@@ -76,6 +76,9 @@ around 2026-10-10.
       models for extremes) — agenda in
       [`doc/research-tails-and-dependence.md`](doc/research-tails-and-dependence.md);
       parked 2026-09-26.
+- [ ] Research proposal: a joint world model over the surprise field —
+      [`doc/research-joint-model.md`](doc/research-joint-model.md)
+      (proposal 2026-09-29).
 - [ ] Real-time detection path, own active prober + IODA, coverage balance —
       [`doc/adr/0002-real-time-detection-and-coverage.md`](doc/adr/0002-real-time-detection-and-coverage.md)
       (accepted 2026-09-26; measured per-source latency in
