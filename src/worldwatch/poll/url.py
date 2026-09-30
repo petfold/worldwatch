@@ -7,7 +7,9 @@ Wikimedia pageviews API:
 `build_url` fills `{placeholders}` from the source's [parse] table plus computed
 `start`/`end` covering a rolling look-back window ending at the poll time (also
 as `start_dt`/`end_dt` datetimes, for format specs like `{start_dt:%Y%m%d%H}`,
-and `start_iso`/`end_iso`). Feeds
+and `start_iso`/`end_iso`), and `{auth}` from the stanza's `auth_env_var` for
+APIs that take their key only in the URL (the poller redacts it from recorded
+errors). Feeds
 with a plain endpoint (no braces) are returned unchanged. Overlapping windows
 are harmless — ingestion dedups on (stream, cell, ts) via the `seen` table.
 """
@@ -53,6 +55,8 @@ def build_url(cfg: SourceConfig, now: int) -> str:
     fields.setdefault("end_dt", end_dt)
     fields.setdefault("start_iso", start_dt.strftime("%Y-%m-%dT%H:%M:%SZ"))
     fields.setdefault("end_iso", end_dt.strftime("%Y-%m-%dT%H:%M:%SZ"))
+    if cfg.auth_env_var and "{auth}" in endpoint:  # a key the API takes only in the URL (EIA)
+        fields["auth"] = cfg.auth_token()
 
     try:
         return endpoint.format(**fields)

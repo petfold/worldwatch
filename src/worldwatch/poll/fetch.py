@@ -12,7 +12,8 @@ kinds:
   json_get           (default) conditional GET; if the stanza names an
                      `auth_env_var`, its value is sent as a Bearer token
                      (`auth_scheme` changes the word: Open Exchange Rates
-                     wants "Token"), never in the URL
+                     wants "Token"); `auth_scheme = "url"`: no header, the key
+                     goes in the endpoint's `{auth}` (EIA accepts it nowhere else)
   earthdata_granule  NASA Earthdata: GET the endpoint (a CMR granule search,
                      newest first) → newest granule id + download URL; skip if
                      the id matches the last fetched one (stored in the ETag
@@ -83,8 +84,9 @@ async def fetch_json_get(
 ) -> FetchResult:
     headers: dict[str, str] | None = None
     token = cfg.auth_token()
-    if token is not None:
-        headers = {"Authorization": f"{cfg.fetch.get('auth_scheme', 'Bearer')} {token}"}
+    scheme = str(cfg.fetch.get("auth_scheme", "Bearer"))
+    if token is not None and scheme != "url":
+        headers = {"Authorization": f"{scheme} {token}"}
     return await conditional_get(client, build_url(cfg, now), validators, headers=headers)
 
 

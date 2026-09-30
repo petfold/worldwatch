@@ -1048,15 +1048,18 @@ class            = "grid_load"
 modality         = "infrastructural"
 topic_tags       = ["power", "grid"]
 flavor           = "continuous"
-endpoint         = "https://api.eia.gov/v2/electricity/rto/region-data/data/?api_key={api_key}&frequency=hourly&data[0]=value&facets[type][]=D&facets[respondent][]=CAL&facets[respondent][]=CAR&facets[respondent][]=CENT&facets[respondent][]=FLA&facets[respondent][]=MIDA&facets[respondent][]=MIDW&facets[respondent][]=NE&facets[respondent][]=NY&facets[respondent][]=NW&facets[respondent][]=SE&facets[respondent][]=SW&facets[respondent][]=TEN&facets[respondent][]=TEX&sort[0][column]=period&sort[0][direction]=desc&length=130"
+endpoint         = "https://api.eia.gov/v2/electricity/rto/region-data/data/?api_key={auth}&frequency=hourly&data[0]=value&facets[type][]=D&facets[respondent][]=CAL&facets[respondent][]=CAR&facets[respondent][]=CENT&facets[respondent][]=FLA&facets[respondent][]=MIDA&facets[respondent][]=MIDW&facets[respondent][]=NE&facets[respondent][]=NY&facets[respondent][]=NW&facets[respondent][]=SE&facets[respondent][]=SW&facets[respondent][]=TEN&facets[respondent][]=TEX&sort[0][column]=period&sort[0][direction]=desc&length=130"
 cadence_seconds  = 3600
+auth_env_var     = "WW_EIA_KEY"
 status           = "nursery"
-notes            = "US EIA-930 hourly demand for the 13 US regions (~1.6 h behind); DEMO_KEY until a free key is registered; public domain"
+notes            = "US EIA-930 hourly demand for the 13 US regions (~1.6 h behind); the operator's free key, which EIA takes only in the URL (redacted from recorded errors); public domain"
+
+[eia_demand.fetch]
+auth_scheme      = "url"
 
 [eia_demand.parse]
 format           = "records"
 records          = "response.data"
-api_key          = "DEMO_KEY"   # EIA's public demo key (a personal free key has higher limits)
 time_field       = "period"
 time_format      = "%Y-%m-%dT%H"
 value_field      = "value"
@@ -1252,6 +1255,59 @@ inverse          = "expm1"
 
 [digitraffic_ships.alerts]
 reach_km         = 300
+
+
+# Batch 2: the operator's free aisstream.io key (WW_AISSTREAM_KEY).
+[aisstream_chokepoints]
+class            = "sea_traffic"
+modality         = "economic"
+topic_tags       = ["shipping", "traffic", "chokepoint"]
+flavor           = "continuous"
+endpoint         = "wss://stream.aisstream.io/v0/stream"
+cadence_seconds  = 1800
+auth_env_var     = "WW_AISSTREAM_KEY"
+status           = "nursery"
+notes            = "aisstream.io (free key, beta): distinct ships per half hour at Hormuz, Bab-el-Mandeb and Suez, counted from their static-data broadcasts (each ship about every 6 min: a fraction of position reports' bandwidth); ship identities never leave the parser"
+
+[aisstream_chokepoints.fetch]
+kind             = "websocket"
+window_seconds   = 1800    # one count per box per half hour: ~5 chances to hear each ship
+# the same boxes as [geocode] below, as [[lat, lon], [lat, lon]] corners; the key goes in as {auth}
+subscribe        = { APIKey = "{auth}", BoundingBoxes = [[[25.9, 55.9], [26.9, 57.0]], [[12.2, 42.9], [13.1, 43.8]], [[29.6, 32.15], [31.5, 32.7]]], FilterMessageTypes = ["ShipStaticData"] }
+
+[aisstream_chokepoints.parse]
+format           = "cell_aggregate"
+records          = "messages"
+where            = { MessageType = ["ShipStaticData"] }
+aggregate        = "distinct"
+distinct_field   = "MetaData.MMSI"
+time_field       = "received"  # the window's start
+time_format      = "epoch"
+zero_fill        = true        # an empty strait is news, when the others are heard
+transform        = "log1p"
+
+[aisstream_chokepoints.geocode]
+strategy         = "boxes"
+lat_field        = ["MetaData.Latitude", "MetaData.latitude"]
+lon_field        = ["MetaData.Longitude", "MetaData.longitude"]
+h3_resolution    = 3
+boxes            = { hormuz = [25.9, 55.9, 26.9, 57.0], bab_el_mandeb = [12.2, 42.9, 13.1, 43.8], suez = [29.6, 32.15, 31.5, 32.7] }
+
+[aisstream_chokepoints.model]
+obs_scale        = 0.2
+level_var        = 1e-2
+time_scale       = 3600.0
+periods_seconds  = [86400]   # Suez runs daily convoys
+
+[aisstream_chokepoints.display]
+label            = "Ships at chokepoints (aisstream)"
+about            = "How many different ships are heard each half hour in the Strait of Hormuz, the Bab-el-Mandeb and the Suez Canal with its anchorages. A closure or a diversion shows as a drop."
+unit             = " ships"
+inverse          = "expm1"
+
+[aisstream_chokepoints.alerts]
+tail             = "lower"   # harm is ships staying away (ADR 0004)
+reach_km         = 500
 
 # --- the internet --------------------------------------------------------------------
 

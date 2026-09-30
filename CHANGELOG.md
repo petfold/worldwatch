@@ -41,6 +41,23 @@ sibling projects, where the tag is what publishes.
 
 ### Added
 
+- **Ships at Hormuz, Bab-el-Mandeb and Suez** (`aisstream_chokepoints`, the
+  operator's free aisstream.io key): distinct ships per half hour in each box,
+  counted from their static-data broadcasts (each ship about every 6 minutes,
+  a fraction of position reports' bandwidth); an empty box is 0 when the other
+  boxes are heard, and nothing when none is. Generic: a stream's
+  `window_seconds` holds messages per UTC half hour and parses them together
+  (the window a connection opens in is dropped, never guessed);
+  `cell_aggregate`'s `aggregate = "distinct"` counts an identity once and
+  drops it; `[geocode] strategy = "boxes"`; `zero_fill`. The key goes in the
+  subscription as `{auth}`.
+- **US grid demand on the operator's EIA key** instead of the shared DEMO_KEY.
+  EIA takes a key only in the URL, so `{auth}` fills it there
+  (`auth_scheme = "url"`: no header) and every recorded error has it redacted
+  (`SourceConfig.redact`, for polled and streamed sources): an httpx error
+  quotes the URL, and the health table now leaves the VPS in the daily export.
+  The EIA test fixture was all balancing authorities outside the stanza's 13
+  regions, so its test passed on zero rows; it is a real 13-region payload now.
 - **A daily Parquet export of the permanent record, pulled to the local
   machine: the backup** (spec §6; no restic/B2 existed, despite the docs).
   `worldwatch export` (`worldwatch-export.timer`, 00:30 UTC) writes the surprise

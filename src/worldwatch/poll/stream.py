@@ -17,6 +17,14 @@ live scorer.
   silence.
 - **Isolation.** Every failure is recorded as data; the stream reconnects with
   exponential backoff (capped) and never affects other sources.
+- **Windows.** A feed whose unit is an interval, not a message (distinct
+  ships in an area per half hour), sets `window_seconds`: messages are held
+  for each UTC-aligned window and parsed together as {"messages", "received":
+  the window's start}. The window a connection opens in is incomplete and is
+  dropped, as is the one a dropped connection leaves: missing, never guessed.
+- **Secrets.** A key the feed expects in its subscription is written `{auth}`
+  there and filled from the stanza's `auth_env_var`; it is redacted from
+  every recorded error.
 - **Liveness.** By default a WebSocket keepalive ping every 20 s. A feed that
   talks constantly (Coinbase's heartbeat channel) can instead turn pings off
   (`ping_interval = 0`) and reconnect when silent for `stale_seconds` —
@@ -108,7 +116,10 @@ async def run_stream(
                 ping_interval=(float(ping) if ping else None),
             ) as ws:
                 if cfg.fetch.get("subscribe"):
-                    await ws.send(json.dumps(cfg.fetch["subscribe"]))
+                    msg = json.dumps(cfg.fetch["subscribe"])
+                    if cfg.auth_env_var:  # a key sent in the subscription (aisstream)
+                        msg = msg.replace("{auth}", cfg.auth_token() or "")
+                    await ws.send(msg)
                 record_health(conn, cfg.stream_id, "connected", ts=int(clock()))
                 backoff = 0.0
                 await _pump(conn, cfg, ws, throttle, flush_seconds, on_new, stop, clock)
@@ -119,7 +130,7 @@ async def run_stream(
             reason = f"{type(e).__name__}: {e}"
         if stop is not None and stop.is_set():
             return
-        record_health(conn, cfg.stream_id, "stream_error", reason[:300], ts=int(clock()))
+        record_health(conn, cfg.stream_id, "stream_error", cfg.redact(reason)[:300], ts=int(clock()))
         backoff = min(MAX_BACKOFF_SECONDS, max(min_backoff, backoff * 2 or min_backoff))
         await asyncio.sleep(backoff)
 
@@ -140,6 +151,10 @@ async def _pump(
     next_beat = clock()  # heartbeat right away, then once per cadence
     stale = cfg.fetch.get("stale_seconds")  # feeds that keep talking: silence = dead link
     last_message = clock()
+    win = float(cfg.fetch["window_seconds"]) if cfg.fetch.get("window_seconds") else None
+    buffer: list[Any] = []
+    win_start = clock() // win * win if win else 0.0
+    partial = True  # the window the connection opened in is incomplete: never emitted
     while stop is None or not stop.is_set():
         timeout = max(0.05, min(next_flush, next_beat) - clock())
         try:
@@ -151,16 +166,29 @@ async def _pump(
             messages += 1
             last_message = now
             try:
-                for o in parsers.parse({"message": json.loads(raw), "received": int(now)}, cfg):
-                    o = o if o.ts != parsers._NOW_SENTINEL else _with_ts(o, int(now))
-                    kept = throttle.offer(o) if throttle else o
-                    if kept is not None:
-                        batch.append(kept)
+                msg = json.loads(raw)
+                if win:
+                    buffer.append(msg)
+                else:
+                    for o in parsers.parse({"message": msg, "received": int(now)}, cfg):
+                        o = o if o.ts != parsers._NOW_SENTINEL else _with_ts(o, int(now))
+                        kept = throttle.offer(o) if throttle else o
+                        if kept is not None:
+                            batch.append(kept)
             except Exception as e:  # a malformed message never kills the stream
                 parse_errors += 1
                 if parse_errors <= 3:
                     record_health(conn, cfg.stream_id, "parse_error",
-                                  f"{type(e).__name__}: {e}"[:300], ts=int(now))
+                                  cfg.redact(f"{type(e).__name__}: {e}")[:300], ts=int(now))
+        if win and now >= win_start + win:
+            if not partial:
+                try:
+                    batch.extend(parsers.parse({"messages": buffer, "received": int(win_start)}, cfg))
+                except Exception as e:
+                    record_health(conn, cfg.stream_id, "parse_error",
+                                  cfg.redact(f"{type(e).__name__}: {e}")[:300], ts=int(now))
+            buffer, partial = [], False
+            win_start = now // win * win
         if now >= next_flush:
             if throttle:
                 batch.extend(throttle.flush_due(now))

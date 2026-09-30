@@ -58,6 +58,10 @@ text: about ten parsers for ~40 stanzas.
 
 ## Batch 2 — needs a free key or account that you register
 
+**Status 2026-09-30:** aisstream (`aisstream_chokepoints`: Hormuz, Bab-el-Mandeb
+and Suez, distinct ships per half hour from their static-data broadcasts) and
+the EIA key (`eia_demand` off DEMO_KEY) added; the rest not yet registered.
+
 | Source | What it adds | How to get access |
 |---|---|---|
 | OpenAQ v3 | regulatory AQ outside the US/EU (Asia, Africa, LatAm, **the Gulf**) — the NO2-drop-means-shutdown case | free account at explore.openaq.org → API key; 60 req/min, 2,000/h. Exclude AirNow/EEA stations (already covered) |

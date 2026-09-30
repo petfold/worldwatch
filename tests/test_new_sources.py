@@ -1,6 +1,7 @@
 """Batch 1 of the source review: each new stanza parses a real (trimmed) payload."""
 
 import json
+import math
 import pathlib
 
 import h3
@@ -146,6 +147,7 @@ def test_grid_feeds(sources):
     nem = _obs(sources, "aemo_nem_demand", _json("aemo_nem.json"))
     assert len(nem) == 5 and len({o.cell for o in nem}) == 5
     eia = _obs(sources, "eia_demand", _json("eia_region.json"))
+    assert len(eia) == 26 and len({o.cell for o in eia}) == 13  # 13 regions x 3 hours, the newest dropped
     assert all(h3.is_valid_cell(o.cell) for o in eia)
 
 
@@ -209,6 +211,33 @@ def test_uae_air_defence_days_with_engagements(sources):
             + (r["daily_ballistic_missiles_engaged"] or 0) > 0]
     assert len(obs) == len(days) and obs[0].value == 40.0
     assert obs[0].ts == 1775001600 - 4 * 3600  # 2026-04-01 00:00 in the UAE
+
+
+def _ais(mmsi, lat, lon, kind="ShipStaticData", lower=False):
+    """An aisstream message in its documented shape (no key here to record one)."""
+    pos = {"latitude": lat, "longitude": lon} if lower else {"Latitude": lat, "Longitude": lon}
+    return {"MessageType": kind, "MetaData": {"MMSI": mmsi, "ShipName": f"SHIP {mmsi}", **pos},
+            "Message": {kind: {"UserID": mmsi}}}
+
+
+def test_chokepoints_count_each_ship_once_per_window(sources):
+    from worldwatch.ingest.geocode import h3_cell
+
+    msgs = [_ais(1, 26.4, 56.4), _ais(1, 26.5, 56.5), _ais(2, 26.3, 56.2, lower=True),  # Hormuz: 2 ships
+            _ais(3, 30.5, 32.35),                                                     # Suez: 1
+            _ais(4, 26.4, 56.4, kind="PositionReport"),                              # not counted
+            _ais(5, 20.0, 60.0),                                                      # outside every box
+            {"MessageType": "SubscriptionConfirmation", "Message": {"CompressionEnabled": True}}]
+    obs = _obs(sources, "aisstream_chokepoints", {"messages": msgs, "received": 1790740800})
+    by = {o.cell: o.value for o in obs}
+    hormuz, bam, suez = (h3_cell(26.4, 56.45, 3), h3_cell(12.65, 43.35, 3), h3_cell(30.55, 32.425, 3))
+    assert by == {hormuz: pytest.approx(math.log1p(2)), suez: pytest.approx(math.log1p(1)), bam: 0.0}
+    assert {o.ts for o in obs} == {1790740800}
+    assert all(o.context is None for o in obs)  # no ship names or MMSIs kept
+
+
+def test_chokepoints_say_nothing_when_nothing_was_heard(sources):
+    assert _obs(sources, "aisstream_chokepoints", {"messages": [], "received": 1790740800}) == []
 
 
 def test_fx_rates_one_series_per_watched_currency(sources):

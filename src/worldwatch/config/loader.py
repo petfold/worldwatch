@@ -38,6 +38,12 @@ class SourceConfig:
             )
         return val
 
+    def redact(self, text: str) -> str:
+        """This source's secret out of a text bound for the health table: an
+        httpx error quotes the URL, and some APIs (EIA) take their key only there."""
+        secret = os.environ.get(self.auth_env_var) if self.auth_env_var else None
+        return text.replace(secret, "***") if secret else text
+
 
 def load_sources(config_dir: Path) -> dict[str, SourceConfig]:
     sources: dict[str, SourceConfig] = {}

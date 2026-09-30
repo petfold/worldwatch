@@ -23,6 +23,11 @@ Legend: 🔴 blocks a source/feature · 🟡 nice-to-have · ⚪ later (deploy p
       (hourly, 1,000 requests a month; a 304 counts too), `WW_OXR_APP_ID` set in
       `/etc/worldwatch/worldwatch.env` and checked; stanza `fx_usd`.
 
+- [x] 🟡 **aisstream.io and EIA keys** — done 2026-09-30: `WW_AISSTREAM_KEY`
+      (ships at Hormuz, Bab-el-Mandeb, Suez) and `WW_EIA_KEY` (US grid demand,
+      off the shared DEMO_KEY). The rest of the source review's batch 2
+      (OpenAQ, OpenSky account, ENTSO-E, ...) when you want them.
+
 ## Push notifications (needed before step 9 is useful)
 
 - [x] 🔴 **Choose a channel** — decided 2026-07-11: **self-hosted ntfy on

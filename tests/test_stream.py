@@ -195,3 +195,61 @@ async def test_silent_feed_is_reconnected_when_stale(db, sources):
 def test_coinbase_liveness_is_its_heartbeat(sources):
     f = sources["btc_usd"].fetch
     assert "heartbeat" in f["subscribe"]["channels"] and f["ping_interval"] == 0 and f["stale_seconds"] == 60
+
+
+# --- windows: distinct ships per half hour (aisstream) ------------------------
+
+
+class TimedWS(FakeWS):
+    """Delivers (t, message) pairs, moving a fake clock to each t; then moves
+    it to `end`, so the last full window closes, and waits."""
+
+    def __init__(self, timed, end, clock, stop):
+        super().__init__([], stop)
+        self.timed, self.end, self.clock = list(timed), end, clock
+
+    async def recv(self):
+        if self.timed:
+            self.clock[0], raw = self.timed.pop(0)
+            return raw
+        self.clock[0] = self.end
+        return await super().recv()
+
+
+def _static(mmsi, lat=26.4, lon=56.4):
+    return json.dumps({"MessageType": "ShipStaticData",
+                       "MetaData": {"MMSI": mmsi, "ShipName": "X", "Latitude": lat, "Longitude": lon},
+                       "Message": {"ShipStaticData": {"UserID": mmsi}}})
+
+
+async def test_a_window_is_counted_whole_and_the_opening_one_dropped(db, sources, monkeypatch):
+    monkeypatch.setenv("WW_AISSTREAM_KEY", "ais-secret-9")
+    cfg = _fast(sources["aisstream_chokepoints"])
+    w = 1790740800  # a window boundary (30 min)
+    clock = [w + 100.0]
+    stop = asyncio.Event()
+    ws = TimedWS([(w + 100, _static(9)),                                  # the opening window: dropped
+                  (w + 1900, _static(1)), (w + 2000, _static(1)), (w + 2100, _static(2)),
+                  (w + 2200, _static(3, 30.5, 32.35))], w + 3700, clock, stop)
+    got: list = []
+
+    async def on_new(c, obs, t):
+        got.extend(obs)
+
+    await _run_until(lambda: len(got) >= 3, run_stream(db, cfg, on_new=on_new, stop=stop,
+                                                       connect=_connector([ws]), clock=lambda: clock[0]), stop)
+    assert ws.sent[0]["APIKey"] == "ais-secret-9"
+    assert sorted(round(math.expm1(o.value)) for o in got) == [0, 1, 2]  # Bab-el-Mandeb, Suez, Hormuz
+    assert {o.ts for o in got} == {w + 1800}
+
+
+async def test_a_stream_key_never_reaches_the_health_table(db, sources, monkeypatch):
+    monkeypatch.setenv("WW_AISSTREAM_KEY", "ais-secret-9")
+    cfg = _fast(sources["aisstream_chokepoints"])
+    stop = asyncio.Event()
+    refused = ConnectionError("rejected subscription {'APIKey': 'ais-secret-9'}")
+    await _run_until(lambda: db.execute("SELECT COUNT(*) FROM health WHERE event = 'stream_error'").fetchone()[0],
+                     run_stream(db, cfg, stop=stop, connect=_connector([refused, FakeWS([], stop)]),
+                                min_backoff=0.01), stop)
+    detail = db.execute("SELECT detail FROM health WHERE event = 'stream_error'").fetchone()[0]
+    assert "ais-secret-9" not in detail and "***" in detail

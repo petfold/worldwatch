@@ -62,6 +62,40 @@ async def test_json_get_auth_scheme_keeps_the_key_out_of_the_url(db, sources, mo
     assert "0123456789abcdef" not in str(seen[0].url)
 
 
+async def test_a_url_key_is_sent_only_in_the_url(db, sources, monkeypatch):
+    """EIA takes its key only in the URL: no Authorization header besides."""
+    monkeypatch.setenv("WW_EIA_KEY", "eia-secret-123")
+    cfg = sources["eia_demand"]
+    payload = load_fixture("eia_region.json")
+    seen = []
+
+    def handler(request):
+        seen.append(request)
+        return httpx.Response(200, json=payload)
+
+    async with _client(handler) as client:
+        outcome = await poll_once(client, db, cfg, CacheValidators(), now=1790741000)
+
+    assert outcome.event == "ok" and outcome.rows_written > 0
+    assert "api_key=eia-secret-123" in str(seen[0].url)
+    assert "Authorization" not in seen[0].headers
+
+
+async def test_a_failed_fetch_records_the_error_without_the_key(db, sources, monkeypatch):
+    """An httpx error quotes the URL, key and all; the health table (and the
+    export that copies it off the VPS) gets it redacted."""
+    monkeypatch.setenv("WW_EIA_KEY", "eia-secret-123")
+    cfg = sources["eia_demand"]
+
+    async with _client(lambda request: httpx.Response(403, text="forbidden")) as client:
+        outcome = await poll_once(client, db, cfg, CacheValidators(), now=1790741000)
+
+    detail = db.execute("SELECT detail FROM health WHERE component = 'eia_demand'").fetchone()["detail"]
+    assert outcome.event == "http_error"
+    assert "eia-secret-123" not in detail and "eia-secret-123" not in (outcome.detail or "")
+    assert "api_key=***" in detail
+
+
 def test_fx_cadence_stays_inside_the_free_plan(sources):
     """1,000 requests a month, and a 304 counts too: the cadence is the budget."""
     assert 31 * 86400 / sources["fx_usd"].cadence_seconds < 1000

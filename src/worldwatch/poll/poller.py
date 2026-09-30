@@ -73,14 +73,14 @@ async def poll_once(
         fetcher = get_fetcher(cfg)
         result = await fetcher(client, cfg, validators, poll_time)
     except httpx.TimeoutException as e:
-        record_health(conn, cfg.stream_id, "timeout", str(e), ts=poll_time)
-        return PollOutcome("timeout", detail=str(e))
+        record_health(conn, cfg.stream_id, "timeout", cfg.redact(str(e)), ts=poll_time)
+        return PollOutcome("timeout", detail=cfg.redact(str(e)))
     except httpx.HTTPError as e:
-        record_health(conn, cfg.stream_id, "http_error", str(e), ts=poll_time)
-        return PollOutcome("http_error", detail=str(e))
+        record_health(conn, cfg.stream_id, "http_error", cfg.redact(str(e)), ts=poll_time)
+        return PollOutcome("http_error", detail=cfg.redact(str(e)))
     except Exception as e:  # isolation boundary: fetcher fault → data, not a crash
-        record_health(conn, cfg.stream_id, "fetch_error", f"{type(e).__name__}: {e}", ts=poll_time)
-        return PollOutcome("fetch_error", detail=str(e))
+        record_health(conn, cfg.stream_id, "fetch_error", cfg.redact(f"{type(e).__name__}: {e}"), ts=poll_time)
+        return PollOutcome("fetch_error", detail=cfg.redact(str(e)))
 
     # Carry updated validators back to the caller's state.
     validators.etag = result.validators.etag
@@ -94,8 +94,8 @@ async def poll_once(
         obs = parsers.parse(result.payload, cfg)
         obs = _stamp_now(obs, poll_time)
     except Exception as e:  # isolation boundary: any parser fault → data, not a crash
-        record_health(conn, cfg.stream_id, "parse_error", f"{type(e).__name__}: {e}", ts=poll_time)
-        return PollOutcome("parse_error", detail=str(e))
+        record_health(conn, cfg.stream_id, "parse_error", cfg.redact(f"{type(e).__name__}: {e}"), ts=poll_time)
+        return PollOutcome("parse_error", detail=cfg.redact(str(e)))
 
     new = write_new_observations(conn, obs, now=poll_time)
     record_health(conn, cfg.stream_id, "ok", f"rows={len(new)}", ts=poll_time)

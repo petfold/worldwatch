@@ -30,14 +30,20 @@ Two shapes cover most new sources with config alone (guardrail 2):
   skip_last      drop the newest time in the payload (an in-progress bucket)
   id_fields      spread records sharing a time: + a stable offset < id_spread s
 [parse] keys, cell_aggregate:
-  aggregate      "count" (default) | "median" | "mean" | "fraction"
+  aggregate      "count" (default) | "median" | "mean" | "fraction" | "distinct"
   value_field    what median/mean/fraction read; fraction_below = n
+  distinct_field what "distinct" counts once per place (a ship's MMSI): read,
+                 counted and dropped here, never stored
+  zero_fill      with the boxes strategy: a box with no records is 0 when the
+                 payload had records elsewhere (a feed that sent nothing says nothing)
   min_records    places with fewer are skipped (default 1)
   time_field     payload-level time (dotted); else the newest record time
                  (record_time_field) or the poll time; floored to bucket_seconds
 [geocode] strategy:
-  fixed (cell, or fixed_latlon with lat/lon)  |  coords (lat_field, lon_field; or polygon_field: a list
-  of {lat, lon} or [lon, lat], its centroid)  |  country (country_field: ISO-2; or country_map = { value = ISO-2 }, the
+  fixed (cell, or fixed_latlon with lat/lon)  |  coords (lat_field, lon_field, each a
+  field or a list tried in order; or polygon_field: a list of {lat, lon} or [lon, lat], its
+  centroid)  |  boxes (lat_field, lon_field; boxes = { name = [lat_min, lon_min, lat_max,
+  lon_max] }: the cell at the centre of the box a point is in)  |  country (country_field: ISO-2; or country_map = { value = ISO-2 }, the
   records it does not name dropped)
   |  points (key_field, points = { key = [lat, lon] })
 """
@@ -179,10 +185,18 @@ def _cell(rec: Any, cfg: SourceConfig) -> str | None:
         if g.get("polygon_field"):
             c = _centroid(get_path(rec, str(g["polygon_field"])))
             return h3_cell(c[0], c[1], res) if c else None
-        lat, lon = _num(get_path(rec, str(g.get("lat_field", "lat")))), _num(get_path(rec, str(g.get("lon_field", "lon"))))
+        lat, lon = _latlon(rec, g)
         if lat is None or lon is None or not (-90 <= lat <= 90 and -180 <= lon <= 180) or (lat == 0 and lon == 0):
             return None
         return h3_cell(lat, lon, res)
+    if strategy == "boxes":
+        lat, lon = _latlon(rec, g)
+        if lat is None or lon is None:
+            return None
+        for la0, lo0, la1, lo1 in (g.get("boxes") or {}).values():
+            if la0 <= lat <= la1 and lo0 <= lon <= lo1:
+                return h3_cell((la0 + la1) / 2, (lo0 + lo1) / 2, res)
+        return None
     if strategy == "country":
         from worldwatch.config.countries import country_cell
 
@@ -194,6 +208,23 @@ def _cell(rec: Any, cfg: SourceConfig) -> str | None:
         p = (g.get("points") or {}).get(str(get_path(rec, str(g.get("key_field", "id")))))
         return h3_cell(float(p[0]), float(p[1]), res) if p else None
     return resolve_fixed(g)  # fixed: a cell name, or fixed_latlon
+
+
+def _latlon(rec: Any, g: dict[str, Any]) -> tuple[float | None, float | None]:
+    def first(fields: Any, default: str) -> float | None:
+        for f in fields if isinstance(fields, list) else [fields or default]:
+            v = _num(get_path(rec, str(f)))
+            if v is not None:
+                return v
+        return None
+
+    return first(g.get("lat_field"), "lat"), first(g.get("lon_field"), "lon")
+
+
+def _box_cells(cfg: SourceConfig) -> list[str]:
+    res = int(cfg.geocode.get("h3_resolution", 3))
+    return [h3_cell((la0 + la1) / 2, (lo0 + lo1) / 2, res)
+            for la0, lo0, la1, lo1 in (cfg.geocode.get("boxes") or {}).values()]
 
 
 def _centroid(pts: Any) -> tuple[float, float] | None:
@@ -306,6 +337,7 @@ def parse_cell_aggregate(payload: Any, cfg: SourceConfig) -> list[Observation]:
     how = str(p.get("aggregate", "count"))
     vf = p.get("value_field")
     groups: dict[str, list[float]] = {}
+    distinct: dict[str, set[str]] = {}
     times: list[int] = []
     doc_time = None
     for rec, doc in _payload_records(payload, cfg):
@@ -323,6 +355,11 @@ def parse_cell_aggregate(payload: Any, cfg: SourceConfig) -> list[Observation]:
         if how == "count":
             groups.setdefault(cell, []).append(1.0)
             continue
+        if how == "distinct":
+            ident = get_path(rec, str(p.get("distinct_field", "id")))
+            if ident is not None:
+                distinct.setdefault(cell, set()).add(str(ident))
+            continue
         v = _num(get_path(rec, str(vf))) if vf else None
         if v is not None and _in_range(v, cfg):
             groups.setdefault(cell, []).append(v)
@@ -330,12 +367,20 @@ def parse_cell_aggregate(payload: Any, cfg: SourceConfig) -> list[Observation]:
     bucket = int(p.get("bucket_seconds", 0))
     if bucket and ts != _NOW_SENTINEL:
         ts -= ts % bucket
+    if how == "distinct":
+        groups = {cell: [1.0] * len(ids) for cell, ids in distinct.items()}
+        if p.get("zero_fill") and groups:
+            for cell in _box_cells(cfg):
+                groups.setdefault(cell, [])
     need = int(p.get("min_records", 1))
     obs = []
     for cell, vals in sorted(groups.items()):
+        if not vals and p.get("zero_fill"):
+            obs.append(Observation(cfg.stream_id, cell, ts, _transform(0.0, cfg)))
+            continue
         if len(vals) < need:
             continue
-        if how == "count":
+        if how in ("count", "distinct"):
             v = float(len(vals))
         elif how == "median":
             v = float(statistics.median(vals))
