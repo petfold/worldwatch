@@ -212,7 +212,8 @@ def test_uae_air_defence_days_with_engagements(sources):
 
 
 def test_fx_rates_one_series_per_watched_currency(sources):
-    """The fixture follows the documented latest.json shape (no App ID here to record one)."""
+    """The fixture follows the documented latest.json shape, with the rates of the first
+    real poll (2026-09-30 05:00 UTC) for the watched currencies."""
     import math
 
     from worldwatch.config.countries import country_cell
@@ -221,7 +222,7 @@ def test_fx_rates_one_series_per_watched_currency(sources):
     by = {o.context["key"]: o for o in _obs(sources, "fx_usd", payload)}
     assert set(by) == {"AED", "ARS", "EGP", "EUR", "GBP", "IRR", "JPY", "SAR", "TRY"}
     assert {o.ts for o in by.values()} == {payload["timestamp"]}
-    assert by["EUR"].value == pytest.approx(math.log(0.8827))
+    assert by["EUR"].value == pytest.approx(math.log(0.8825))
     assert by["IRR"].cell == country_cell("IR", 3) and by["EUR"].cell == country_cell("DE", 3)
 
 

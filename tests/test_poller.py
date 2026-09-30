@@ -5,7 +5,7 @@ import pytest
 
 from conftest import load_fixture
 from worldwatch.poll.http import CacheValidators
-from worldwatch.poll.poller import jitter_seconds, poll_once
+from worldwatch.poll.poller import jitter_seconds, poll_once, slot_delay
 
 
 def _client(handler) -> httpx.AsyncClient:
@@ -148,6 +148,44 @@ def test_jitter_is_deterministic_and_bounded(sources):
     j2 = jitter_seconds(cfg.stream_id, cfg.cadence_seconds)
     assert j1 == j2  # deterministic
     assert 0 <= j1 < 0.25 * cfg.cadence_seconds
+
+
+def test_slot_delay_lands_on_the_phase():
+    hour = 1790740800  # 2026-09-30 05:00 UTC
+    assert slot_delay(hour + 37 * 60, 3600, 240) == 23 * 60 + 240  # 05:37 → 06:04
+    assert slot_delay(hour + 100, 3600, 240) == 140
+    assert slot_delay(hour + 240, 3600, 240) == 0
+
+
+async def test_phased_poller_reads_just_after_each_publication(db, sources, monkeypatch):
+    """Open Exchange Rates publishes 1-2 min past the hour: read at hh:04 every
+    hour, whenever the poller started (the first deploy read at 05:37)."""
+    import asyncio
+
+    from worldwatch.poll import poller
+
+    monkeypatch.setenv("WW_OXR_APP_ID", "x")
+    cfg = sources["fx_usd"]
+    payload = load_fixture("oxr_latest.json")
+    clock = [1790740800 + 37 * 60]
+    polls: list[float] = []
+    stop = asyncio.Event()
+
+    async def fake_sleep(seconds):
+        clock[0] += seconds
+
+    def handler(request):
+        polls.append(clock[0])
+        if len(polls) == 3:
+            stop.set()
+        return httpx.Response(200, json=payload)
+
+    monkeypatch.setattr(poller.asyncio, "sleep", fake_sleep)
+    monkeypatch.setattr(poller.time, "time", lambda: clock[0])
+    async with _client(handler) as client:
+        await poller.run_poller(client, db, cfg, stop=stop)
+
+    assert [(t - 1790740800) / 60 for t in polls] == [64, 124, 184]  # 06:04, 07:04, 08:04
 
 
 @pytest.mark.parametrize(

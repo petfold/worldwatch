@@ -170,6 +170,7 @@ topic_tags       = ["markets", "fx"]
 flavor           = "continuous"
 endpoint         = "https://openexchangerates.org/api/latest.json?prettyprint=false"
 cadence_seconds  = 3600    # ~730 requests a month of the free plan's 1,000: never faster
+phase_seconds    = 240     # 4 min past each hour: OXR refreshes "about 1-2 minutes past the hour" (its FAQ)
 auth_env_var     = "WW_OXR_APP_ID"
 status           = "nursery"
 notes            = "Open Exchange Rates (free plan, hourly): units of each currency per US dollar; value = log(rate). The App ID goes in the Authorization header, never the URL. Weekends repeat Friday's close."
@@ -224,7 +225,7 @@ ILS = "IL"
 EGP = "EG"
 LBP = "LB"
 IQD = "IQ"
-IRR = "IR"    # the official rate, not the street rate
+IRR = "IR"    # ~1.37 million per dollar on 2026-09-30: not the old 42,000 official rate
 INR = "IN"
 PKR = "PK"
 BDT = "BD"

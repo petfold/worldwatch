@@ -48,8 +48,11 @@ sibling projects, where the tag is what publishes.
   Authorization header (a stanza's `[fetch] auth_scheme`, here "Token"), never
   in the URL. Each currency sits in its country's cell, where OONI, IODA and
   Tor already are (`[geocode] country_map`); the Gulf pegs included, where a
-  move means a peg under strain. Generic: `record_items` (a dict as one record
-  per entry) and `doc_time_field` (one time for the whole document).
+  move means a peg under strain. Read at 4 minutes past each hour, just after
+  OXR publishes ("about 1-2 minutes past the hour"): a stanza's
+  `phase_seconds` pins its polls to the clock (the first deploy read at 05:37,
+  37 minutes late). Generic: `record_items` (a dict as one record per entry)
+  and `doc_time_field` (one time for the whole document).
 - **Early alerts that escalate.** A stream that needs corroboration no longer
   stays silent until a second modality agrees when one reading is strong
   enough on its own (`alert_score` ≥ 6, p ~ 1e-6; on the archive, a few times

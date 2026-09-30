@@ -8,7 +8,7 @@ checked-in fixture and/or the real feed).
 | # | Source | Flavor | Stanza | Parser | Status |
 |---|--------|--------|--------|--------|--------|
 | 1 | Seismic (USGS) | count | `usgs_seismic` | `geojson_features` | ✅ live (all-hour summary feed) |
-| 2 | Markets/crypto/FX | continuous | `btc_usd`, `eth_usd`, `fx_usd` | `coinbase_ticker`, `records` | ✅ live (crypto); FX added 2026-09-30 (Open Exchange Rates, `WW_OXR_APP_ID`), awaiting its first real poll |
+| 2 | Markets/crypto/FX | continuous | `btc_usd`, `eth_usd`, `fx_usd` | `coinbase_ticker`, `records` | ✅ live (crypto; FX since 2026-09-30: Open Exchange Rates, `WW_OXR_APP_ID`, 57 currencies hourly) |
 | 3 | News events (GDELT) | count | `gdelt_events` | `gdelt_export_events` | ✅ live (raw 15-min export files) |
 | 4 | Wikipedia pageviews | count | `wikipedia_pageviews` | `wikimedia_pageviews` | ✅ live (URL templating in `poll/url.py`) |
 | 5 | Internet health | continuous | `cf_radar_netflows_*` | `cloudflare_radar_timeseries` | ✅ live (global + GB/US/JP; `WW_CLOUDFLARE_TOKEN`) |

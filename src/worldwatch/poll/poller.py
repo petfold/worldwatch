@@ -3,8 +3,10 @@
 One asyncio task per source (per-source failure isolation, guardrail 3):
 a broken API stalls only its own task. Every outcome — ok, 304, http_error,
 timeout, parse_error — is recorded in the health table as data (P9), not just
-logged. Schedule is jittered to avoid thundering-herd on shared endpoints;
-transient failures back off exponentially up to the source's cadence.
+logged. Schedule is jittered to avoid thundering-herd on shared endpoints,
+unless a stanza's `phase_seconds` pins it to the clock (a feed that publishes
+on the hour is read just after); transient failures back off exponentially up
+to the source's cadence.
 """
 
 from __future__ import annotations
@@ -35,6 +37,12 @@ def jitter_seconds(stream_id: str, cadence: int) -> float:
     for ch in stream_id:
         h = (h * 131 + ord(ch)) & 0xFFFFFFFF
     return (h % 1000) / 1000.0 * _MAX_JITTER_FRAC * cadence
+
+
+def slot_delay(now: float, cadence: int, phase: int) -> float:
+    """Seconds until the next UTC time t with t ≡ phase (mod cadence): with
+    cadence 3600 and phase 240, four minutes past every hour."""
+    return (phase - now) % cadence
 
 
 @dataclass(slots=True)
@@ -120,19 +128,29 @@ async def run_poller(
     stop: asyncio.Event | None = None,
     on_new: OnNew | None = None,
 ) -> None:
-    """Long-running loop for one source: jittered cadence, exponential backoff
-    on transient failure (capped at the cadence)."""
+    """Long-running loop for one source: jittered cadence (or the stanza's
+    slot on the clock), exponential backoff on transient failure (capped at
+    the cadence)."""
     validators = CacheValidators()
     backoff = 0.0
-    # Stagger startup across sources.
-    await asyncio.sleep(jitter_seconds(cfg.stream_id, cfg.cadence_seconds))
+    phase = cfg.extra.get("phase_seconds")
+    # Stagger startup across sources, or wait for the source's slot.
+    if phase is None:
+        await asyncio.sleep(jitter_seconds(cfg.stream_id, cfg.cadence_seconds))
+    else:
+        await asyncio.sleep(slot_delay(time.time(), cfg.cadence_seconds, int(phase)))
 
     while stop is None or not stop.is_set():
         outcome = await poll_once(client, conn, cfg, validators, on_new=on_new)
         if outcome.event in ("timeout", "http_error", "fetch_error"):
             backoff = min(cfg.cadence_seconds, max(1.0, backoff * 2 or 1.0))
             sleep_for = backoff
-        else:
+        elif phase is None:
             backoff = 0.0
             sleep_for = cfg.cadence_seconds
+        else:
+            backoff = 0.0
+            sleep_for = slot_delay(time.time(), cfg.cadence_seconds, int(phase))
+            if sleep_for < 1.0:  # still inside the slot just polled
+                sleep_for += cfg.cadence_seconds
         await asyncio.sleep(sleep_for)

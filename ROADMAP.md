@@ -36,9 +36,8 @@ fixture and/or the real feed.
 - [x] Severe weather — NWS, US; zone-only alerts skipped
 - [x] Radiation — Safecast
 - [x] Night lights — Earthdata login verified 2026-07-11
-- [ ] FX markets — `fx_usd` added 2026-09-30: Open Exchange Rates' free plan
-      (`WW_OXR_APP_ID`), 57 currencies hourly. Tick once the first real poll
-      lands on the VPS; the test fixture follows the documented response.
+- [x] FX markets (DONE 2026-09-30) — `fx_usd`: Open Exchange Rates' free plan
+      (`WW_OXR_APP_ID`), 57 currencies hourly; first real poll 05:37 UTC, all 57.
 
 ### Definition of done — not yet met
 
