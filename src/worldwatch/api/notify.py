@@ -145,9 +145,15 @@ def format_alert(
 ) -> tuple[str, str, int, list[str]]:
     """(title, message, priority, tags) for an alert row.
 
-    Title: 'WW Confirmed: Radiation, Europe (EURDEP) + 1 - Finland' (ASCII: an HTTP
-    header); prefix overrides the stage word. With `conn`, each evidence line also
-    says what was observed (from the consolidated bin) and the usual level there —
+    A phone shows a push as two short lines, so those say what happened and where.
+    The title is the most specific thing known: a source's own words for the event
+    ('M6.6 80 km ENE of Tadine, New Caledonia, depth 10 km'), else the signal and its
+    harm or direction, then the place unless the words already name it (ASCII: an
+    HTTP header). The message opens with the readings, observed and usual. How sure
+    it is (the stage, 'WW Confirmed: ...'), the severity, the exact place and the data
+    time come last; truncation takes detail lines first, never those. prefix
+    overrides the stage words (the notifier adds 'far away', '(update)'). With
+    `conn`, each reading comes from the consolidated bin with the usual level there:
     context for the reader only; the alert itself was opened on q_values alone."""
     evidence = json.loads(alert["evidence"])
     severity = float(alert["severity"])
@@ -156,52 +162,99 @@ def format_alert(
     is_silence = (bool(evidence) and all(e.get("q_value") is None for e in evidence)
                   and not any(e.get("kind") == "source_alert" for e in evidence))
 
-    labels: list[str] = []
-    for e in evidence:
-        lab = context.display_for(e["stream_id"], sources.get(e["stream_id"])).label
-        if lab not in labels:
-            labels.append(lab)
-    what = labels[0] + (f" + {len(labels) - 1}" if len(labels) > 1 else "") if labels else "alert"
     cells = [e["cell"] for e in evidence if e.get("cell")] or [alert["cell"]]
     where = context.place_names(cells) or context.where(alert["cell"])
-    title = _ascii_text(f"WW {prefix or STAGE_PREFIX.get(stage, 'Alert')}: {what} - {where}")
+    stories = {i: _stories(e, conn, sources) for i, e in enumerate(evidence[:MAX_EVIDENCE_LINES])}
+    head = _headline_index(evidence, stories, hm)
+    what = (_headline(evidence[head], stories.get(head, []), conn, sources, hm.members.get(head))
+            if evidence else "Alert")
+    title = _ascii_text(what if _names_place(what, where) else f"{what} - {where}")
 
-    lines = [
-        certainty(hm.kept or evidence, sources, stage) + f" (severity {severity:.2f})",
-        f"Where: {context.place(cells[0])}",
-    ]
+    body: list[str] = []
+    order = ([head] + [i for i in range(len(evidence)) if i != head]) if evidence else []
+    titled = bool(evidence) and bool(stories.get(head))  # the title is that signal's first story
+    for i in order[:MAX_EVIDENCE_LINES]:
+        e, mh = evidence[i], hm.members.get(i)
+        if not (i == head and titled and e.get("kind") == "source_alert"):  # "issued": in the footer
+            body.append(_evidence_line(e, conn, sources) + (f" [{mh.label}]" if mh else ""))
+        for rec in stories.get(i, [])[1 if i == head and titled else 0:]:
+            cfg = sources.get(e["stream_id"])
+            url = evstore.link(cfg, rec)
+            body.append(f"  > {evstore.summary(cfg, rec)}" + (f" [{evstore.domain(url)}]" if url else ""))
+    if len(evidence) > MAX_EVIDENCE_LINES:
+        body.append(f"+{len(evidence) - MAX_EVIDENCE_LINES} more signals")
+    news = _news_in_area(alert, conn, sources)
+    if news:
+        shown = {evstore.summary(sources.get(e["stream_id"]), r) for i, e in enumerate(evidence)
+                 for r in stories.get(i, [])}
+        news = [(cfg, rec) for cfg, rec in news if evstore.summary(cfg, rec) not in shown]
+    if news:
+        body += [""] * bool(body)
+        for cfg, rec in news:  # context, not evidence (ADR 0001); the report page says so
+            url = evstore.link(cfg, rec)
+            kind = "News" if "news" in cfg.topic_tags else "Nearby"
+            body.append(f"{kind}: {evstore.summary(cfg, rec)}" + (f" [{evstore.domain(url)}]" if url else ""))
+
+    why = certainty(hm.kept or evidence, sources, stage).split(": ", 1)[-1]
+    footer = [""] * bool(body) + [f"WW {prefix or STAGE_PREFIX.get(stage, 'Alert')}: {why} (severity {severity:.2f})",
+              f"Where: {context.place(cells[0])}"]
     main = context.place_names(cells[:1])
     others = context.place_names([c for c in cells[1:] if context.place_names([c]) != main], limit=3)
     if others:
-        lines.append(f"Also: {others}")
+        footer.append(f"Also: {others}")
     starts = [e["bin_start"] for e in evidence if e.get("bin_start") is not None]
     if starts:
-        lines.append(f"Latest data: {time.strftime('%Y-%m-%d %H:%M UTC', time.gmtime(max(starts)))}")
-    lines.append("")
-    for i, e in enumerate(evidence[:MAX_EVIDENCE_LINES]):
-        mh = hm.members.get(i)
-        lines.append(_evidence_line(e, conn, sources) + (f" [{mh.label}]" if mh else ""))
-        for rec in _stories(e, conn, sources):
-            cfg = sources.get(e["stream_id"])
-            url = evstore.link(cfg, rec)
-            lines.append(f"    > {evstore.summary(cfg, rec)}" + (f" [{evstore.domain(url)}]" if url else ""))
-    if len(evidence) > MAX_EVIDENCE_LINES:
-        lines.append(f"+{len(evidence) - MAX_EVIDENCE_LINES} more signals")
-    news = _news_in_area(alert, conn, sources)
-    if news:
-        lines.append("")
-        lines.append("News in the area (context, not evidence):")
-        for cfg, rec in news:
-            url = evstore.link(cfg, rec)
-            lines.append(f"  > {evstore.summary(cfg, rec)}" + (f" [{evstore.domain(url)}]" if url else ""))
-    message = "\n".join(lines)
-    while len(message.encode()) > MAX_MESSAGE_BYTES and len(lines) > 4:
-        lines.pop()  # drop the last detail line
-        message = "\n".join(lines + ["(truncated: the full report has everything)"])
+        footer.append(f"Latest data: {time.strftime('%Y-%m-%d %H:%M UTC', time.gmtime(max(starts)))}")
+    message = "\n".join(body + footer)
+    while len(message.encode()) > MAX_MESSAGE_BYTES and len(body) > 1:
+        body.pop()  # the last detail line; the stage and place stay
+        message = "\n".join(body + ["(truncated: the full report has everything)"] + footer)
 
     priority = 5 if severity >= 0.9 else 4 if severity >= 0.7 else 3
     tags = ["mute"] if is_silence else ["rotating_light"]
     return title, message, priority, tags
+
+
+def _headline_index(evidence: list[dict], stories: dict[int, list], hm) -> int:
+    """The signal the push leads with: one the source itself issued, else one with a
+    story (the source's words for what happened), else one at a harm level, else the first."""
+    for want in (lambda i, e: e.get("kind") == "source_alert" and stories.get(i),
+                 lambda i, e: stories.get(i),
+                 lambda i, e: (mh := hm.members.get(i)) is not None and mh.level > 0):
+        for i, e in enumerate(evidence):
+            if want(i, e):
+                return i
+    return 0
+
+
+def _headline(e: dict, stories: list, conn: sqlite3.Connection | None,
+              sources: dict[str, SourceConfig], mh) -> str:
+    """What happened, as specifically as the signal allows: the source's words, its
+    harm level, or its direction and reading. The label without its source in
+    brackets ('Radiation, Europe'): the message names the source."""
+    import re
+
+    cfg = sources.get(e["stream_id"])
+    label = re.sub(r"\s*\([^)]*\)$", "", context.display_for(e["stream_id"], cfg).label)
+    if stories:
+        return evstore.summary(cfg, stories[0])
+    if mh is not None and mh.level > 0:
+        return f"{label}: {mh.label}"
+    if e.get("kind") == "source_alert":
+        return f"{label}: issued by the source"
+    if e.get("q_value") is None:
+        return f"{label} stopped reporting"
+    what = f"{label} unusually {context.rarity(e['q_value'])[1]}"
+    row = (context.bin_row(conn, e["stream_id"], e["cell"], e.get("scale"), e.get("bin_start"))
+           if conn is not None and e.get("cell") else None)
+    return f"{what}: {context.describe_bin(e['stream_id'], cfg, row)}" if row is not None else what
+
+
+def _names_place(what: str, where: str) -> bool:
+    """Whether the headline already names the place ('..., New Caledonia')."""
+    low = what.lower()
+    return any(len(part) > 3 and part in low
+               for part in (p.strip().lower().removeprefix("off ") for p in where.replace("+", ",").split(",")))
 
 
 def certainty(evidence: list[dict], sources: dict[str, SourceConfig] | None, stage: int) -> str:
@@ -236,6 +289,7 @@ def _ascii_text(s: str) -> str:
     """Plain ASCII for a header: accents folded ('Cote d'Ivoire'), the rest dropped."""
     import unicodedata
 
+    s = s.replace("µ", "u")  # µSv/h, µg/m³: the symbols a reading may carry (², ³ fold to digits)
     return unicodedata.normalize("NFKD", s).encode("ascii", "ignore").decode()
 
 
@@ -292,42 +346,56 @@ def _news_in_area(
     return out
 
 
-def story_links(
+def source_links(
     alert: sqlite3.Row, conn: sqlite3.Connection | None, sources: dict[str, SourceConfig] | None
 ) -> list[tuple[str, str]]:
-    """(button label, url) for the alert's top source pages, best first."""
+    """(label, url) for the pages a person would open next, most specific first.
+    Signal by signal, the push's lead signal first: its own event pages (the
+    evidence store's links: the quake, the warning), then the pages its stanza
+    names for people ([display] links: a radiation map at the place, the source's
+    own view), then the place on OpenStreetMap. Duplicates dropped."""
     sources = sources or {}
+    evidence = json.loads(alert["evidence"])
     out: list[tuple[str, str]] = []
-    for e in json.loads(alert["evidence"]):
-        cfg = sources.get(e["stream_id"])
-        for rec in _stories(e, conn, sources):
+
+    def add(label: str, url: str | None) -> None:
+        if url and all(url != u for _, u in out):
+            out.append((label, url))
+
+    stories = {i: _stories(e, conn, sources) for i, e in enumerate(evidence)}
+    head = _headline_index(evidence, stories, effective(conn, evidence, sources)[2]) if evidence else 0
+    for i in ([head] + [i for i in range(len(evidence)) if i != head]) if evidence else []:
+        e, cfg = evidence[i], sources.get(evidence[i]["stream_id"])
+        for rec in stories[i]:
             url = evstore.link(cfg, rec)
-            if url and all(url != u for _, u in out):
-                out.append((evstore.domain(url)[:24], url))
+            add(evstore.domain(url)[:24] if url else "", url)
+        cell = e.get("cell") or alert["cell"]
+        for label, template in context.display_for(e["stream_id"], cfg).links:
+            add(label, context.fill_link(template, cell, e.get("bin_start"), stories[i][0] if stories[i] else None))
+    add("Map", context.map_url(alert["cell"]))
     return out
 
 
 def _evidence_line(
     e: dict, conn: sqlite3.Connection | None, sources: dict[str, SourceConfig]
 ) -> str:
-    """'- Radiation, Europe (EURDEP): unusually high (1 in 2,500): 0.327 µSv/h,
-    usually 0.100 µSv/h @ Portugal (41.2N 8.2W)'"""
+    """'0.327 µSv/h, usually 0.100 µSv/h: Radiation, Europe (EURDEP), unusually high
+    (1 in 2,500) @ Portugal (41.2N 8.2W)': the reading first, as a phone shows it."""
     cfg = sources.get(e["stream_id"])
     label = context.display_for(e["stream_id"], cfg).label
     at = f" @ {context.place(e['cell'])}" if e.get("cell") and context.cell_center(e["cell"]) else ""
     if e.get("kind") == "source_alert":
-        return f"- {label}: issued by the source{at}"
+        return f"{label}: issued by the source{at}"
     if e.get("q_value") is None:
-        return f"- {label}: stopped reporting (presence {e['presence_q']:.2f}){at}"
-    line = f"- {label}: {context.rarity_phrase(e['q_value'])}"
+        return f"{label}: stopped reporting (presence {e['presence_q']:.2f}){at}"
+    rarity = context.rarity_phrase(e["q_value"])
     if conn is not None and e.get("cell"):
         row = context.bin_row(conn, e["stream_id"], e["cell"], e.get("scale"), e.get("bin_start"))
         if row is not None:
-            line += f": {context.describe_bin(e['stream_id'], cfg, row)}"
+            reading = context.describe_bin(e["stream_id"], cfg, row)
             usual = context.typical(conn, e["stream_id"], cfg, e["cell"], e.get("bin_start"))
-            if usual:
-                line += f", usually {usual}"
-    return line + at
+            return f"{reading}" + (f", usually {usual}" if usual else "") + f": {label}, {rarity}{at}"
+    return f"{label}: {rarity}{at}"
 
 
 def _ascii(s: str) -> str:
@@ -356,12 +424,9 @@ async def send_ntfy(
         "Tags": ",".join(tags),
     }
     map_url = context.map_url(alert["cell"])
-    buttons = story_links(alert, conn, sources)  # tap straight to the source pages
+    buttons = source_links(alert, conn, sources)  # tap straight to the sources' own pages
     if cfg.dashboard_url:
-        # tapping the push opens the alert's full report; the map is a button
-        headers["Click"] = f"{cfg.dashboard_url}/alert/{alert['alert_id']}"
-        if map_url:
-            buttons.append(("Map", map_url))
+        headers["Click"] = f"{cfg.dashboard_url}/alert/{alert['alert_id']}"  # the full report
     elif map_url:
         headers["Click"] = map_url  # no dashboard configured: open the region on a map
     if buttons:

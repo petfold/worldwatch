@@ -40,6 +40,23 @@ def test_format_value_alert(db):
     assert tags == ["rotating_light"]
 
 
+def _stage(request) -> str:
+    """The stage words a push ends with ('WW Confirmed, far away')."""
+    return next(ln for ln in request.content.decode().splitlines() if ln.startswith("WW ")).split(":")[0]
+
+
+def test_truncation_keeps_the_stage_and_the_place(db, sources, monkeypatch):
+    import worldwatch.api.notify as notify
+
+    ev = [{"stream_id": f"s{i}", "modality": "physical", "q_value": 0.9999, "presence_q": 1.0}
+          for i in range(8)]
+    row = _alert(db, 4, "8226", 0.8, ev)
+    monkeypatch.setattr(notify, "MAX_MESSAGE_BYTES", 300)
+    _, message, _, _ = notify.format_alert(row)
+    assert "(truncated: the full report has everything)" in message
+    assert message.rstrip().splitlines()[-2].startswith("WW Unconfirmed:") and "Where:" in message
+
+
 def test_format_alert_with_observed_context(db, sources):
     import h3
 
@@ -57,9 +74,12 @@ def test_format_alert_with_observed_context(db, sources):
     ]
     row = _alert(db, 3, h3.cell_to_parent(cell, 2), 0.95, ev)
     title, message, priority, _ = format_alert(row, db, sources)
-    assert title == "WW Confirmed: Earthquakes, all magnitudes (USGS) + 1 - Coral Sea, off New Caledonia"
-    assert "- Earthquakes, all magnitudes (USGS): unusually high (1 in 2,500): 3 quakes, max M6.6 @ Coral Sea" in message
-    assert "- News events (GDELT): unusually high (1 in 333) @ Coral Sea" in message
+    # a phone shows two short lines: what happened and where come first, the stage last
+    assert title == "Earthquakes, all magnitudes unusually high: 3 quakes, max M6.6 - Coral Sea, off New Caledonia"
+    assert message.startswith("3 quakes, max M6.6")
+    assert "Earthquakes, all magnitudes (USGS), unusually high (1 in 2,500) @ Coral Sea" in message
+    assert "News events (GDELT): unusually high (1 in 333) @ Coral Sea" in message
+    assert message.index("WW Confirmed: 2 independent kinds") > message.index("News events (GDELT)")
     assert "Latest data: 1970-01-01 01:23 UTC" in message
     assert priority == 5
 
@@ -312,7 +332,7 @@ async def test_an_alert_is_pushed_early_then_again_as_it_is_confirmed(db):
     seen = []
 
     def handler(request):
-        seen.append((int(request.headers["priority"]), request.headers["title"].split(":")[0]))
+        seen.append((int(request.headers["priority"]), _stage(request)))
         return httpx.Response(200)
 
     _value_alert(db, 1, 1 - 1e-11)  # one modality, score 10.7: unconfirmed
@@ -412,7 +432,7 @@ async def test_an_extreme_event_far_away_does_not_wake(db, sources):
     seen = []
 
     def handler(request):
-        seen.append((int(request.headers["priority"]), request.headers["title"].split(":")[0]))
+        seen.append((int(request.headers["priority"]), _stage(request)))
         return httpx.Response(200)
 
     src = _reach_sources(sources)
@@ -506,7 +526,7 @@ async def test_an_alert_below_harm_levels_is_not_pushed_and_harm_skips_the_budge
     seen = []
 
     def handler(request):
-        seen.append(request.headers["title"].split(":")[0])
+        seen.append(_stage(request))
         return httpx.Response(200)
 
     src = _rad_sources(sources)

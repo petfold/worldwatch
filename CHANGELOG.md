@@ -39,8 +39,30 @@ sibling projects, where the tag is what publishes.
   Replayed over the alerts so far (395 in about 20 hours): 3 pushes, no
   wake-up.
 
+### Changed
+
+- **A push leads with what happened and where.** A phone shows two short lines,
+  so the title is the most specific thing known: a source's own words ("M6.6
+  80 km ENE of Tadine, New Caledonia, depth 10 km"), else the signal and its
+  harm level or direction and reading ("Radiation, Europe unusually high: 0.327
+  uSv/h - Portugal"), with the place unless the words name it; the message
+  opens with the readings, value first, then the stories and news ("News:",
+  "Nearby:"). The stage ("WW Confirmed: ..."), severity, exact place and data
+  time come last, and truncation takes detail lines first, never those. A story
+  shown in the title is not repeated; space weather is "worldwide".
+
 ### Added
 
+- **Links to the sources' own pages, most specific first.** A stanza's
+  `[display] links` names pages for people, templated with the signal's place
+  (`{lat}`, `{lon}`, a box `{south}`..`{east}`), country (`{CC}`, exact for
+  streams placed by country), date and record fields: a radiation alert opens
+  the Safecast map at the reading, then EURDEP; fires the FIRMS map, aircraft
+  and GPS jamming, ships, air quality, quakes (USGS map around the event), NWS
+  point forecasts, OONI, IODA and Cloudflare Radar by country, SWPC's space
+  weather pages, the grids, FX charts: 66 stanzas, each URL checked. The push's
+  three buttons take the first: the event's own page, the source's map at the
+  place, then its general page, OpenStreetMap last; the report page lists all.
 - **Ships at Hormuz, Bab-el-Mandeb and Suez** (`aisstream_chokepoints`, the
   operator's free aisstream.io key): distinct ships per half hour in each box,
   counted from their static-data broadcasts (each ship about every 6 minutes,

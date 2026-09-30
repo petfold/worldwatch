@@ -78,6 +78,15 @@ around 2026-10-10.
       models for extremes) — agenda in
       [`doc/research-tails-and-dependence.md`](doc/research-tails-and-dependence.md);
       parked 2026-09-26.
+- [ ] Alert-triggered investigation and denser sampling (asked 2026-09-30): an
+      unusual event raises the sampling of what is unusual, in time (cadence)
+      and in space (finer cells, more stations), on its own streams and on
+      those coupled to it, and starts a closer look at the event (the finer or
+      slower data it justifies; the LLM interpreter's "suggested next
+      observations"). The allocator of
+      [spec §9](doc/worldwatch-architecture-v0.1.md#9-attention-allocator),
+      driven by alerts first; the
+      [seismic layer](doc/seismic-layer.md) is its first case.
 - [ ] Research proposal: a joint world model over the surprise field —
       [`doc/research-joint-model.md`](doc/research-joint-model.md)
       (proposal 2026-09-29).

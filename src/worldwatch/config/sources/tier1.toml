@@ -34,6 +34,7 @@ label            = "Earthquakes, all magnitudes (USGS)"
 about            = "Every earthquake the US Geological Survey locates worldwide, counted per area and hour."
 unit             = "quakes"
 max_prefix       = "M"
+links            = [["Quake map", "https://earthquake.usgs.gov/earthquakes/map/?extent={south},{west}&extent={north},{east}"]]
 
 [usgs_seismic.context]
 fields           = ["title", "place", "mag", "magType", "depth_km", "url", "tsunami", "alert", "felt", "sig"]
@@ -120,6 +121,7 @@ label            = "Bitcoin"
 about            = "The Bitcoin price in US dollars (Coinbase), tick by tick."
 prefix           = "$"
 inverse          = "expm1"
+links            = [["Coinbase BTC", "https://www.coinbase.com/price/bitcoin"]]
 
 
 # Adding a second market is stanza-only — reuses the coinbase_ticker parser.
@@ -159,6 +161,7 @@ label            = "Ether"
 about            = "The Ether price in US dollars (Coinbase), tick by tick."
 prefix           = "$"
 inverse          = "expm1"
+links            = [["Coinbase ETH", "https://www.coinbase.com/price/ethereum"]]
 
 
 # Fiat FX: every currency in one request an hour. The free plan allows 1,000
@@ -264,6 +267,7 @@ label            = "Exchange rates (per US dollar)"
 about            = "What one US dollar buys in each of 57 currencies, every hour (Open Exchange Rates). A currency losing value shows as a rise."
 inverse          = "exp"
 digits           = 4
+links            = [["XE chart", "https://www.xe.com/currencycharts/?from=USD&to={key}"]]
 
 [fx_usd.context]
 fields           = ["key", "value"]
@@ -297,6 +301,7 @@ h3_resolution    = 2       # a few samples of US weather are enough (coverage ba
 label            = "US severe weather (NWS)"
 about            = "US National Weather Service warnings (storms, floods, fires), counted per area."
 unit             = "alerts"
+links            = [["NWS forecast", "https://forecast.weather.gov/MapClick.php?lat={lat}&lon={lon}"]]
 
 [nws_severe_alerts.context]
 fields           = ["event", "headline", "severity", "urgency", "certainty", "areaDesc"]
@@ -331,6 +336,7 @@ h3_resolution    = 4
 label            = "Radiation (Safecast)"
 about            = "Radiation readings from Safecast's volunteer detectors."
 unit             = " cpm"
+links            = [["Radiation map", "https://map.safecast.org/?y={lat}&x={lon}&z=9"]]
 
 
 # --- News events: GDELT 2.0 raw 15-min export files --------------------------
@@ -405,6 +411,7 @@ label            = "Internet traffic, world"
 about            = "Internet traffic worldwide as seen by Cloudflare, every 15 minutes."
 unit             = "% of 7-day peak"
 percent          = true
+links            = [["Cloudflare Radar", "https://radar.cloudflare.com/"]]
 
 [cf_radar_netflows_global.alerts]
 tail             = "lower"   # a drop is the outage: only a fall is evidence
@@ -436,6 +443,7 @@ label            = "Internet traffic, UK"
 about            = "Internet traffic in the UK as seen by Cloudflare, every 15 minutes."
 unit             = "% of 7-day peak"
 percent          = true
+links            = [["Cloudflare Radar", "https://radar.cloudflare.com/gb"], ["IODA country", "https://ioda.inetintel.cc.gatech.edu/country/GB"]]
 
 [cf_radar_netflows_gb.alerts]
 tail             = "lower"   # a drop is the outage: only a fall is evidence
@@ -467,6 +475,7 @@ label            = "Internet traffic, US"
 about            = "Internet traffic in the US as seen by Cloudflare, every 15 minutes."
 unit             = "% of 7-day peak"
 percent          = true
+links            = [["Cloudflare Radar", "https://radar.cloudflare.com/us"], ["IODA country", "https://ioda.inetintel.cc.gatech.edu/country/US"]]
 
 [cf_radar_netflows_us.alerts]
 tail             = "lower"   # a drop is the outage: only a fall is evidence
@@ -498,6 +507,7 @@ label            = "Internet traffic, Japan"
 about            = "Internet traffic in Japan as seen by Cloudflare, every 15 minutes."
 unit             = "% of 7-day peak"
 percent          = true
+links            = [["Cloudflare Radar", "https://radar.cloudflare.com/jp"], ["IODA country", "https://ioda.inetintel.cc.gatech.edu/country/JP"]]
 
 [cf_radar_netflows_jp.alerts]
 tail             = "lower"   # a drop is the outage: only a fall is evidence
@@ -546,6 +556,7 @@ about            = "Brightness of the ground at night from NASA's VIIRS satellit
 unit             = " nW/cm²/sr"
 inverse          = "expm1"
 digits           = 1
+links            = [["Night lights", "https://worldview.earthdata.nasa.gov/?v={west},{south},{east},{north}&l=VIIRS_SNPP_DayNightBand_At_Sensor_Radiance,Coastlines_15m&t={date}"]]
 
 [night_lights_h17v03.alerts]
 reach_km         = 300     # a power outage
@@ -577,6 +588,7 @@ about            = "Brightness of the ground at night from NASA's VIIRS satellit
 unit             = " nW/cm²/sr"
 inverse          = "expm1"
 digits           = 1
+links            = [["Night lights", "https://worldview.earthdata.nasa.gov/?v={west},{south},{east},{north}&l=VIIRS_SNPP_DayNightBand_At_Sensor_Radiance,Coastlines_15m&t={date}"]]
 
 [night_lights_h18v04.alerts]
 reach_km         = 300
@@ -608,6 +620,7 @@ about            = "Brightness of the ground at night from NASA's VIIRS satellit
 unit             = " nW/cm²/sr"
 inverse          = "expm1"
 digits           = 1
+links            = [["Night lights", "https://worldview.earthdata.nasa.gov/?v={west},{south},{east},{north}&l=VIIRS_SNPP_DayNightBand_At_Sensor_Radiance,Coastlines_15m&t={date}"]]
 
 [night_lights_h10v05.alerts]
 reach_km         = 300
@@ -639,6 +652,7 @@ about            = "Brightness of the ground at night from NASA's VIIRS satellit
 unit             = " nW/cm²/sr"
 inverse          = "expm1"
 digits           = 1
+links            = [["Night lights", "https://worldview.earthdata.nasa.gov/?v={west},{south},{east},{north}&l=VIIRS_SNPP_DayNightBand_At_Sensor_Radiance,Coastlines_15m&t={date}"]]
 
 [night_lights_h31v05.alerts]
 reach_km         = 300
@@ -692,6 +706,7 @@ about            = "Gamma dose rate from Europe's official radiation monitoring 
 unit             = " µSv/h"
 inverse          = "exp"
 digits           = 3
+links            = [["Radiation map", "https://map.safecast.org/?y={lat}&x={lon}&z=9"], ["EURDEP", "https://remap.jrc.ec.europa.eu/Advanced.aspx"]]
 
 [eurdep_gamma.context]
 fields           = ["id", "name", "value", "unit", "validated"]
@@ -749,6 +764,7 @@ about            = "Gamma dose rate from Germany's official monitoring network (
 unit             = " µSv/h"
 inverse          = "exp"
 digits           = 3
+links            = [["Radiation map", "https://map.safecast.org/?y={lat}&x={lon}&z=9"], ["BfS ODL-INFO", "https://odlinfo.bfs.de/ODL/EN/home/home_node.html"]]
 
 [bfs_odl_gamma.context]
 fields           = ["id", "name", "value", "unit", "validated"]
@@ -801,6 +817,7 @@ label            = "Significant earthquakes (USGS)"
 about            = "Earthquakes the USGS rates significant (by magnitude, reported shaking and expected impact)."
 unit             = "quakes"
 max_prefix       = "M"
+links            = [["Quake map", "https://earthquake.usgs.gov/earthquakes/map/?extent={south},{west}&extent={north},{east}"]]
 
 [usgs_significant.context]
 fields           = ["title", "place", "mag", "magType", "depth_km", "url", "tsunami", "alert", "felt", "sig"]
@@ -838,6 +855,7 @@ h3_resolution    = 3
 label            = "Extreme weather alerts (NWS)"
 about            = "US National Weather Service warnings of the highest severity, Extreme."
 unit             = "alerts"
+links            = [["NWS forecast", "https://forecast.weather.gov/MapClick.php?lat={lat}&lon={lon}"]]
 
 [nws_extreme.context]
 fields           = ["event", "headline", "severity", "urgency", "certainty", "areaDesc"]
@@ -887,6 +905,7 @@ label            = "Earthquakes, all magnitudes (EMSC)"
 about            = "Every earthquake the European-Mediterranean Seismological Centre reports, within seconds."
 unit             = "quakes"
 max_prefix       = "M"
+links            = [["Quake map", "https://earthquake.usgs.gov/earthquakes/map/?extent={south},{west}&extent={north},{east}"], ["EMSC", "https://www.emsc-csem.org/Earthquake_information/"]]
 
 [emsc_seismic.context]
 fields           = ["flynn_region", "mag", "magtype", "depth", "evtype", "auth", "unid", "url"]
@@ -923,6 +942,7 @@ h3_resolution    = 3        # res 2 merged 24 small neighbouring countries into 
 label            = "Internet outages (IODA events)"
 about            = "Internet outages per country detected by IODA (Georgia Tech) from routing, probing and background traffic."
 unit             = "outages"
+links            = [["IODA country", "https://ioda.inetintel.cc.gatech.edu/country/{CC}"]]
 
 [ioda_outage_events.context]
 fields           = ["country", "cc", "datasource", "score", "duration_h", "url"]
@@ -966,6 +986,7 @@ native_seconds   = 600
 label            = "Internet signal alerts (IODA)"
 about            = "IODA's per-country alerts: one of its internet signals fell below its usual level."
 unit             = "alerts"
+links            = [["IODA country", "https://ioda.inetintel.cc.gatech.edu/country/{CC}"], ["Cloudflare Radar", "https://radar.cloudflare.com/{cc}"]]
 
 [ioda_alerts.context]
 fields           = ["country", "cc", "datasource", "level", "ratio"]
@@ -1017,6 +1038,7 @@ native_seconds   = 120      # one window per round
 label            = "Reachability (own probes)"
 about            = "Worldwatch's own probes: whether time servers and RIPE Atlas anchors in each country answer."
 unit             = "unreachable"
+links            = [["IODA country", "https://ioda.inetintel.cc.gatech.edu/country/{CC}"], ["Cloudflare Radar", "https://radar.cloudflare.com/{cc}"]]
 
 [probe_reachability.alerts]
 tail             = "upper"   # fewer is harmless: only a rise is evidence
@@ -1062,6 +1084,7 @@ label            = "Earthquakes M4.5+ (USGS)"
 about            = "Earthquakes of magnitude 4.5 and above worldwide (USGS), counted per area."
 unit             = "quakes"
 max_prefix       = "M"
+links            = [["Quake map", "https://earthquake.usgs.gov/earthquakes/map/?extent={south},{west}&extent={north},{east}"]]
 
 [usgs_m45.context]
 fields           = ["title", "place", "mag", "magType", "depth_km", "url", "tsunami", "alert", "felt", "sig"]
@@ -1111,6 +1134,7 @@ label            = "Earthquakes M4.5+ (EMSC)"
 about            = "Earthquakes of magnitude 4.5 and above worldwide (EMSC, within seconds), counted per area."
 unit             = "quakes"
 max_prefix       = "M"
+links            = [["Quake map", "https://earthquake.usgs.gov/earthquakes/map/?extent={south},{west}&extent={north},{east}"], ["EMSC", "https://www.emsc-csem.org/Earthquake_information/"]]
 
 [emsc_m45.context]
 fields           = ["flynn_region", "mag", "magtype", "depth", "evtype", "auth", "unid", "url"]
@@ -1158,6 +1182,7 @@ h3_resolution    = 3
 label            = "Disasters, Red (GDACS)"
 about            = "Red alerts from GDACS (UN and EU): a disaster likely to need international help (earthquake, cyclone, flood, volcano, drought, wildfire, tsunami)."
 unit             = "alerts"
+links            = [["GDACS", "https://www.gdacs.org/"]]
 
 [gdacs_red.context]
 fields           = ["type", "name", "country", "level", "episode", "url"]
@@ -1195,6 +1220,7 @@ h3_resolution    = 3
 label            = "Disasters, Orange (GDACS)"
 about            = "Orange alerts from GDACS (UN and EU): a disaster that may need international help."
 unit             = "alerts"
+links            = [["GDACS", "https://www.gdacs.org/"]]
 
 [gdacs_orange.context]
 fields           = ["type", "name", "country", "level", "episode", "url"]
@@ -1245,6 +1271,7 @@ native_seconds   = 1800
 label            = "European severe weather (MeteoAlarm)"
 about            = "Orange and red weather warnings from 37 European national weather services (MeteoAlarm), per country."
 unit             = "warnings"
+links            = [["MeteoAlarm", "https://meteoalarm.org/en/live/"]]
 
 [meteoalarm_warnings.context]
 fields           = ["country", "cc", "title", "event", "level", "severity", "area", "url"]

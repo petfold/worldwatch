@@ -34,6 +34,7 @@ label            = "Official warnings, Saudi Arabia"
 about            = "Warnings from National Center for Meteorology (NCM), Saudi Arabia, in the common alerting format (CAP): dust, heat, rain, floods, storms."
 unit             = "warnings"
 max_prefix       = "severity "
+links            = [["NCM Saudi Arabia", "https://ncm.gov.sa/en/"]]
 
 [cap_saudi.context]
 fields           = ["event", "headline", "severity", "urgency", "certainty", "sender", "area", "url"]
@@ -78,6 +79,7 @@ label            = "Official warnings, Kuwait"
 about            = "Warnings from Kuwait Meteorological Department, in the common alerting format (CAP): dust, heat, rain, floods, storms."
 unit             = "warnings"
 max_prefix       = "severity "
+links            = [["Kuwait Met", "https://www.met.gov.kw/"]]
 
 [cap_kuwait.context]
 fields           = ["event", "headline", "severity", "urgency", "certainty", "sender", "area", "url"]
@@ -166,6 +168,7 @@ label            = "Official warnings, Bahrain"
 about            = "Warnings from Bahrain Meteorological Directorate, in the common alerting format (CAP): dust, heat, rain, floods, storms."
 unit             = "warnings"
 max_prefix       = "severity "
+links            = [["Bahrain Met", "https://www.bahrainweather.gov.bh/"]]
 
 [cap_bahrain.context]
 fields           = ["event", "headline", "severity", "urgency", "certainty", "sender", "area", "url"]
@@ -254,6 +257,7 @@ label            = "Official warnings, Pakistan"
 about            = "Warnings from Pakistan Meteorological Department, in the common alerting format (CAP): dust, heat, rain, floods, storms."
 unit             = "warnings"
 max_prefix       = "severity "
+links            = [["PMD Pakistan", "https://www.pmd.gov.pk/"]]
 
 [cap_pakistan.context]
 fields           = ["event", "headline", "severity", "urgency", "certainty", "sender", "area", "url"]
@@ -298,6 +302,7 @@ label            = "Official warnings, India (IMD)"
 about            = "Warnings from India Meteorological Department, in the common alerting format (CAP): dust, heat, rain, floods, storms."
 unit             = "warnings"
 max_prefix       = "severity "
+links            = [["IMD", "https://mausam.imd.gov.in/"]]
 
 [cap_india_imd.context]
 fields           = ["event", "headline", "severity", "urgency", "certainty", "sender", "area", "url"]
@@ -342,6 +347,7 @@ label            = "Official warnings, India (NDMA)"
 about            = "Warnings from India's National Disaster Management Authority (Sachet), in the common alerting format (CAP): dust, heat, rain, floods, storms."
 unit             = "warnings"
 max_prefix       = "severity "
+links            = [["NDMA Sachet", "https://sachet.ndma.gov.in/"]]
 
 [cap_india_ndma.context]
 fields           = ["event", "headline", "severity", "urgency", "certainty", "sender", "area", "url"]
@@ -387,6 +393,7 @@ label            = "Tropical cyclones (JTWC)"
 about            = "Warnings from the US Joint Typhoon Warning Center, including the Arabian Sea: each storm's position and strongest sustained wind."
 unit             = "warnings"
 max_prefix       = ""
+links            = [["JTWC", "https://www.metoc.navy.mil/jtwc/jtwc.html"]]
 
 [jtwc_cyclones.context]
 fields           = ["name", "wind_kt", "position", "url"]
@@ -435,6 +442,7 @@ native_seconds   = 21600
 label            = "Hurricanes (NHC)"
 about            = "Active Atlantic and eastern Pacific storms from the US National Hurricane Center, each advisory with the storm's strongest wind."
 unit             = "advisories"
+links            = [["NHC", "https://www.nhc.noaa.gov/"]]
 
 [nhc_storms.context]
 fields           = ["name", "classification", "intensity", "pressure", "publicAdvisory.url"]
@@ -474,6 +482,7 @@ h3_resolution    = 3
 label            = "Tsunami warnings (PTWC)"
 about            = "Tsunami watches and warnings from the US Pacific Tsunami Warning Center."
 unit             = "bulletins"
+links            = [["tsunami.gov", "https://www.tsunami.gov/"]]
 
 [tsunami_ptwc.context]
 fields           = ["category", "region", "magnitude", "url"]
@@ -511,6 +520,7 @@ h3_resolution    = 3
 label            = "Tsunami warnings (NTWC)"
 about            = "Tsunami watches and warnings from the US National Tsunami Warning Center (Alaska)."
 unit             = "bulletins"
+links            = [["tsunami.gov", "https://www.tsunami.gov/"]]
 
 [tsunami_ntwc.context]
 fields           = ["category", "region", "magnitude", "url"]
@@ -553,6 +563,7 @@ time_scale       = 3600.0
 label            = "Geomagnetic activity (Kp, NOAA)"
 about            = "How disturbed Earth's magnetic field is (Kp 0-9), every minute. Storms (Kp 5+) disturb GPS, radio and, when severe, power grids."
 digits           = 1
+links            = [["Kp index", "https://www.swpc.noaa.gov/products/planetary-k-index"], ["SWPC alerts", "https://www.swpc.noaa.gov/products/alerts-watches-and-warnings"]]
 
 [swpc_kp.alerts]
 tail             = "upper"
@@ -594,6 +605,7 @@ about            = "The Sun's X-ray brightness, every minute: flares. M- and X-c
 unit             = " W/m²"
 inverse          = "exp"
 digits           = 7
+links            = [["X-ray flux", "https://www.swpc.noaa.gov/products/goes-x-ray-flux"], ["SWPC alerts", "https://www.swpc.noaa.gov/products/alerts-watches-and-warnings"]]
 
 [swpc_xray.alerts]
 tail             = "upper"
@@ -632,6 +644,7 @@ label            = "Solar wind speed (NOAA)"
 about            = "How fast the solar wind reaches Earth; a jump comes before geomagnetic storms."
 unit             = " km/s"
 inverse          = "exp"
+links            = [["Solar wind", "https://www.swpc.noaa.gov/products/real-time-solar-wind"], ["SWPC alerts", "https://www.swpc.noaa.gov/products/alerts-watches-and-warnings"]]
 
 [swpc_solar_wind.alerts]
 tail             = "upper"
@@ -668,6 +681,7 @@ native_seconds   = 3600
 label            = "Volcanic ash warnings (SIGMET)"
 about            = "Warnings to aircraft of volcanic ash clouds, issued by the world's flight information regions."
 unit             = "warnings"
+links            = [["SIGMET map", "https://aviationweather.gov/gfa/#sigmet"]]
 
 [sigmet_volcanic_ash.context]
 fields           = ["firName", "hazard", "qualifier", "top", "rawSigmet"]
@@ -715,6 +729,7 @@ label            = "Fires from space (FIRMS, NOAA-21)"
 about            = "Fire hotspots seen by the VIIRS instrument on NOAA-21, a few hours after the pass: wildfires, industrial and conflict fires, gas flares."
 unit             = "hotspots"
 max_prefix       = "FRP "
+links            = [["Fire map", "https://firms.modaps.eosdis.nasa.gov/map/#d:24hrs;@{lon},{lat},9.0z"]]
 
 [firms_viirs_noaa21.alerts]
 tail             = "upper"
@@ -758,6 +773,7 @@ label            = "Fires from space (FIRMS, NOAA-20)"
 about            = "Fire hotspots seen by the VIIRS instrument on NOAA-20, a few hours after the pass: wildfires, industrial and conflict fires, gas flares."
 unit             = "hotspots"
 max_prefix       = "FRP "
+links            = [["Fire map", "https://firms.modaps.eosdis.nasa.gov/map/#d:24hrs;@{lon},{lat},9.0z"]]
 
 [firms_viirs_noaa20.alerts]
 tail             = "upper"
@@ -806,6 +822,7 @@ about            = "PM2.5, the smoke and dust particles that reach the lungs, fr
 unit             = " µg/m³"
 inverse          = "expm1"
 digits           = 1
+links            = [["Air map", "https://maps.sensor.community/#9/{lat}/{lon}"]]
 
 [sensor_community_pm25.alerts]
 tail             = "upper"
@@ -858,6 +875,7 @@ about            = "PM2.5 from official monitors in the US, Canada and Mexico (a
 unit             = " µg/m³"
 inverse          = "expm1"
 digits           = 1
+links            = [["Fire & smoke map", "https://fire.airnow.gov/#9/{lat}/{lon}"]]
 
 [airnow_pm25.context]
 fields           = ["SiteName", "StateName", "CountryCode", "PM25", "PM25_AQI"]
@@ -904,6 +922,7 @@ time_scale       = 3600.0
 label            = "River levels, Germany (PEGELONLINE)"
 about            = "Water levels on Germany's federal rivers and canals: floods, and low water that stops shipping."
 unit             = " cm"
+links            = [["Water levels", "https://www.pegelonline.wsv.de/gast/karte/standard"]]
 
 [pegelonline_water.context]
 fields           = ["shortname", "water.shortname", "timeseries.0.currentMeasurement.value", "timeseries.0.currentMeasurement.stateNswHsw"]
@@ -943,6 +962,7 @@ native_seconds   = 3600
 label            = "Flood warnings, England (Environment Agency)"
 about            = "Flood warnings (flooding expected) and severe flood warnings (danger to life) in England."
 unit             = "warnings"
+links            = [["Flood warnings", "https://check-for-flooding.service.gov.uk/alerts-and-warnings"]]
 
 [ea_flood_warnings.context]
 fields           = ["severity", "description", "eaAreaName", "floodArea.county"]
@@ -987,6 +1007,7 @@ label            = "Grid frequency, Great Britain (Elexon)"
 about            = "The 50 Hz frequency of Britain's grid every 15 seconds: it dips when a big power station or link trips."
 unit             = " Hz"
 digits           = 3
+links            = [["GB frequency", "https://bmrs.elexon.co.uk/system-frequency"]]
 
 [elexon_frequency.alerts]
 tail             = "lower"
@@ -1034,6 +1055,7 @@ label            = "Power demand, eastern Australia (AEMO)"
 about            = "Electricity demand in each region of Australia's eastern grid, every 5 minutes: bushfires, storms and trips show as sudden drops."
 unit             = " MW"
 inverse          = "exp"
+links            = [["AEMO dashboard", "https://aemo.com.au/en/energy-systems/electricity/national-electricity-market-nem/data-nem/data-dashboard-nem"]]
 
 [aemo_nem_demand.context]
 fields           = ["REGIONID", "TOTALDEMAND", "PRICE"]
@@ -1083,6 +1105,7 @@ label            = "Power demand, US regions (EIA)"
 about            = "Hourly electricity demand in the 13 regions of the US grid: storms and heat waves show here, as do outages."
 unit             = " MWh"
 inverse          = "exp"
+links            = [["US grid monitor", "https://www.eia.gov/electricity/gridmonitor/dashboard/electric_overview/US48/US48"]]
 
 [eia_demand.alerts]
 reach_km         = 500
@@ -1127,6 +1150,7 @@ label            = "Aircraft in the air (OpenSky)"
 about            = "How many aircraft are flying over each area, every 15 minutes: an airspace closing (conflict, ash, storms) empties it."
 unit             = " aircraft"
 inverse          = "expm1"
+links            = [["Aircraft map", "https://globe.adsb.lol/?lat={lat}&lon={lon}&zoom=8"]]
 
 [opensky_aircraft.alerts]
 tail             = "lower"   # fewer aircraft: a closure; more is harmless
@@ -1161,6 +1185,7 @@ native_seconds   = 3600
 label            = "Aircraft emergencies (adsb.lol)"
 about            = "Aircraft transmitting an emergency code: 7700 emergency, 7600 radio failure, 7500 hijack."
 unit             = "aircraft"
+links            = [["Aircraft map", "https://globe.adsb.lol/?lat={lat}&lon={lon}&zoom=8"], ["ADSB.lol", "https://globe.adsb.lol/"]]
 
 [adsb_emergency_squawks.context]
 fields           = ["squawk", "meaning"]
@@ -1212,6 +1237,7 @@ time_scale       = 3600.0
 label            = "GPS interference (aircraft, adsb.lol)"
 about            = "The share of aircraft reporting poor position accuracy, in the Gulf, the eastern Mediterranean, the Baltic, the Black Sea and the Red Sea: GPS jamming or spoofing."
 percent          = true
+links            = [["GPS jamming map", "https://gpsjam.org/?lat={lat}&lon={lon}&z=6"], ["Aircraft map", "https://globe.adsb.lol/?lat={lat}&lon={lon}&zoom=8"]]
 
 [adsb_gnss_interference.alerts]
 tail             = "upper"
@@ -1252,6 +1278,7 @@ label            = "Ships, Baltic (Digitraffic)"
 about            = "How many ships report their position in each area of the Baltic, every 15 minutes."
 unit             = " ships"
 inverse          = "expm1"
+links            = [["Ship map", "https://www.marinetraffic.com/en/ais/home/centerx:{lon}/centery:{lat}/zoom:9"]]
 
 [digitraffic_ships.alerts]
 reach_km         = 300
@@ -1304,6 +1331,7 @@ label            = "Ships at chokepoints (aisstream)"
 about            = "How many different ships are heard each half hour in the Strait of Hormuz, the Bab-el-Mandeb and the Suez Canal with its anchorages. A closure or a diversion shows as a drop."
 unit             = " ships"
 inverse          = "expm1"
+links            = [["Ship map", "https://www.marinetraffic.com/en/ais/home/centerx:{lon}/centery:{lat}/zoom:9"]]
 
 [aisstream_chokepoints.alerts]
 tail             = "lower"   # harm is ships staying away (ADR 0004)
@@ -1344,6 +1372,7 @@ time_scale       = 3600.0
 label            = "Internet censorship tests (OONI)"
 about            = "Volunteers' tests of whether websites and apps can be reached in each country: the share that look blocked."
 percent          = true
+links            = [["OONI country", "https://explorer.ooni.org/country/{CC}"], ["IODA country", "https://ioda.inetintel.cc.gatech.edu/country/{CC}"]]
 
 [ooni_anomalies.alerts]
 tail             = "upper"
@@ -1385,6 +1414,7 @@ label            = "Internet probes online (RIPE Atlas)"
 about            = "How many of RIPE Atlas's small measurement devices, kept by volunteers in homes and offices, are online in each country: a power or internet cut takes many offline at once."
 unit             = " probes"
 inverse          = "expm1"
+links            = [["IODA country", "https://ioda.inetintel.cc.gatech.edu/country/{CC}"], ["Cloudflare Radar", "https://radar.cloudflare.com/{cc}"]]
 
 [ripe_atlas_probes.alerts]
 tail             = "lower"
@@ -1415,6 +1445,7 @@ native_seconds   = 3600
 label            = "Cloudflare data centres degraded"
 about            = "Cloudflare's own status page: which of its data centres, in some 300 cities, are not fully working."
 unit             = "data centres"
+links            = [["Cloudflare status", "https://www.cloudflarestatus.com/"]]
 
 [cloudflare_pops.context]
 fields           = ["component", "status"]
@@ -1483,6 +1514,7 @@ label            = "Internet traffic, UAE"
 about            = "Internet traffic in UAE as seen by Cloudflare, every 15 minutes."
 unit             = "% of 7-day peak"
 percent          = true
+links            = [["Cloudflare Radar", "https://radar.cloudflare.com/ae"], ["IODA country", "https://ioda.inetintel.cc.gatech.edu/country/AE"]]
 
 [cf_radar_netflows_ae.alerts]
 tail             = "lower"
@@ -1513,6 +1545,7 @@ label            = "Internet traffic, Saudi Arabia"
 about            = "Internet traffic in Saudi Arabia as seen by Cloudflare, every 15 minutes."
 unit             = "% of 7-day peak"
 percent          = true
+links            = [["Cloudflare Radar", "https://radar.cloudflare.com/sa"], ["IODA country", "https://ioda.inetintel.cc.gatech.edu/country/SA"]]
 
 [cf_radar_netflows_sa.alerts]
 tail             = "lower"
@@ -1543,6 +1576,7 @@ label            = "Internet traffic, Qatar"
 about            = "Internet traffic in Qatar as seen by Cloudflare, every 15 minutes."
 unit             = "% of 7-day peak"
 percent          = true
+links            = [["Cloudflare Radar", "https://radar.cloudflare.com/qa"], ["IODA country", "https://ioda.inetintel.cc.gatech.edu/country/QA"]]
 
 [cf_radar_netflows_qa.alerts]
 tail             = "lower"
@@ -1573,6 +1607,7 @@ label            = "Internet traffic, Kuwait"
 about            = "Internet traffic in Kuwait as seen by Cloudflare, every 15 minutes."
 unit             = "% of 7-day peak"
 percent          = true
+links            = [["Cloudflare Radar", "https://radar.cloudflare.com/kw"], ["IODA country", "https://ioda.inetintel.cc.gatech.edu/country/KW"]]
 
 [cf_radar_netflows_kw.alerts]
 tail             = "lower"
@@ -1603,6 +1638,7 @@ label            = "Internet traffic, Bahrain"
 about            = "Internet traffic in Bahrain as seen by Cloudflare, every 15 minutes."
 unit             = "% of 7-day peak"
 percent          = true
+links            = [["Cloudflare Radar", "https://radar.cloudflare.com/bh"], ["IODA country", "https://ioda.inetintel.cc.gatech.edu/country/BH"]]
 
 [cf_radar_netflows_bh.alerts]
 tail             = "lower"
@@ -1633,6 +1669,7 @@ label            = "Internet traffic, Oman"
 about            = "Internet traffic in Oman as seen by Cloudflare, every 15 minutes."
 unit             = "% of 7-day peak"
 percent          = true
+links            = [["Cloudflare Radar", "https://radar.cloudflare.com/om"], ["IODA country", "https://ioda.inetintel.cc.gatech.edu/country/OM"]]
 
 [cf_radar_netflows_om.alerts]
 tail             = "lower"
@@ -1663,6 +1700,7 @@ label            = "Internet traffic, Iran"
 about            = "Internet traffic in Iran as seen by Cloudflare, every 15 minutes."
 unit             = "% of 7-day peak"
 percent          = true
+links            = [["Cloudflare Radar", "https://radar.cloudflare.com/ir"], ["IODA country", "https://ioda.inetintel.cc.gatech.edu/country/IR"]]
 
 [cf_radar_netflows_ir.alerts]
 tail             = "lower"
@@ -1693,6 +1731,7 @@ label            = "Internet traffic, Israel"
 about            = "Internet traffic in Israel as seen by Cloudflare, every 15 minutes."
 unit             = "% of 7-day peak"
 percent          = true
+links            = [["Cloudflare Radar", "https://radar.cloudflare.com/il"], ["IODA country", "https://ioda.inetintel.cc.gatech.edu/country/IL"]]
 
 [cf_radar_netflows_il.alerts]
 tail             = "lower"

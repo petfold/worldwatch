@@ -12,6 +12,7 @@ from __future__ import annotations
 import math
 import sqlite3
 from dataclasses import dataclass
+from functools import cache
 
 import h3
 
@@ -30,6 +31,7 @@ class Display:
     percent: bool = False  # value is a 0..1 fraction; show as %
     max_prefix: str = ""  # count streams: also show the bin max (e.g. "M" magnitude)
     about: str = ""  # what the source measures, in plain words (alert reports)
+    links: tuple[tuple[str, str], ...] = ()  # pages for people, most specific first (fill_link)
 
 
 def display_for(stream_id: str, cfg: SourceConfig | None) -> Display:
@@ -43,6 +45,7 @@ def display_for(stream_id: str, cfg: SourceConfig | None) -> Display:
         percent=bool(d.get("percent", False)),
         max_prefix=str(d.get("max_prefix", "")),
         about=str(d.get("about", "")),
+        links=tuple((str(label), str(url)) for label, url in d.get("links", [])),
     )
 
 
@@ -129,11 +132,14 @@ def where(cell: str) -> str:
     return fmt_latlon(*c) if c else cell
 
 
+WORLDWIDE = {"GLOBAL", "SPACE"}  # whole-Earth cells: markets, space weather
+
+
 def place(cell: str) -> str:
     """'Japan (35.7N 139.7E)', 'Sea of Japan (38.5N 135.0E)'; 'worldwide' for GLOBAL."""
     c = cell_center(cell)
     if c is None:
-        return "worldwide" if cell == "GLOBAL" else cell
+        return "worldwide" if cell in WORLDWIDE else cell
     name = cell_place(cell)
     return f"{name} ({fmt_latlon(*c)})" if name else fmt_latlon(*c)
 
@@ -142,7 +148,7 @@ def place_names(cells: list[str], limit: int = 2) -> str:
     """The distinct place names of some cells, in order: 'Finland, Estonia +1'."""
     names: list[str] = []
     for c in cells:
-        n = cell_place(c) or ("worldwide" if c == "GLOBAL" else "")
+        n = cell_place(c) or ("worldwide" if c in WORLDWIDE else "")
         if n and n not in names:
             names.append(n)
     more = len(names) - limit
@@ -155,6 +161,58 @@ def map_url(cell: str) -> str | None:
         return None
     zoom = max(3, min(10, h3.get_resolution(cell) + 3))
     return f"https://www.openstreetmap.org/?mlat={c[0]:.3f}&mlon={c[1]:.3f}#map={zoom}/{c[0]:.3f}/{c[1]:.3f}"
+
+
+def cell_country(cell: str) -> str | None:
+    """The ISO-2 code of the country whose cell this is: exact for streams placed
+    by country (OONI, IODA, Tor, FX); None for any other cell."""
+    if not h3.is_valid_cell(cell):
+        return None
+    return _country_cells(h3.get_resolution(cell)).get(cell)
+
+
+@cache
+def _country_cells(resolution: int) -> dict[str, str]:
+    from worldwatch.config.countries import countries, country_cell
+
+    out: dict[str, str] = {}
+    for cc in sorted(countries()):
+        c = country_cell(cc, resolution)
+        if c is not None:
+            out.setdefault(c, cc)
+    return out
+
+
+LINK_BOX_DEGREES = 2.0  # {south} {north} {west} {east}: a box this far around the place
+
+
+def fill_link(template: str, cell: str, bin_start: int | None, record: dict | None = None) -> str | None:
+    """A stanza's [display] link for one signal, or None if it needs a field this
+    signal lacks. Fields: {lat} {lon} {south} {north} {west} {east} (the cell),
+    {cc} {CC} (its country, when placed by country), {date} (YYYY-MM-DD of the data),
+    and the fields of its evidence record ({key}, URL-encoded)."""
+    import time
+    from urllib.parse import quote
+
+    fields: dict[str, str] = {}
+    c = cell_center(cell)
+    if c is not None:
+        lat, lon = c
+        d = LINK_BOX_DEGREES
+        fields.update(lat=f"{lat:.3f}", lon=f"{lon:.3f}", south=f"{max(-90.0, lat - d):.1f}",
+                      north=f"{min(90.0, lat + d):.1f}", west=f"{lon - d:.1f}", east=f"{lon + d:.1f}")
+    cc = cell_country(cell)
+    if cc:
+        fields.update(cc=cc.lower(), CC=cc.upper())
+    if bin_start is not None:
+        fields["date"] = time.strftime("%Y-%m-%d", time.gmtime(int(bin_start)))
+    for k, v in (record or {}).items():
+        if not k.startswith("_") and isinstance(v, str | int | float) and not isinstance(v, bool):
+            fields.setdefault(k, quote(str(v), safe=""))
+    try:
+        return template.format_map(fields)
+    except (KeyError, IndexError, ValueError):
+        return None
 
 
 def bin_row(

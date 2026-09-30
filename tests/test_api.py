@@ -212,8 +212,8 @@ def test_cell_detail(rich_client):
 
 def test_alert_carries_readable_text(client):
     a = client.get("/api/alerts/1").json()
-    assert a["title"] == "WW Unconfirmed: quake - United States"
-    assert "Unconfirmed: one kind of measurement so far" in a["text"]
+    assert a["title"] == "quake unusually high - United States"
+    assert "WW Unconfirmed: one kind of measurement so far" in a["text"]
 
 
 def test_about_page_is_served_and_linked(client):
@@ -282,7 +282,7 @@ def test_alert_report_page(client):
     r = client.get("/alert/1")
     assert r.status_code == 200 and r.headers["content-type"].startswith("text/html")
     page = r.text
-    assert "WW Unconfirmed: quake - United States" in page
+    assert "quake unusually high - United States" in page
     for part in ("Certainty", "Surprise", "Severity", "Reach", "History", "Signals", "Opened as"):
         assert part in page
     assert client.get("/alert/999").status_code == 404

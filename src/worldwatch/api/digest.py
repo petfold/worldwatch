@@ -152,7 +152,7 @@ def build_digest(conn: sqlite3.Connection, sources: dict[str, SourceConfig], wee
         group = by_stage[stage]
         out.append(f"### {STAGE_PREFIX.get(stage, stage)}: {len(group)}")
         for a in group[-30:]:
-            title = format_alert(a, conn, sources)[0].split(": ", 1)[-1]
+            title = format_alert(a, conn, sources)[0]  # what and where; the stage is the group
             out.append(f"- {_t(a['opened_at'])} #{a['alert_id']} {title}"
                        + (" (pushed)" if a["alert_id"] in pushed else "")
                        + (f" (labelled {a['label']})" if a["label"] else ""))

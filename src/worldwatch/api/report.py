@@ -45,7 +45,7 @@ def _link(url: str | None, text: str) -> str:
 def render_report(conn: sqlite3.Connection, alert_id: int,
                   sources: dict[str, SourceConfig] | None) -> str | None:
     from worldwatch.alerts.engine import alert_score, stage_of
-    from worldwatch.api.notify import (STAGE_PREFIX, _news_in_area, _parse_home, _stories,
+    from worldwatch.api.notify import (STAGE_PREFIX, _news_in_area, _parse_home, _stories, source_links,
                                        certainty, effective, format_alert, in_reach)
 
     row = conn.execute("SELECT * FROM alerts WHERE alert_id = ?", (alert_id,)).fetchone()
@@ -146,7 +146,9 @@ def render_report(conn: sqlite3.Connection, alert_id: int,
         cards="".join(cards),
         news=f"<h2>News in the area <span class=muted>(context, not evidence)</span></h2><ul>{news}</ul>" if news else "",
         links=" · ".join(x for x in (f'<a href="/?alert={alert_id}">on the Worldwatch map</a>',
-                                     _link(map_url, "OpenStreetMap") if map_url else "") if x),
+                                     _link(map_url, "OpenStreetMap") if map_url else "") if x)
+        + ("<br>More about it: " + " · ".join(_link(url, label or url) for label, url in more)
+           if (more := [lu for lu in source_links(row, conn, sources) if lu[1] != map_url]) else ""),
         alert_id=alert_id,
     )
 

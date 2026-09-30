@@ -111,8 +111,10 @@ def _alert_row(db):
 
 def test_push_text_carries_the_story(db, sources):
     write_observations(db, [_quake(1000, 6.6)])
-    _, message, _, _ = format_alert(_alert_row(db), db, sources)
-    assert "> M6.6 80 km ENE of Tadine, New Caledonia, depth 10 km [earthquake.usgs.gov]" in message
+    title, message, _, _ = format_alert(_alert_row(db), db, sources)
+    assert title == "M6.6 80 km ENE of Tadine, New Caledonia, depth 10 km"  # the story leads the push
+    assert message.startswith("Earthquakes, all magnitudes (USGS): unusually high")
+    assert "M6.6 80 km ENE" not in message  # said once, in the title
 
 
 async def test_push_buttons_open_the_sources(db, sources):
@@ -176,8 +178,71 @@ def test_source_alert_push_names_the_event_and_the_news_around_it(db, sources):
     (aid,) = run_alerts(db, sources, now=now)
     row = db.execute("SELECT * FROM alerts WHERE alert_id = ?", (aid,)).fetchone()
     title, message, priority, _ = format_alert(row, db, sources)
-    assert "Confirmed: issued by Significant earthquakes (USGS)" in message and priority == 5
-    assert "- Significant earthquakes (USGS): issued by the source @ Coral Sea, off New Caledonia" in message
-    assert "> M6.6 80 km ENE of Tadine, New Caledonia, depth 10 km [earthquake.usgs.gov]" in message
-    assert "News in the area (context, not evidence):" in message
+    assert title == "M6.6 80 km ENE of Tadine, New Caledonia, depth 10 km"  # the source's words, place included
+    assert "WW Confirmed: issued by Significant earthquakes (USGS)" in message and priority == 5
+    assert "M6.6 80 km ENE" not in message and "issued by the source" not in message  # not repeated
+    assert message.startswith("News: Strong quake shakes new caledonia")  # the second line a phone shows
     assert "Strong quake shakes new caledonia - Public statement, Noumea, New Caledonia [rnz.co.nz]" in message
+
+
+# --- links: the event, then the sources' own pages, most specific first ------
+
+
+def _row(db, aid, evidence, cell=None):
+    db.execute("INSERT INTO alerts (alert_id, opened_at, status, severity, cell, scale, evidence) "
+               "VALUES (?, 1000, 'open', 0.8, ?, 0, ?)", (aid, cell or evidence[0]["cell"], json.dumps(evidence)))
+    db.commit()
+    return db.execute("SELECT * FROM alerts WHERE alert_id = ?", (aid,)).fetchone()
+
+
+def _sig(sid, cell, **kw):
+    return {"stream_id": sid, "modality": "physical", "q_value": 0.9999, "presence_q": 1.0,
+            "cell": cell, "scale": 0, "bin_start": 900, **kw}
+
+
+def test_links_lead_with_the_event_then_its_map(db, sources):
+    from worldwatch.api.notify import source_links
+
+    write_observations(db, [_quake(1000, 6.6)])
+    links = source_links(_alert_row(db), db, sources)
+    assert [label for label, _ in links] == ["earthquake.usgs.gov", "Quake map", "Map"]
+    assert "extent=" in links[1][1]
+
+
+def test_a_radiation_alert_links_a_radiation_map_at_the_reading(db, sources):
+    from worldwatch.api.notify import source_links
+
+    cell = h3.latlng_to_cell(48.2, 16.4, 5)
+    links = source_links(_row(db, 11, [_sig("eurdep_gamma", cell)]), db, sources)
+    lat, lon = h3.cell_to_latlng(cell)
+    assert links[0] == ("Radiation map", f"https://map.safecast.org/?y={lat:.3f}&x={lon:.3f}&z=9")
+    assert [label for label, _ in links] == ["Radiation map", "EURDEP", "Map"]
+
+
+def test_country_pages_and_record_fields_fill_their_links(db, sources):
+    from worldwatch.api.notify import source_links
+    from worldwatch.config.countries import country_cell
+
+    iran = country_cell("IR", 3)
+    ooni = dict(source_links(_row(db, 12, [_sig("ooni_anomalies", iran)]), db, sources))
+    assert ooni["OONI country"] == "https://explorer.ooni.org/country/IR"
+    assert ooni["IODA country"] == "https://ioda.inetintel.cc.gatech.edu/country/IR"
+    write_observations(db, [Observation("fx_usd", iran, 1000, 14.1, context={"key": "IRR", "value": 1374600.0})])
+    fx = dict(source_links(_row(db, 13, [_sig("fx_usd", iran, bin_start=1000)]), db, sources))
+    assert fx["XE chart"] == "https://www.xe.com/currencycharts/?from=USD&to=IRR"
+
+
+def test_a_link_that_needs_a_place_is_skipped_without_one(db, sources):
+    from worldwatch.api.notify import source_links
+
+    links = source_links(_row(db, 14, [_sig("swpc_kp", "SPACE")]), db, sources)
+    assert [label for label, _ in links] == ["Kp index", "SWPC alerts"]  # no map for space weather
+
+
+def test_the_report_page_lists_the_sources_pages(db, sources):
+    from worldwatch.api.report import render_report
+
+    cell = h3.latlng_to_cell(48.2, 16.4, 5)
+    _row(db, 15, [_sig("eurdep_gamma", cell)])
+    page = render_report(db, 15, sources)
+    assert "More about it:" in page and "map.safecast.org" in page and "remap.jrc.ec.europa.eu" in page
