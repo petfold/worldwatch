@@ -36,6 +36,11 @@ def config_dir() -> Path:
     return Path(os.environ.get("WW_CONFIG_DIR", str(_PACKAGED_CONFIG_DIR)))
 
 
+def export_dir() -> Path:
+    """Where `worldwatch export` writes Parquet: beside the database by default."""
+    return Path(os.environ.get("WW_EXPORT_DIR", str(db_path().parent / "export")))
+
+
 def fine_window_seconds() -> int:
     return int(os.environ.get("WW_FINE_WINDOW_SECONDS", DEFAULT_FINE_WINDOW_SECONDS))
 

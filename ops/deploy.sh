@@ -37,7 +37,7 @@ fi
 echo ">> venv + install"
 python3 -m venv "$VENV_DIR"
 "$VENV_DIR/bin/pip" install --quiet --upgrade pip
-"$VENV_DIR/bin/pip" install --quiet "$APP_DIR"
+"$VENV_DIR/bin/pip" install --quiet "$APP_DIR[export]"   # [export]: pyarrow, for the daily Parquet export
 
 echo ">> environment file"
 if [ ! -f "$ETC_DIR/worldwatch.env" ]; then
@@ -56,7 +56,7 @@ echo ">> systemd units"
 cp "$APP_DIR"/ops/systemd/*.slice "$APP_DIR"/ops/systemd/*.service "$APP_DIR"/ops/systemd/*.timer /etc/systemd/system/
 systemctl daemon-reload
 systemctl enable --now worldwatch-poll.service worldwatch-api.service
-systemctl enable --now worldwatch-consolidate.timer worldwatch-detect.timer worldwatch-presence.timer worldwatch-digest.timer
+systemctl enable --now worldwatch-consolidate.timer worldwatch-detect.timer worldwatch-presence.timer worldwatch-digest.timer worldwatch-export.timer
 # enable --now leaves running services alone; restart them onto new code/units.
 systemctl try-restart worldwatch-poll.service worldwatch-api.service
 

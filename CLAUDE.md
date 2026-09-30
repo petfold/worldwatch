@@ -147,7 +147,8 @@ anomaly logic anywhere; imputation anywhere; heavyweight infra before it hurts.
 
 - Deployment: cheap VPS (ingestion, 24/7) + Ubuntu local machine (research/fits).
 - Operator values privacy and self-hosting; prefer self-hostable components (ntfy over
-  proprietary push, etc.). Backups via restic/B2 exist already — plug into that.
+  proprietary push, etc.). The backup is the daily Parquet export pulled to the local machine
+  (`ops/local/`); there is no restic/B2 setup (checked 2026-09-30) and no cloud copy yet.
 - Long-term interest in publishing the coupling graph, lead-time results, and the
   calibrated-surprise protocol; keep code structured so the protocol layer could be
   extracted as a spec/library later. Decentralized persistence (Ethereum Swarm) may be

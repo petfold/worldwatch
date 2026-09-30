@@ -82,14 +82,28 @@ SELECT component, event, COUNT(*) FROM health GROUP BY 1, 2 ORDER BY 1;
 SELECT * FROM alerts ORDER BY opened_at DESC LIMIT 20;
 ```
 
-## Backups
+## Backups: the daily Parquet export, pulled to the local machine
 
-`ops/backup/restic-backup.sh` takes a WAL-consistent SQLite snapshot and pushes
-it to your existing restic/B2 repo. Schedule it hourly (cron or a timer):
+What lasts is exported; what rolls over is not. `worldwatch-export.timer` runs
+`worldwatch export` at 00:30 UTC into `/var/lib/worldwatch/export/`
+(`WW_EXPORT_DIR`):
 
-```
-RESTIC_REPOSITORY=... RESTIC_PASSWORD_FILE=... ops/backup/restic-backup.sh
-```
+- `surprise/` and `bins/`: a numbered batch a day with the rows written since
+  the last one (~20 MB); nothing deletes them.
+- `snapshots/`: the small permanent tables, whole (model states, alerts,
+  pushes, digests, health, sources).
+- Not exported: `raw_ring` (the fine window), `seen` (8 days), `context` (the
+  evidence store's fixed budget).
+
+The local machine pulls it daily with `ops/local/install-pull.sh` (a user
+timer, no sudo): rsync over SSH into `~/worldwatch-archive`, never deleting
+there, keeping the previous version of each rewritten snapshot for 14 days in
+`.replaced/`. Read it with DuckDB: `ops/local/archive.sql` defines views that keep
+the newest version of each row. Its outcome is data: `SELECT * FROM health
+WHERE component = 'export'`.
+
+A cloud copy is not set up. `ops/backup/restic-backup.sh` (a WAL-consistent
+SQLite snapshot into restic) is ready for when one is.
 
 ## The 14-day soak (P0 definition of done)
 

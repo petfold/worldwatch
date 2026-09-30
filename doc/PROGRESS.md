@@ -158,8 +158,9 @@ Highlights from connecting the last four:
 - **The ops scaffolding** packages everything to run unattended: one command per
   job (fetch, roll-up, score, silence-check, serve), ready-made start-up scripts
   so the server keeps them running and restarts them cleanly after crashes or
-  reboots, a one-shot deploy script, and a backup hook into your existing
-  restic/B2. Each job talks only through the one database file, so any of them
+  reboots, a one-shot deploy script, and a daily Parquet export of
+  the permanent record that the local machine pulls (the backup; a cloud copy
+  can come later). Each job talks only through the one database file, so any of them
   can restart at any moment without harm.
 
 ### Trust level

@@ -145,6 +145,20 @@ async def cmd_poll(conn: sqlite3.Connection, sources: dict[str, SourceConfig]) -
         await asyncio.gather(ticker(), *(runner(cfg) for cfg in active))
 
 
+def cmd_export(conn: sqlite3.Connection) -> dict[str, int]:
+    """The daily Parquet export of the permanent record; its outcome is recorded as data."""
+    from worldwatch.export import export
+    from worldwatch.runtime import db_path, export_dir
+
+    try:
+        counts = export(db_path(), export_dir())
+    except Exception as e:
+        record_health(conn, "export", "export_error", f"{type(e).__name__}: {e}")
+        raise
+    record_health(conn, "export", "ok", json.dumps(counts))
+    return counts
+
+
 def cmd_api() -> None:
     import uvicorn
 
@@ -160,7 +174,7 @@ def cmd_api() -> None:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="worldwatch")
     sub = parser.add_subparsers(dest="command", required=True)
-    for name in ("init", "poll", "consolidate", "detect", "presence", "digest", "api"):
+    for name in ("init", "poll", "consolidate", "detect", "presence", "digest", "export", "api"):
         sub.add_parser(name)
     args = parser.parse_args(argv)
 
@@ -193,6 +207,8 @@ def main(argv: list[str] | None = None) -> int:
     elif args.command == "digest":
         week = cmd_digest(conn, sources)
         print(f"digest for the week to {week}" if week else "this week's digest exists")
+    elif args.command == "export":
+        print(json.dumps(cmd_export(conn)))
     elif args.command == "poll":
         with contextlib.suppress(KeyboardInterrupt):
             asyncio.run(cmd_poll(conn, sources))

@@ -129,12 +129,11 @@ def _fold_group(
         total_n = n_obs
 
     has_values = merged.n > 0
+    # REPLACE, not an in-place update: the merged row gets a new rowid, which is
+    # how the Parquet export (worldwatch.export) finds bins changed since its last run.
     conn.execute(
-        """INSERT INTO bins (stream_id, cell, scale, bin_start, n, vmin, vmax, vmean, m2, sketch)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-           ON CONFLICT(stream_id, cell, scale, bin_start) DO UPDATE SET
-                n=excluded.n, vmin=excluded.vmin, vmax=excluded.vmax,
-                vmean=excluded.vmean, m2=excluded.m2, sketch=excluded.sketch""",
+        """INSERT OR REPLACE INTO bins (stream_id, cell, scale, bin_start, n, vmin, vmax, vmean, m2, sketch)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (
             stream_id,
             cell,

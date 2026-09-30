@@ -168,22 +168,17 @@ WW_NTFY_TOKEN=
 
 ---
 
-## 7️⃣ Restic/B2 Backup (⚪ deployment phase)
+## 7️⃣ Backup (⚪ deployment phase)
 
-You already have restic + B2 configured. When deploying:
+There is no restic/B2 setup (an earlier version of this guide assumed one). The
+backup is the daily Parquet export, pulled to the local machine:
 
-1. The deploy script creates `/var/lib/worldwatch/worldwatch.db`
-2. Add it to your existing restic backup schedule:
-   ```bash
-   RESTIC_REPOSITORY=... RESTIC_PASSWORD_FILE=... \
-     /opt/worldwatch/ops/backup/restic-backup.sh
-   ```
-3. Schedule via cron (e.g., hourly):
-   ```
-   0 * * * * RESTIC_REPOSITORY=... /opt/worldwatch/ops/backup/restic-backup.sh
-   ```
+1. The deploy enables `worldwatch-export.timer` on the VPS (00:30 UTC).
+2. On the local machine, from the repo: `ops/local/install-pull.sh`, then a
+   first pull with `systemctl --user start worldwatch-pull.service`.
 
-That's it — piggyback on your existing setup.
+Details: `ops/README.md` § Backups. A cloud copy can come later
+(`ops/backup/restic-backup.sh` is ready for restic).
 
 ---
 
@@ -200,7 +195,7 @@ Remaining — all deployment-phase:
 3. **Deploy**: give Claude the IP; it runs `ops/deploy.sh`, copies the three
    keys from your local `.env` plus the ntfy settings into
    `/etc/worldwatch/worldwatch.env`, and verifies all sources are polling
-4. **Backup**: point your existing restic/B2 at the DB (§7)
+4. **Backup**: the daily Parquet export, pulled to the local machine (§7)
 5. **Soak**: 14 days unattended (`ops/README.md` for what to check)
 
 ---

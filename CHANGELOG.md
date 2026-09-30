@@ -41,6 +41,21 @@ sibling projects, where the tag is what publishes.
 
 ### Added
 
+- **A daily Parquet export of the permanent record, pulled to the local
+  machine: the backup** (spec §6; no restic/B2 existed, despite the docs).
+  `worldwatch export` (`worldwatch-export.timer`, 00:30 UTC) writes the surprise
+  archive and the bins as a numbered batch a day of the rows written since the
+  last one, found by rowid, and the small permanent tables whole; the rolling
+  ones (raw ring, dedup keys, evidence) are left out. All tables are read in
+  one transaction; the state is written last, so a run that dies repeats the
+  same batch. The consolidator now rewrites a merged bin with `INSERT OR
+  REPLACE`, which gives it a new rowid, so a bin changed later is exported
+  again; readers keep the row with the highest `(_rowid, _batch)`
+  (`ops/local/archive.sql`: DuckDB views that do it). The local side is a user
+  timer (`ops/local/install-pull.sh`): rsync over SSH, never deleting, with the
+  previous version of each rewritten snapshot kept 14 days. pyarrow is the
+  new `[export]` extra. `ops/backup/restic-backup.sh` no longer snapshots to a
+  fresh temp path each run, which made restic keep every snapshot.
 - **FX: 57 currencies against the dollar, hourly** (`fx_usd`, Open Exchange
   Rates' free plan; the operator's App ID in `WW_OXR_APP_ID`). One request an
   hour returns every currency, ~730 of the plan's 1,000 a month, and a 304

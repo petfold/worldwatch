@@ -1,0 +1,8 @@
+[Unit]
+Description=Pull Worldwatch's daily Parquet export from the VPS
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/worldwatch-pull

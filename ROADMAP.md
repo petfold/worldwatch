@@ -58,11 +58,13 @@ the repository alone; they need the deployment.
       website; see `ops/README.md`.
 - [x] Push channel working end to end (DONE 2026-09-26) — ntfy.categor.io,
       phone subscribed, Worldwatch's own notifier verified.
-- [ ] Point the existing restic/B2 backup at the SQLite file and its WAL.
+- [ ] Backup: a daily Parquet export of the permanent record (built
+      2026-09-30), pulled to the local machine; tick once the first pull has
+      landed. No restic/B2 exists; a cloud copy later.
 - [ ] Register any per-source accounts that need the VPS's own IP.
 - [x] Data directory and retention (DONE 2026-09-26) — `/var/lib/worldwatch`;
-      fixed budgets, oldest out (`ops/README.md` § Storage budgets). Parquet
-      export still open.
+      fixed budgets, oldest out (`ops/README.md` § Storage budgets); Parquet
+      export daily since 2026-09-30.
 
 The 14-day soak restarted 2026-09-26 after the double-counting fix; it ends
 around 2026-10-10.

@@ -1,0 +1,10 @@
+[Unit]
+Description=Pull Worldwatch's Parquet export daily (and at the next start if the machine was off)
+
+[Timer]
+OnCalendar=*-*-* 09:00
+Persistent=true
+RandomizedDelaySec=15min
+
+[Install]
+WantedBy=timers.target

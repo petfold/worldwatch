@@ -1,0 +1,11 @@
+[Unit]
+Description=Worldwatch daily Parquet export of the permanent record (pulled by the local machine)
+
+[Service]
+Slice=worldwatch.slice
+Type=oneshot
+User=worldwatch
+EnvironmentFile=/etc/worldwatch/worldwatch.env
+Nice=10
+IOSchedulingClass=idle
+ExecStart=/opt/worldwatch/.venv/bin/python -m worldwatch export
