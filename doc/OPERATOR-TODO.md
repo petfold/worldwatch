@@ -19,8 +19,9 @@ Legend: 🔴 blocks a source/feature · 🟡 nice-to-have · ⚪ later (deploy p
       midsummer (physics, not a bug). Set the env vars on the VPS too.
 - [x] 🟡 **GDELT news** — done 2026-07-11: you chose the raw 15-min event
       files; `gdelt_events` is live (no account needed).
-- [ ] 🟡 **FX markets** — crypto (BTC/ETH) is live without a key. If you want
-      fiat FX pairs too, pick a free provider; most need an API key + env var.
+- [x] 🟡 **FX markets** — done 2026-09-30: Open Exchange Rates free plan
+      (hourly, 1,000 requests a month; a 304 counts too), `WW_OXR_APP_ID` set in
+      `/etc/worldwatch/worldwatch.env` and checked; stanza `fx_usd`.
 
 ## Push notifications (needed before step 9 is useful)
 

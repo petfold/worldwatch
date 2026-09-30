@@ -41,6 +41,15 @@ sibling projects, where the tag is what publishes.
 
 ### Added
 
+- **FX: 57 currencies against the dollar, hourly** (`fx_usd`, Open Exchange
+  Rates' free plan; the operator's App ID in `WW_OXR_APP_ID`). One request an
+  hour returns every currency, ~730 of the plan's 1,000 a month, and a 304
+  counts too, so a test holds the cadence to the budget. The App ID goes in the
+  Authorization header (a stanza's `[fetch] auth_scheme`, here "Token"), never
+  in the URL. Each currency sits in its country's cell, where OONI, IODA and
+  Tor already are (`[geocode] country_map`); the Gulf pegs included, where a
+  move means a peg under strain. Generic: `record_items` (a dict as one record
+  per entry) and `doc_time_field` (one time for the whole document).
 - **Early alerts that escalate.** A stream that needs corroboration no longer
   stays silent until a second modality agrees when one reading is strong
   enough on its own (`alert_score` ≥ 6, p ~ 1e-6; on the archive, a few times

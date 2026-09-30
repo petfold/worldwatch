@@ -211,6 +211,20 @@ def test_uae_air_defence_days_with_engagements(sources):
     assert obs[0].ts == 1775001600 - 4 * 3600  # 2026-04-01 00:00 in the UAE
 
 
+def test_fx_rates_one_series_per_watched_currency(sources):
+    """The fixture follows the documented latest.json shape (no App ID here to record one)."""
+    import math
+
+    from worldwatch.config.countries import country_cell
+
+    payload = _json("oxr_latest.json")
+    by = {o.context["key"]: o for o in _obs(sources, "fx_usd", payload)}
+    assert set(by) == {"AED", "ARS", "EGP", "EUR", "GBP", "IRR", "JPY", "SAR", "TRY"}
+    assert {o.ts for o in by.values()} == {payload["timestamp"]}
+    assert by["EUR"].value == pytest.approx(math.log(0.8827))
+    assert by["IRR"].cell == country_cell("IR", 3) and by["EUR"].cell == country_cell("DE", 3)
+
+
 def test_every_new_stanza_has_a_display_and_a_tail_or_reach(sources):
     import tomllib
 

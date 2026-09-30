@@ -161,6 +161,118 @@ prefix           = "$"
 inverse          = "expm1"
 
 
+# Fiat FX: every currency in one request an hour. The free plan allows 1,000
+# requests a month and a 304 still counts, so the cadence is the budget.
+[fx_usd]
+class            = "fx_market"
+modality         = "economic"
+topic_tags       = ["markets", "fx"]
+flavor           = "continuous"
+endpoint         = "https://openexchangerates.org/api/latest.json?prettyprint=false"
+cadence_seconds  = 3600    # ~730 requests a month of the free plan's 1,000: never faster
+auth_env_var     = "WW_OXR_APP_ID"
+status           = "nursery"
+notes            = "Open Exchange Rates (free plan, hourly): units of each currency per US dollar; value = log(rate). The App ID goes in the Authorization header, never the URL. Weekends repeat Friday's close."
+
+[fx_usd.fetch]
+auth_scheme      = "Token"
+
+[fx_usd.parse]
+format           = "records"
+records          = "rates"
+record_items     = true    # {"EUR": 0.88, ...}: one record per currency
+doc_time_field   = "timestamp"
+time_format      = "epoch"
+value_field      = "value"
+transform        = "log"
+
+[fx_usd.geocode]
+strategy         = "country"
+country_field    = "key"
+h3_resolution    = 3
+
+# The currencies watched, each in its country's cell (the cell OONI, IODA and
+# Tor use); the rest of the ~170 in the payload are dropped.
+[fx_usd.geocode.country_map]
+EUR = "DE"    # the euro area, placed in Germany
+GBP = "GB"
+JPY = "JP"
+CHF = "CH"
+CAD = "CA"
+AUD = "AU"
+NZD = "NZ"
+CNY = "CN"
+HKD = "HK"    # a band on the dollar
+SEK = "SE"
+NOK = "NO"
+PLN = "PL"
+HUF = "HU"
+CZK = "CZ"
+RON = "RO"
+UAH = "UA"
+RUB = "RU"
+TRY = "TR"
+GEL = "GE"
+AED = "AE"    # AED, SAR, QAR, BHD, OMR, JOD: pegged to the dollar, so a move is a peg under strain
+SAR = "SA"
+QAR = "QA"
+KWD = "KW"    # a basket peg
+BHD = "BH"
+OMR = "OM"
+JOD = "JO"
+ILS = "IL"
+EGP = "EG"
+LBP = "LB"
+IQD = "IQ"
+IRR = "IR"    # the official rate, not the street rate
+INR = "IN"
+PKR = "PK"
+BDT = "BD"
+LKR = "LK"
+AFN = "AF"
+KRW = "KR"
+TWD = "TW"
+SGD = "SG"
+THB = "TH"
+MYR = "MY"
+IDR = "ID"
+PHP = "PH"
+VND = "VN"
+ZAR = "ZA"
+NGN = "NG"
+KES = "KE"
+GHS = "GH"
+ETB = "ET"
+MAD = "MA"
+MXN = "MX"
+BRL = "BR"
+ARS = "AR"
+CLP = "CL"
+COP = "CO"
+PEN = "PE"
+VES = "VE"
+
+[fx_usd.model]
+obs_scale        = 3e-4    # prior guess, 0.03% an hour; the scale is learned per currency
+level_var        = 2e-7    # one value for every currency; on synthetic hourly walks it keeps the
+                           # majors' tails calibrated and makes a 1% peg break p ≈ 1e-5 (1e-6: 3e-4)
+trend_var        = 1e-9    # slow crawls (TRY, ARS) without chasing noise
+
+[fx_usd.display]
+label            = "Exchange rates (per US dollar)"
+about            = "What one US dollar buys in each of 57 currencies, every hour (Open Exchange Rates). A currency losing value shows as a rise."
+inverse          = "exp"
+digits           = 4
+
+[fx_usd.context]
+fields           = ["key", "value"]
+text             = "{key}|: {value} per US dollar"
+
+[fx_usd.alerts]
+tail             = "upper"   # harm is a currency falling: more of it per dollar (ADR 0004)
+reach_km         = 1000
+
+
 [nws_severe_alerts]
 class            = "weather_alert_feed"
 modality         = "physical"

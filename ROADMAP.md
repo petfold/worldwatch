@@ -36,8 +36,9 @@ fixture and/or the real feed.
 - [x] Severe weather — NWS, US; zone-only alerts skipped
 - [x] Radiation — Safecast
 - [x] Night lights — Earthdata login verified 2026-07-11
-- [ ] FX markets — the one source gap: crypto is live keyless, FX needs a keyed
-      provider (🟡 in `OPERATOR-TODO.md`).
+- [ ] FX markets — `fx_usd` added 2026-09-30: Open Exchange Rates' free plan
+      (`WW_OXR_APP_ID`), 57 currencies hourly. Tick once the first real poll
+      lands on the VPS; the test fixture follows the documented response.
 
 ### Definition of done — not yet met
 

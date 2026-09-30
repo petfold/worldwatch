@@ -14,12 +14,15 @@ Two shapes cover most new sources with config alone (guardrail 2):
 [parse] keys, both:
   records        dotted path to the list ("" = the payload; a dict is one record);
                  list-of-lists records take integer field names ("6")
+  record_items   true: a dict at `records` is one record per entry, {key, value}
+                 (Open Exchange Rates' {"EUR": 0.88, ...})
   where          { field = [allowed values] };  where_min = { field = n }
   transform      "log" | "log1p"
 [parse] keys, records:
   time_field     or time_fields = [...] joined with a space; time_format:
                  "iso" (default), "epoch", "epoch_ms", or a strptime format;
-                 time_tz ("+04:00") for naive local times
+                 time_tz ("+04:00") for naive local times; doc_time_field: one
+                 time for every record, read from the document (dotted)
   value_field    dotted (indices allowed: "timeseries.0.currentMeasurement.value");
                  or value_sum = [...]; or value_ratio = [[numerators], denominator]
                  with min_denominator; none: a pure event (count flavor);
@@ -34,7 +37,8 @@ Two shapes cover most new sources with config alone (guardrail 2):
                  (record_time_field) or the poll time; floored to bucket_seconds
 [geocode] strategy:
   fixed (cell, or fixed_latlon with lat/lon)  |  coords (lat_field, lon_field; or polygon_field: a list
-  of {lat, lon} or [lon, lat], its centroid)  |  country (country_field: ISO-2)
+  of {lat, lon} or [lon, lat], its centroid)  |  country (country_field: ISO-2; or country_map = { value = ISO-2 }, the
+  records it does not name dropped)
   |  points (key_field, points = { key = [lat, lon] })
 """
 
@@ -100,7 +104,7 @@ def _payload_records(payload: Any, cfg: SourceConfig) -> list[tuple[Any, Any]]:
     for doc in docs:
         recs = get_path(doc, path)
         if isinstance(recs, dict):
-            recs = [recs]
+            recs = [{"key": k, "value": v} for k, v in recs.items()] if cfg.parse.get("record_items") else [recs]
         out += [(r, doc) for r in (recs or [])]
     return out
 
@@ -183,6 +187,8 @@ def _cell(rec: Any, cfg: SourceConfig) -> str | None:
         from worldwatch.config.countries import country_cell
 
         cc = get_path(rec, str(g.get("country_field", "cc")))
+        if g.get("country_map") is not None:  # e.g. currency → country; unmapped records dropped
+            cc = g["country_map"].get(str(cc))
         return country_cell(str(cc), res) if cc else None
     if strategy == "points":
         p = (g.get("points") or {}).get(str(get_path(rec, str(g.get("key_field", "id")))))
@@ -208,7 +214,10 @@ def _centroid(pts: Any) -> tuple[float, float] | None:
     return (sum(lats) / len(lats), sum(lons) / len(lons)) if lats else None
 
 
-def _time(rec: Any, cfg: SourceConfig) -> int | None:
+def _time(rec: Any, cfg: SourceConfig, doc: Any = None) -> int | None:
+    if cfg.parse.get("doc_time_field"):
+        raw_doc = get_path(doc, str(cfg.parse["doc_time_field"]))
+        return parse_time(raw_doc, str(cfg.parse.get("time_format", "iso")), cfg.parse.get("time_tz"))
     fields = cfg.parse.get("time_fields") or [cfg.parse.get("time_field", "time")]
     parts = [get_path(rec, str(f)) for f in fields]
     if any(p is None for p in parts):
@@ -252,10 +261,10 @@ def _offset(rec: Any, cfg: SourceConfig) -> int:
 @register("records")
 def parse_records(payload: Any, cfg: SourceConfig) -> list[Observation]:
     rows = []
-    for rec, _ in _payload_records(payload, cfg):
+    for rec, doc in _payload_records(payload, cfg):
         if not _keep(rec, cfg):
             continue
-        ts, cell = _time(rec, cfg), _cell(rec, cfg)
+        ts, cell = _time(rec, cfg, doc), _cell(rec, cfg)
         if ts is None or cell is None:
             continue
         v = _value(rec, cfg)

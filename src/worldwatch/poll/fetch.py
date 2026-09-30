@@ -11,6 +11,8 @@ any other exception is a fetch fault the poller records as `fetch_error`.
 kinds:
   json_get           (default) conditional GET; if the stanza names an
                      `auth_env_var`, its value is sent as a Bearer token
+                     (`auth_scheme` changes the word: Open Exchange Rates
+                     wants "Token"), never in the URL
   earthdata_granule  NASA Earthdata: GET the endpoint (a CMR granule search,
                      newest first) → newest granule id + download URL; skip if
                      the id matches the last fetched one (stored in the ETag
@@ -82,7 +84,7 @@ async def fetch_json_get(
     headers: dict[str, str] | None = None
     token = cfg.auth_token()
     if token is not None:
-        headers = {"Authorization": f"Bearer {token}"}
+        headers = {"Authorization": f"{cfg.fetch.get('auth_scheme', 'Bearer')} {token}"}
     return await conditional_get(client, build_url(cfg, now), validators, headers=headers)
 
 

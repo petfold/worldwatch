@@ -43,6 +43,30 @@ async def test_json_get_sends_bearer_token(db, sources, monkeypatch):
     assert seen == ["Bearer cf-secret"]
 
 
+async def test_json_get_auth_scheme_keeps_the_key_out_of_the_url(db, sources, monkeypatch):
+    monkeypatch.setenv("WW_OXR_APP_ID", "0123456789abcdef0123456789abcdef")
+    cfg = sources["fx_usd"]
+    payload = load_fixture("oxr_latest.json")
+    seen = []
+
+    def handler(request):
+        seen.append(request)
+        return httpx.Response(200, json=payload)
+
+    async with _client(handler) as client:
+        outcome = await poll_once(client, db, cfg, CacheValidators(), now=1790741000)
+
+    assert outcome.event == "ok"
+    assert outcome.rows_written == 9  # the watched currencies; USD, DKK, BTC, gold dropped
+    assert seen[0].headers["Authorization"] == "Token 0123456789abcdef0123456789abcdef"
+    assert "0123456789abcdef" not in str(seen[0].url)
+
+
+def test_fx_cadence_stays_inside_the_free_plan(sources):
+    """1,000 requests a month, and a 304 counts too: the cadence is the budget."""
+    assert 31 * 86400 / sources["fx_usd"].cadence_seconds < 1000
+
+
 async def test_json_get_missing_auth_env_is_isolated(db, sources, monkeypatch):
     monkeypatch.delenv("WW_CLOUDFLARE_TOKEN", raising=False)
     cfg = sources["cf_radar_netflows_global"]
