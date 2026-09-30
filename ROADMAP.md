@@ -58,9 +58,9 @@ the repository alone; they need the deployment.
       website; see `ops/README.md`.
 - [x] Push channel working end to end (DONE 2026-09-26) — ntfy.categor.io,
       phone subscribed, Worldwatch's own notifier verified.
-- [ ] Backup: a daily Parquet export of the permanent record (built
-      2026-09-30), pulled to the local machine; tick once the first pull has
-      landed. No restic/B2 exists; a cloud copy later.
+- [x] Backup (DONE 2026-09-30): a daily Parquet export of the permanent
+      record, pulled to the local machine; the first pull matched the VPS row
+      for row (53 MB). No restic/B2 exists; a cloud copy later.
 - [ ] Register any per-source accounts that need the VPS's own IP.
 - [x] Data directory and retention (DONE 2026-09-26) — `/var/lib/worldwatch`;
       fixed budgets, oldest out (`ops/README.md` § Storage budgets); Parquet

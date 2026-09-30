@@ -33,11 +33,10 @@ Legend: 🔴 blocks a source/feature · 🟡 nice-to-have · ⚪ later (deploy p
 ## Deployment (step 10 — the soak)
 
 - [x] ⚪ Provision the small VPS — done 2026-09-25 (categor.io; `ops/README.md`).
-- [ ] ⚪ **Backup** — no restic/B2 exists (the earlier note was wrong). Built
-      2026-09-30: a daily Parquet export on the VPS, pulled to the local
-      machine. Install the pull there: `ops/local/install-pull.sh`
-      (`ops/README.md` § Backups). A cloud copy later, with your general backup
-      plan.
+- [x] ⚪ **Backup** — done 2026-09-30: a daily Parquet export on the VPS,
+      pulled to the local machine (`ops/local/install-pull.sh`; `ops/README.md`
+      § Backups). No restic/B2 exists (the earlier note was wrong). A cloud copy
+      later, with your general backup plan.
 - [ ] ⚪ Register any per-source accounts flagged above on the VPS's IP if a
       provider ties keys to an origin.
 - [x] ⚪ Data dir + retention — done 2026-09-26 (`/var/lib/worldwatch`, fixed
