@@ -70,12 +70,26 @@ with S summed over a 3-day forgetting time and ρ = 0.1:
 - Sparse cells' q's are calibrated and a single notable event in a quiet cell
   stands out; a new cell's first report is judged by its region's rate instead
   of returning 0.5.
-- More upper-tail q's from sparse cells (about +26% alarms on `usgs_seismic` at
-  q ≥ 0.999), as a calibrated model should give.
+- More upper-tail q's from sparse cells, as a calibrated model should give. On
+  the fully observed replay alarms at q ≥ 0.999 rose 26%. Through `LiveScorer`
+  itself (`research/replay_changepoint/live_replay.py`: a week of the catalogue,
+  the Alaska swarm inside it, from an empty database) the change is larger,
+  because there sparse cells are new or come back after quiet spells: today
+  their first report scores 0.5 and the next ones meet a near-prior model. Today
+  that week had P(q > 0.999) 0.00036 (a third of nominal), P(q > 0.99) 0.0068
+  and 17 alarms; pooled, 0.00125, 0.0093 and 294 alarms (0.06% of cell-windows,
+  below the nominal 0.1% as conservative detection should be), with the Alaska
+  cell's alarms at the same times. `usgs_seismic` is context, so these are
+  surprise-field values, not alerts.
+- Injected swarms (`tree_inject.py`, one extra event an hour for 6 hours): in
+  sparse cells 11 of 12 detected against 9 of 12 today (10 at today's false-alarm
+  rate), the same in medium cells (6 of 12) and in resolution-2 regions (10 of
+  10), median delays unchanged (0.4-1.2 h).
 - Switching pooling off resumes every cell from its own model; only the pool's
   rows at scale −2 are left unused.
 - Cost: a pooled window over all of `usgs_seismic`'s 1,708 cells takes about
-  0.2 s, against about 3 s for scoring them one model at a time.
+  0.2 s, against about 3 s for scoring them one model at a time; in the live
+  replay, 137 ms per tick against 543 ms.
 - Open: one pooling pattern per window over every live cell (pooling that
   differs by epoch, and grouping siblings rather than all seven children, are
   not done); other count streams (news, fires) need their own replay first,

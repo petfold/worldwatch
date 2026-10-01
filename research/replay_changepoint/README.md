@@ -31,3 +31,13 @@ environment):
     .venv/bin/python research/replay_changepoint/tree_layer0.py check    # the replica against the class, ~2 min
     .venv/bin/python research/replay_changepoint/tree_layer0.py          # ~22 min on 4 cores
     .venv/bin/python research/replay_changepoint/tree_layer0.py report
+
+`live_replay.py` runs a week of the catalogue through `LiveScorer` itself, pooled
+and unpooled (a database each in the cache directory); `tree_inject.py` injects
+swarms into the real counts and compares detection, Layer 0 today against the
+pooled tree:
+
+    PYTHONPATH=src .venv/bin/python research/replay_changepoint/live_replay.py pooled     # ~5 min
+    PYTHONPATH=src .venv/bin/python research/replay_changepoint/live_replay.py unpooled   # ~20 min
+    .venv/bin/python research/replay_changepoint/tree_inject.py                           # ~25 min
+

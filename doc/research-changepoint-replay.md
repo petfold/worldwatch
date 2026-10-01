@@ -385,3 +385,45 @@ upper tail and makes single notable events in sparse cells stand out, while
 leaving the busy cells' models as they are. A 3-day forgetting time is the
 default to start with. Implemented as an opt-in for count stanzas
 (`[<stanza>.model] pool = "h3"`, ADR 0005), on for `usgs_seismic`.
+
+## The pooled tree in the live path, and on injected swarms (2026-10-02)
+
+**Through `LiveScorer` itself** (`research/replay_changepoint/live_replay.py`):
+the catalogue's events from 2026-08-29 to 2026-09-05 (1,967 of them, the Alaska
+swarm inside), written and ingested as the poller would (arrival = event time),
+a tick closing every 5-minute window, from an empty database, once with the
+stanza's pooling and once without:
+
+| live path | ms per tick | rows | P(q>0.99) | P(q>0.999) | KS D | alarms (q_detect ≥ 0.999) |
+|---|---|---|---|---|---|---|
+| Layer 0 today | 543 | 497,814 | 0.0068 | 0.00036 | 0.0064 | 17 |
+| pooled (ADR 0005) | 137 | 497,814 | 0.0093 | 0.00125 | 0.0026 | 294 |
+
+Live, today's upper tail is three times too thin: cells are new or come back
+after quiet spells, so their first report scores 0.5 and the next ones meet a
+near-prior model. Pooled, their region's rate judges them, and the tail is
+nominal; the alarms are 0.06% of cell-windows, below the nominal 0.1% as
+conservative detection should be. The Alaska cell alarms at the same times in
+both (09-01 07:30 and 07:45, 09-03 11:35), and every pooled row carries
+model_version 102.
+
+**Injected swarms** (`research/replay_changepoint/tree_inject.py`): one extra
+event an hour for 6 hours (Poisson), injected into the real counts of 12 sparse
+cells, 12 medium ones, 1 busy one and 10 resolution-2 regions (spread over the
+region's cells with events), at random times, one per resolution-1 region;
+scored as in the replay above (fully observed), clean and injected. Detected:
+an alarm in the swarm's cells within the swarm or the day after.
+
+| swarm in | Layer 0 today | tree | tree at today's false-alarm rate | median delay |
+|---|---|---|---|---|
+| a cell with 3-30 events | 9 of 12 | 11 of 12 | 10 of 12 | 0.6-0.7 h |
+| a cell with 31-299 events | 6 of 12 | 6 of 12 | 6 of 12 | 1.2 h |
+| a busy cell | 0 of 1 | 0 of 1 | 0 of 1 | |
+| a resolution-2 region | 10 of 10 | 10 of 10 | 9 of 10 | 0.3-0.4 h |
+
+In these 69 cells the clean data gave 246 alarms today and 314 pooled over the
+90 days; the tree's threshold at today's rate is 1 − 6.3e-4. Pooling helps where
+it should, in sparse cells, and costs nothing elsewhere; a regional swarm is
+caught by its cells' own events in both. One event an hour is lost in a busy
+cell's own rate either way.
+
