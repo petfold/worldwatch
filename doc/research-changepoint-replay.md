@@ -383,4 +383,5 @@ pooled into the resolution-2 cell).
 predictive distribution of the whole catalogue, calibrates the sparse cells'
 upper tail and makes single notable events in sparse cells stand out, while
 leaving the busy cells' models as they are. A 3-day forgetting time is the
-default to start with. Next: an opt-in for count stanzas.
+default to start with. Implemented as an opt-in for count stanzas
+(`[<stanza>.model] pool = "h3"`, ADR 0005), on for `usgs_seismic`.

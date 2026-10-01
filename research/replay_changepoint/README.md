@@ -17,7 +17,7 @@ weights after every window, and each cell's predictive as the mixture of its
 ancestors' (the "Pooling over the H3 tree" section of the doc). It needs bayesbin
 and h3 in one environment (bayesbin's `paper/twod/.venv` has both):
 
-    <python with bayesbin and h3> research/replay_changepoint/tree_replay.py          # ~35 min on 4 cores
+    <python with bayesbin and h3> research/replay_changepoint/tree_replay.py          # ~90 min on 4 cores
     <python with bayesbin and h3> research/replay_changepoint/tree_replay.py report   # seconds
 
 `TREE_T=1200` runs the first 1,200 windows only, as a quick check; `TREE_WORKERS`

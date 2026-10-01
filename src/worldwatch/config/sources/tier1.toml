@@ -23,6 +23,7 @@ h3_resolution    = 3
 
 [usgs_seismic.model]
 native_seconds   = 300     # 5-min report windows; polled every minute
+pool             = "h3"    # sparse cells borrow their region's rate (ADR 0005)
 
 # M1+ is complete only where US networks are dense: context and local detail,
 # never corroboration. Detection uses the uniform M4.5+ stream (usgs_m45).

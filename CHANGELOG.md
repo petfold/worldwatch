@@ -11,6 +11,20 @@ sibling projects, where the tag is what publishes.
 
 ## [Unreleased]
 
+### Added
+
+- **Count streams pooled over the H3 tree (ADR 0005).** `[<stanza>.model] pool =
+  "h3"`: every node of the tree above a stream's live cells runs the count model
+  on its region's summed counts, and each cell's q comes from the mixture of its
+  own and its ancestors' predictives, weighted by the tree recursion on their
+  recent log scores (`pool_memory_seconds`, default 3 days; `pool_rho`, 0.1).
+  Busy cells keep their own model; sparse cells borrow their region's rate. On
+  the USGS replay: the sparse cells' upper tail from half its nominal mass to
+  nominal, M ≥ 5 quakes alarmed in their window 58% → 72%, busy cells unchanged,
+  +12,448 nats of log score over 90 days. On for `usgs_seismic`; pooled rows carry
+  `model_version` 102, the pool's states sit in `model_state` at scale −2, and a
+  pooled window over 1,708 cells takes 0.2 s (3 s one model at a time).
+
 ### Fixed
 
 - **387 pushes in one day (2026-09-27; 8 the day before).** 370 were the

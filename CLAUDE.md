@@ -24,6 +24,8 @@ primary scientific output ("the digital twin condenses out of the residuals").
   Dirichlet–Markov). Fitted by Kalman-style recursions — NO training runs, NO GPU.
   Scored live in the poll process on arrival, at each stream's native resolution
   (ADR 0002); the geometric cascade is the archive, not the detection clock.
+  A count stanza may pool its cells over the H3 tree (`[model] pool = "h3"`,
+  ADR 0005): sparse cells borrow their region's rate, busy cells keep their own.
 - **q_value / PIT**: the tail quantile of an observation under its Layer-0 predictive
   distribution. The ONLY interchange currency between layers. Never z-scores.
   For a discrete (count) observation q_value is the randomized PIT (uniform:

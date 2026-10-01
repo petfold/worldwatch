@@ -25,6 +25,9 @@ import time
 from collections import defaultdict
 from collections.abc import Iterable
 from dataclasses import dataclass
+from typing import Any
+
+import h3
 
 from worldwatch.alerts.engine import (
     DEFAULT_CUSUM_DRIFT,
@@ -42,6 +45,13 @@ from worldwatch.instrument import record_health
 from worldwatch.layer0 import models
 from worldwatch.layer0.models import SUPPORTED_FLAVORS, Layer0Model
 from worldwatch.layer0.native import NATIVE_SCALE, native_seconds
+from worldwatch.layer0.pool import (
+    POOL_SCALE,
+    POOL_STATE_VERSION,
+    POOLED_VERSION,
+    PoolSettings,
+    TreePool,
+)
 
 DEFAULT_GRACE_SECONDS = 60
 DEFAULT_ACTIVE_SECONDS = 30 * 86400
@@ -79,6 +89,7 @@ class LiveScorer:
         self.max_catchup = max_catchup_seconds
         self.h, self.k, self.recent = h, k, recent_seconds
         self._models: dict[tuple[str, str], Layer0Model] = {}
+        self._pools: dict[str, TreePool] = {}  # count streams pooled over the H3 tree (ADR 0005)
         self._series: dict[tuple[str, str], _Series] = {}
         self._restore_cusum(now if now is not None else int(time.time()))
 
@@ -212,7 +223,8 @@ class LiveScorer:
         ]
         version = models.MODEL_VERSION[cfg.flavor]
         floor = last_due - (self.max_catchup // w) * w
-        rows, touched = [], set()
+        rows: list[tuple[Any, ...]] = []
+        touched: set[str] = set()
         # a cell's first window: its earliest pending one, closed or not (a cell
         # registered without any report yet starts at the newest closed window)
         first_window = {
@@ -221,7 +233,18 @@ class LiveScorer:
                 (sid,),
             )
         }
+        settings = PoolSettings.from_model_table(dict(cfg.extra.get("model", {})))
+        res = cfg.geocode.get("h3_resolution")
+        pooled = ([c for c in cells if h3.is_valid_cell(c) and h3.get_resolution(c) == res]
+                  if settings is not None and res is not None else [])
+        pool_rows: list[tuple[Any, ...]] = []
+        if pooled:
+            pool_rows = self._score_pooled(cfg, settings, pooled, counts, first_window, last_due, floor,
+                                           rows, touched, now)
+        skip = set(pooled)
         for cell in cells:
+            if cell in skip:
+                continue
             m = self._model(cfg, cell)
             last = getattr(m, "_last_ts", None)
             start = last + w if last is not None else first_window.get(cell, last_due)
@@ -236,8 +259,64 @@ class LiveScorer:
             return 0
         self._commit(cfg, rows, touched, [], now=now,
                      extra_sql=[("DELETE FROM live_windows WHERE stream_id = ? AND win_start <= ?",
-                                 (sid, last_due))])
+                                 (sid, last_due))], pool_rows=pool_rows)
         return len(rows)
+
+    def _score_pooled(
+        self,
+        cfg: SourceConfig,
+        settings: PoolSettings | None,
+        cells: list[str],
+        counts: dict[tuple[str, int], int],
+        first_window: dict[str, int],
+        last_due: int,
+        floor: int,
+        rows: list[tuple[Any, ...]],
+        touched: set[str],
+        now: int,
+    ) -> list[tuple[Any, ...]]:
+        """Score a pooled stream's H3 cells window by window, all at once (ADR 0005): every
+        window advances the cells' own models and their ancestors' together. Appends to `rows`
+        and `touched`; returns the pool's model_state rows."""
+        assert settings is not None
+        sid, w = cfg.stream_id, native_seconds(cfg)
+        pool = self._pools.get(sid)
+        if pool is None:
+            pool = TreePool(
+                settings,
+                cell_model=lambda c: self._model(cfg, c),  # type: ignore[arg-type, return-value]
+                new_model=lambda node: models.make_model(cfg, node),  # type: ignore[arg-type, return-value]
+                saved=lambda node: self._pool_state(sid, node),
+            )
+            self._pools[sid] = pool
+        start = {}
+        for cell in cells:
+            last = getattr(self._model(cfg, cell), "_last_ts", None)
+            start[cell] = last + w if last is not None else first_window.get(cell, last_due)
+        nodes: set[str] = set()
+        for ws in range(max(min(start.values()), floor), last_due + 1, w):
+            live = [c for c in cells if start[c] <= ws]
+            if not live:
+                continue
+            scored = pool.step(ws, {c: counts.get((c, ws), 0) for c in live}, live)
+            for cell in live:
+                q, d = scored[cell]
+                rows.append((sid, cell, NATIVE_SCALE, ws, q, 1.0, 1.0, counts.get((cell, ws), 0),
+                             None, POOLED_VERSION, None if d == q else d))
+                touched.add(cell)
+                self._observe(sid, cell, ws, d)
+            nodes.update(live)
+            nodes.update(a for c in live for a in pool.ancestors(c))
+        if not nodes:
+            return []
+        return [(sid, node, POOL_SCALE, POOL_STATE_VERSION, blob, now) for node, blob in pool.states(sorted(nodes))]
+
+    def _pool_state(self, sid: str, node: str) -> bytes | None:
+        row = self.conn.execute(
+            "SELECT state FROM model_state WHERE stream_id = ? AND cell = ? AND scale = ? AND version = ?",
+            (sid, node, POOL_SCALE, POOL_STATE_VERSION),
+        ).fetchone()
+        return None if row is None else bytes(row["state"])
 
     # --- candidates for the alert policy -------------------------------------
 
@@ -298,6 +377,7 @@ class LiveScorer:
         *,
         now: int,
         extra_sql: list[tuple[str, tuple]] | None = None,
+        pool_rows: list[tuple[Any, ...]] | None = None,
     ) -> None:
         version = models.MODEL_VERSION[cfg.flavor]
         self.conn.commit()
@@ -315,6 +395,12 @@ class LiveScorer:
                 [(cfg.stream_id, cell, NATIVE_SCALE, version,
                   self._models[(cfg.stream_id, cell)].to_bytes(), now) for cell in touched],
             )
+            if pool_rows:
+                self.conn.executemany(
+                    "INSERT OR REPLACE INTO model_state (stream_id, cell, scale, version, state, "
+                    "updated_at) VALUES (?, ?, ?, ?, ?, ?)",
+                    pool_rows,
+                )
             if consumed:
                 self.conn.executemany(
                     "UPDATE raw_ring SET scored = 1 WHERE stream_id = ? AND cell = ? AND ts = ?",
