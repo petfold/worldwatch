@@ -95,6 +95,17 @@ surprise archive with sensible scores.
 - **The runner** keeps one small model per feed-per-place, remembers each
   model's state between runs, and only scores new data — so it's cheap and
   restart-safe.
+- **Quiet places borrow from their region** (ADR 0005, 2026-10-02). A place
+  that sees an earthquake a month never learns its own rate from three days of
+  memory, so its model guessed too high and a real event there looked
+  ordinary. Now every region of the hexagonal map (a cell, its parent, and so
+  on up) runs the same model on its combined counts, and the data decide, place
+  by place and continuously, how far up to look: busy places keep their own
+  rate, quiet ones are judged by their region's. Replayed on three months of
+  two independent earthquake catalogues, the quiet places' surprise scores
+  became honest again and more of the large quakes stood out. On for the two
+  "all earthquakes" feeds; the M4.5+ alerting feeds are left as they are until
+  we decide how much more they should alert.
 - **The presence channel** treats a feed _falling silent_ as its own signal. It
   learns each feed's normal rhythm, so a sensor going quiet during its usual
   nightly maintenance window raises nothing, but a normally-reliable feed going

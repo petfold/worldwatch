@@ -8,7 +8,8 @@ Alaska cell's first alarms.
     PYTHONPATH=src .venv/bin/python research/replay_changepoint/live_replay.py pooled
     PYTHONPATH=src .venv/bin/python research/replay_changepoint/live_replay.py unpooled
 
-Another stream and span (emsc_* streams read the EMSC catalogue of fetch_emsc.py):
+Another stream and span (emsc_* streams read the EMSC catalogue of fetch_emsc.py, gdelt_events
+the news counts of fetch_gdelt.py):
 `live_replay.py pooled usgs_m45 2026-06-29 2026-09-27` replays the
 M4.5+ detection stream (the catalogue's events at M >= 4.5) with pooling switched on for it, and
 reports the candidates too (q_detect >= 0.9975: one reading crosses the alert engine's CUSUM at
@@ -57,14 +58,16 @@ def main(kind: str, stream: str = "usgs_seismic", start: int = START, end: int =
     path.unlink(missing_ok=True)
     conn = open_db(path)
     events = []
-    catalogue = "emsc" if stream.startswith("emsc") else "usgs"  # fetch_emsc.py, fetch_usgs.py
+    # fetch_emsc.py, fetch_gdelt.py (counts per batch and cell), fetch_usgs.py
+    catalogue = "emsc" if stream.startswith("emsc") else "gdelt" if stream.startswith("gdelt") else "usgs"
     for f in sorted(glob.glob(str(CACHE / catalogue / "*.csv"))):
         with open(f) as fh:
             for r in csv.DictReader(fh):
                 ts = int(datetime.fromisoformat(r["time"].replace("Z", "+00:00")).timestamp())
                 if start <= ts < end and float(r["mag"] or 0.0) >= min_mag:
                     cell = h3.latlng_to_cell(float(r["latitude"]), float(r["longitude"]), 3)
-                    events.append((ts, cell, float(r["mag"] or 0.0)))
+                    n = int(r.get("n") or 1)  # a batch's articles, spread over its window as the parser does
+                    events += [(ts + (i * 900) // n, cell, float(r["mag"] or 0.0)) for i in range(n)]
     events.sort()
     live = LiveScorer(conn, sources, now=start, grace_seconds=60)
     i, ticks, tick_s = 0, 0, 0.0

@@ -22,7 +22,8 @@ the class itself beside it.
     <python with h3 and scipy> research/replay_changepoint/tree_layer0.py          # ~15 min, 4 cores
 
 TREE_CATALOGUE=emsc runs the same on the EMSC catalogue (fetch_emsc.py; the emsc_seismic stream),
-over the USGS replay's windows, into tree_layer0_emsc.npz.
+over the USGS replay's windows, into tree_layer0_emsc.npz; TREE_CATALOGUE=gdelt on the news counts
+of fetch_gdelt.py (the gdelt_events stream), over their own days in 15-minute windows.
 """
 
 from __future__ import annotations
@@ -46,13 +47,14 @@ from scipy.special import betainc, gammaincinv, gammaln
 
 CACHE = Path.home() / ".cache" / "worldwatch-research"
 SRC = Path(__file__).resolve().parents[2] / "src"
-WARMUP = 2 * 288
+CATALOGUE = os.environ.get("TREE_CATALOGUE", "usgs")  # or "emsc" (fetch_emsc.py), "gdelt" (fetch_gdelt.py)
+WIDTH = 900 if CATALOGUE == "gdelt" else 300  # the stream's window: gdelt_events' native 15 minutes
+WARMUP = 2 * 86400 // WIDTH
 ALARM = 0.999
 RES = 3
 RHO = 0.1
 MEMORIES = {"3 days": 3 * 86400, "30 days": 30 * 86400, "all": math.inf}  # of the pooling evidence
 ALASKA = "8322c4fffffffff"
-CATALOGUE = os.environ.get("TREE_CATALOGUE", "usgs")  # or "emsc" (fetch_emsc.py)
 RESULTS = CACHE / ("tree_layer0.npz" if CATALOGUE == "usgs" else f"tree_layer0_{CATALOGUE}.npz")
 
 # BayesianCount's settings for usgs_seismic (layer0/count.py defaults)
@@ -63,8 +65,10 @@ N_Q = 24
 U = (np.arange(N_Q) + 0.5) / N_Q
 EPS = 1e-12
 
-# the standard gamma's quantiles at U, tabulated in log shape (shape >= A0 always)
-_LA = np.linspace(np.log(A0), np.log(1e6), 6001)
+# the standard gamma's quantiles at U, tabulated in log shape (shape >= A0 always); news regions
+# reach larger shapes, so their table runs further at the same spacing
+_TOP = 1e8 if CATALOGUE == "gdelt" else 1e6
+_LA = np.linspace(np.log(A0), np.log(_TOP), round(6000 * math.log(_TOP / A0) / math.log(1e6 / A0)) + 1)
 _LQ = np.log(gammaincinv(np.exp(_LA)[:, None], U[None, :]))
 _DLA = _LA[1] - _LA[0]
 
@@ -84,7 +88,7 @@ class Batch:
         self.n = n
         self.a = self.b = None
         self.logw = np.full((n, len(K_FIN) + 1), -math.log(len(K_FIN) + 1))
-        self.delta = math.exp(-300 / MEMORY)
+        self.delta = math.exp(-WIDTH / MEMORY)
 
     def start(self, y: np.ndarray) -> None:
         self.a = np.full((self.n, len(K_FIN) + 1), A0) + y[:, None]
@@ -151,12 +155,22 @@ def area(c: str) -> float:
 def build():
     d = np.load(CACHE / "usgs_streams.npz")
     t0, width, T = int(d["t0"]), int(d["width"]), d["counts"].shape[1]
+    files = sorted(glob.glob(str(CACHE / CATALOGUE / "*.csv")))
+    if CATALOGUE == "gdelt":  # its own span (fetch_gdelt.py's days), in its 15-minute windows
+        stamps = []
+        for f in (files[0], files[-1]):
+            with open(f) as fh:
+                stamps += [datetime.fromisoformat(r["time"].replace("Z", "+00:00")).timestamp() for r in csv.DictReader(fh)]
+        t0, width = int(min(stamps) // WIDTH * WIDTH), WIDTH
+        T = int((max(stamps) - t0) // WIDTH) + 1
     rows, big = [], []
-    for f in sorted(glob.glob(str(CACHE / CATALOGUE / "*.csv"))):
+    for f in files:
         with open(f) as fh:
             for r in csv.DictReader(fh):
                 ts = datetime.fromisoformat(r["time"].replace("Z", "+00:00")).timestamp()
-                rows.append((int((ts - t0) // width), h3.latlng_to_cell(float(r["latitude"]), float(r["longitude"]), RES)))
+                cell = h3.latlng_to_cell(float(r["latitude"]), float(r["longitude"]), RES)
+                for _ in range(int(r.get("n") or 1)):  # n: a count of reports (fetch_gdelt.py)
+                    rows.append((int((ts - t0) // width), cell))
                 if float(r["mag"] or 0.0) >= 5.0 and 0 <= rows[-1][0] < T:
                     big.append((rows[-1][0], rows[-1][1], float(r["mag"])))
     cells = sorted({c for _, c in rows})
@@ -211,7 +225,7 @@ def run_group(roots):
     m.start(np.append(Y[:, 0], 0))
     corr = gammaln(Y + 1.0) - Y * np.log(areas)[:, None]  # the finest cells' allocation
     S = {k: np.zeros(n + 1) for k in MEMORIES}
-    dpool = {k: (0.0 if math.isinf(v) else math.exp(-300 / v)) for k, v in MEMORIES.items()}
+    dpool = {k: (0.0 if math.isinf(v) else math.exp(-WIDTH / v)) for k, v in MEMORIES.items()}
     lr, l1r = math.log(RHO), math.log1p(-RHO)
     levels = [np.flatnonzero(res == r) for r in range(RES + 1)]
     fixed = [np.tile(np.eye(RES + 1)[RES], (C, 1)), np.tile(np.eye(RES + 1)[2], (C, 1))]

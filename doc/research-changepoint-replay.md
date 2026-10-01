@@ -468,6 +468,21 @@ quadrupled by a fixed resolution-2 bin, the medium cells' small cost, the
 their own cell. The Alaska cell alarms at the same times pooled and alone
 (09-01 06:40, then 09-03 11:35).
 
+**Through `LiveScorer`** (`live_replay.py pooled|unpooled emsc_seismic`: the week
+of 2026-08-29 to 09-05, 2,661 events, from an empty database):
+
+| live path | ms per tick | rows | P(q>0.99) | P(q>0.999) | alarms (q_detect ≥ 0.999) |
+|---|---|---|---|---|---|
+| Layer 0 today | 1,117 | 930,266 | 0.0068 | 0.00027 | 23 |
+| pooled (ADR 0005) | 321 | 930,266 | 0.0092 | 0.00133 | 669 |
+
+As on USGS's feed, today's live tail is far too thin (a quarter of nominal: new
+cells and cells back from quiet spells), and pooled it is nominal or a little
+above in a week with a real swarm; the alarms are 0.07% of cell-windows. Of the
+week's two M ≥ 6 quakes, the M6.2 of 09-02 is a candidate in its window either
+way (q_detect 0.9982 pooled, 0.9977 today); the M6.3 of 09-03 falls in the
+Alaska cell, busy by then, in both. `emsc_seismic` now pools (ADR 0005).
+
 ## The detection stream pooled: `usgs_m45` (2026-10-02)
 
 What pooling would do to the M4.5+ detection stream, through `LiveScorer`
