@@ -62,8 +62,9 @@ with S summed over a 3-day forgetting time and ρ = 0.1:
 - **Surprise rows** of pooled cells carry `model_version` 102 (100 + the count
   model's version 2): the q's come from a different predictive than the cell's
   own.
-- **On for `usgs_seismic`**, the stream it was replayed on. Its role stays
-  "context"; detection still uses `usgs_m45`.
+- **On for `usgs_seismic` and `emsc_seismic`**, the streams it was replayed on
+  (EMSC on its own catalogue, 2026-10-02). Their role stays "context";
+  detection still uses `usgs_m45` and `emsc_m45`, unpooled (below).
 
 ## Consequences
 
@@ -90,6 +91,19 @@ with S summed over a 3-day forgetting time and ρ = 0.1:
 - Cost: a pooled window over all of `usgs_seismic`'s 1,708 cells takes about
   0.2 s, against about 3 s for scoring them one model at a time; in the live
   replay, 137 ms per tick against 543 ms.
+- The same on a second catalogue (EMSC's, 39,313 events in 2,916 cells over the
+  same 90 days, more of them outside the US): sparse cells' tails from 0.00053
+  and 0.00044 to 0.00095 and 0.00094, busy cells 93% on themselves, +18,373
+  nats, M ≥ 5 quakes alarmed in their window 51% → 62%
+  (doc/research-changepoint-replay.md, "A second catalogue").
+- The detection streams are left unpooled. Replayed through `LiveScorer`
+  (`usgs_m45`, 24 days of M ≥ 4.5), pooling calibrates them (P(q > 0.999)
+  0.00025 → 0.00111) and turns a quake in a quiet region into a candidate
+  (63-70% of reports where their resolution-1 region had at most 30, against
+  0-23% today), at p mostly 1e-4 to 1e-6: about four times as many candidates,
+  and two in 24 days strong enough for an unconfirmed alert on their own. That
+  changes what reaches corroboration and the notifier, so it is an alerting
+  decision, to take with the alert engine replayed on those rows.
 - Open: one pooling pattern per window over every live cell (pooling that
   differs by epoch, and grouping siblings rather than all seven children, are
   not done); other count streams (news, fires) need their own replay first,

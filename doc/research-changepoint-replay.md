@@ -427,3 +427,89 @@ it should, in sparse cells, and costs nothing elsewhere; a regional swarm is
 caught by its cells' own events in both. One event an hour is lost in a busy
 cell's own rate either way.
 
+
+## A second catalogue: EMSC (2026-10-02)
+
+The same replay on the EMSC catalogue, the events `emsc_seismic` ingests
+(`fetch_emsc.py`: its FDSN service, M ≥ 1, 39,313 events over the same 90 days,
+in 2,916 resolution-3 cells with events, 4,413 nodes;
+`TREE_CATALOGUE=emsc tree_layer0.py`, 55 minutes on 4 cores). EMSC gathers more
+networks outside the US than the USGS catalogue does, so its cells and its
+sparse classes are different ones.
+
+| cells | model | P(q>0.999) | alarms/day per cell | log score |
+|---|---|---|---|---|
+| 14 busy (300+) | Layer 0 today | 0.00103 | 0.078 | |
+| | the resolution-2 cell | 0.00435 | 0.258 | −4.863 |
+| | tree, memory 3 days | 0.00107 | 0.087 | −0.004 |
+| 230 with 31-299 | Layer 0 today | 0.00087 | 0.045 | |
+| | the resolution-2 cell | 0.00180 | 0.209 | −0.317 |
+| | tree, memory 3 days | 0.00112 | 0.090 | −0.033 |
+| 1,193 with 3-30 | Layer 0 today | 0.00053 | 0.052 | |
+| | the resolution-2 cell | 0.00093 | 0.077 | +0.017 |
+| | tree, memory 3 days | 0.00095 | 0.067 | +0.038 |
+| 1,479 with 1-2 | Layer 0 today | 0.00044 | 0.013 | |
+| | the resolution-2 cell | 0.00088 | 0.014 | +0.108 |
+| | tree, memory 3 days | 0.00094 | 0.014 | +0.113 |
+
+| model | log score vs today, 90 days | alarms/day, all cells | M ≥ 5 quakes alarmed in their window | within an hour |
+|---|---|---|---|---|
+| Layer 0 today | | 93.6 | 301 of 592 (51%) | 321 |
+| the resolution-2 cell | +3,473 nats | 163.7 | 423 (71%) | 458 |
+| tree, memory 3 days | +18,373 nats | 122.0 | 365 (62%) | 385 |
+| tree, memory 30 days | +15,281 nats | 144.3 | 414 (70%) | 430 |
+| tree, no forgetting | +13,999 nats | 155.1 | 436 (74%) | 452 |
+
+Everything the USGS replay showed holds on the second catalogue: the sparse
+cells' upper tail from about half its nominal mass to nominal, the busy cells
+left on their own (weight 0.93 on the cell, 30-day memory), their tail
+quadrupled by a fixed resolution-2 bin, the medium cells' small cost, the
+3-day memory best for prediction, and more of the large quakes alarming in
+their own cell. The Alaska cell alarms at the same times pooled and alone
+(09-01 06:40, then 09-03 11:35).
+
+## The detection stream pooled: `usgs_m45` (2026-10-02)
+
+What pooling would do to the M4.5+ detection stream, through `LiveScorer`
+itself (`live_replay.py pooled|unpooled usgs_m45 2026-06-29 2026-09-27`: the
+catalogue's events at M ≥ 4.5, about 23 a day, written and ingested as the
+poller would, from an empty database; `live_compare.py usgs_m45` over the
+span both runs had scored when this was written, 24 days):
+
+| run | cell-windows | P(q>0.99) | P(q>0.999) | first reports (q = 0.5) | candidates/day | alarms/day |
+|---|---|---|---|---|---|---|
+| unpooled (today) | 1,070,784 | 0.0083 | 0.00025 | 310 | 3.4 | 1.9 |
+| pooled | 1,070,784 | 0.0098 | 0.00111 | 58 | 14.5 | 13.1 |
+
+A candidate is a window whose q_detect makes one reading cross the alert
+engine's CUSUM (h = 4, k = 2: q_detect ≥ 0.9975). Which reports (windows with
+an event) are candidates, by how many reports their resolution-1 region had in
+the span:
+
+| region's reports | report windows | candidates today | pooled |
+|---|---|---|---|
+| 1 (the quake alone) | 49 | 0 (0%) | 31 (63%) |
+| 2-5 | 143 | 10 (7%) | 100 (70%) |
+| 6-30 | 279 | 64 (23%) | 195 (70%) |
+| 31 or more | 102 | 6 (6%) | 20 (20%) |
+
+And how strong they are, as the engine scores them (−log10 of 1 − q_detect):
+
+| strength | today | pooled |
+|---|---|---|
+| 2.6-3 | 34 | 33 |
+| 3-4 | 44 | 78 |
+| 4-6 | 1 | 231 |
+| 6 or more (an unconfirmed alert on its own) | 0 | 2 |
+
+Today the stream is cold where it matters most: an M4.5 is rare in a
+resolution-3 cell, so its cell is usually new or near its prior, its first
+report scores 0.5 and its tail has a quarter of the nominal mass; a quake that
+is alone in its region is never a candidate. Pooled, the stream is calibrated,
+and a quake in a quiet region stands out (63-70% are candidates, mostly at
+p 1e-4 to 1e-6) while one in a busy region mostly does not (20%): the rate it
+is judged by is its region's. Enabling it would change what reaches the
+corroboration rules and the notifier (about four times as many candidates, far
+stronger ones, and two in 24 days strong enough for an unconfirmed alert from
+this stream alone), so it is left off: an alerting decision, best taken with the
+alert engine replayed on these rows.

@@ -41,3 +41,20 @@ pooled tree:
     PYTHONPATH=src .venv/bin/python research/replay_changepoint/live_replay.py unpooled   # ~20 min
     .venv/bin/python research/replay_changepoint/tree_inject.py                           # ~25 min
 
+The EMSC catalogue (the events `emsc_seismic` ingests) for the same replays:
+
+    PYTHONPATH=src .venv/bin/python research/replay_changepoint/fetch_emsc.py 2026-06-27 2026-09-27
+    TREE_CATALOGUE=emsc .venv/bin/python research/replay_changepoint/tree_layer0.py          # ~55 min on 4 cores
+    TREE_CATALOGUE=emsc .venv/bin/python research/replay_changepoint/tree_layer0.py report
+    PYTHONPATH=src .venv/bin/python research/replay_changepoint/live_replay.py pooled emsc_seismic
+
+`live_replay.py KIND STREAM START END` replays another stream and span (emsc_*
+streams read the EMSC files), with the stream's pooling switched on or off;
+`live_compare.py STREAM` compares its pooled and unpooled databases over the
+span both have scored (the tail, candidates, first reports, and candidates by
+how active the cell's resolution-1 region was):
+
+    PYTHONPATH=src .venv/bin/python research/replay_changepoint/live_replay.py pooled usgs_m45 2026-06-29 2026-09-27
+    PYTHONPATH=src .venv/bin/python research/replay_changepoint/live_replay.py unpooled usgs_m45 2026-06-29 2026-09-27
+    .venv/bin/python research/replay_changepoint/live_compare.py usgs_m45
+

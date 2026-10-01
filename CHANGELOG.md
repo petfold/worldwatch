@@ -24,6 +24,13 @@ sibling projects, where the tag is what publishes.
   +12,448 nats of log score over 90 days. On for `usgs_seismic`; pooled rows carry
   `model_version` 102, the pool's states sit in `model_state` at scale −2, and a
   pooled window over 1,708 cells takes 0.2 s (3 s one model at a time).
+- **Pooling on for `emsc_seismic` too**, replayed on the EMSC catalogue
+  (`research/replay_changepoint/fetch_emsc.py`, `TREE_CATALOGUE=emsc`): the same
+  as on USGS's (sparse cells' tails to nominal, busy cells on their own, +18,373
+  nats over 90 days). The detection streams (`usgs_m45`, `emsc_m45`) stay
+  unpooled: pooled, `usgs_m45` is calibrated but raises four times the
+  candidates (a quake in a quiet region becomes one), an alerting decision
+  (ADR 0005).
 
 ### Fixed
 

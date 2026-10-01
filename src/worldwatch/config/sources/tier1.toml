@@ -897,6 +897,7 @@ h3_resolution    = 3
 
 [emsc_seismic.model]
 native_seconds   = 300
+pool             = "h3"    # sparse cells borrow their region's rate (ADR 0005; replayed on EMSC)
 
 [emsc_seismic.alerts]
 role             = "context"   # small European quakes: detail, not evidence (see emsc_m45)

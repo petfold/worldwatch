@@ -20,6 +20,9 @@ the class itself beside it.
 
     <python with h3 and scipy> research/replay_changepoint/tree_layer0.py check    # the replica
     <python with h3 and scipy> research/replay_changepoint/tree_layer0.py          # ~15 min, 4 cores
+
+TREE_CATALOGUE=emsc runs the same on the EMSC catalogue (fetch_emsc.py; the emsc_seismic stream),
+over the USGS replay's windows, into tree_layer0_emsc.npz.
 """
 
 from __future__ import annotations
@@ -49,6 +52,8 @@ RES = 3
 RHO = 0.1
 MEMORIES = {"3 days": 3 * 86400, "30 days": 30 * 86400, "all": math.inf}  # of the pooling evidence
 ALASKA = "8322c4fffffffff"
+CATALOGUE = os.environ.get("TREE_CATALOGUE", "usgs")  # or "emsc" (fetch_emsc.py)
+RESULTS = CACHE / ("tree_layer0.npz" if CATALOGUE == "usgs" else f"tree_layer0_{CATALOGUE}.npz")
 
 # BayesianCount's settings for usgs_seismic (layer0/count.py defaults)
 K_FIN = np.array([0.25, 0.5, 1.0, 2.0, 4.0, 8.0, 16.0, 32.0, 64.0])
@@ -146,12 +151,14 @@ def area(c: str) -> float:
 def build():
     d = np.load(CACHE / "usgs_streams.npz")
     t0, width, T = int(d["t0"]), int(d["width"]), d["counts"].shape[1]
-    rows = []
-    for f in sorted(glob.glob(str(CACHE / "usgs" / "*.csv"))):
+    rows, big = [], []
+    for f in sorted(glob.glob(str(CACHE / CATALOGUE / "*.csv"))):
         with open(f) as fh:
             for r in csv.DictReader(fh):
                 ts = datetime.fromisoformat(r["time"].replace("Z", "+00:00")).timestamp()
                 rows.append((int((ts - t0) // width), h3.latlng_to_cell(float(r["latitude"]), float(r["longitude"]), RES)))
+                if float(r["mag"] or 0.0) >= 5.0 and 0 <= rows[-1][0] < T:
+                    big.append((rows[-1][0], rows[-1][1], float(r["mag"])))
     cells = sorted({c for _, c in rows})
     nodes = sorted(set(cells) | {h3.cell_to_parent(c, r) for c in cells for r in range(RES)},
                    key=lambda c: (h3.get_resolution(c), c))
@@ -161,7 +168,7 @@ def build():
         if 0 <= w < T:
             for r in range(RES + 1):
                 Y[index[h3.cell_to_parent(c, r) if r < RES else c], w] += 1
-    replay = [str(n) for n in d["names"]][1:]
+    replay = [str(n) for n in d["names"]][1:] if CATALOGUE == "usgs" else []
     for j, c in enumerate(replay):
         assert np.array_equal(Y[index[c]], d["counts"][j + 1]), c
     res = np.array([h3.get_resolution(c) for c in nodes])
@@ -170,7 +177,8 @@ def build():
     n_empty = np.array([0 if r == RES else sum(k not in index for k in h3.cell_to_children(c, int(r) + 1))
                         for c, r in zip(nodes, res, strict=True)])
     root = np.array([index[h3.cell_to_parent(c, 0)] for c in nodes])
-    big = [(int((ts - t0) // width), str(c), float(m)) for ts, c, m in zip(d["big_ts"], d["big_cell"], d["big_mag"], strict=True)]
+    if CATALOGUE == "usgs":  # (the same quakes as above, in prepare.py's order)
+        big = [(int((ts - t0) // width), str(c), float(m)) for ts, c, m in zip(d["big_ts"], d["big_cell"], d["big_mag"], strict=True)]
     return dict(t0=t0, width=width, T=T, nodes=nodes, Y=Y, res=res, parent=parent, areas=areas,
                 n_empty=n_empty, root=root, cells=cells, replay=replay, big=big)
 
@@ -335,7 +343,7 @@ def main():
     for o in out:
         keep.update(o[3])
     wbar = np.concatenate([o[4] for o in out])
-    np.savez(CACHE / "tree_layer0.npz", names=np.array(names), events=events, wbar=wbar,
+    np.savez(RESULTS, names=np.array(names), events=events, wbar=wbar,
              keep_names=np.array(list(keep)), keep=np.array(list(keep.values())), variants=np.array(VARIANTS),
              big=np.array([(w, c, mg) for w, c, mg in G["big"]], dtype=object), t0=G["t0"], width=G["width"],
              T=G["T"], replay=np.array(G["replay"]), **acc)
@@ -343,7 +351,7 @@ def main():
 
 
 def report():
-    R = np.load(CACHE / "tree_layer0.npz", allow_pickle=True)
+    R = np.load(RESULTS, allow_pickle=True)
     names, events, variants = [str(x) for x in R["names"]], R["events"], [str(v) for v in R["variants"]]
     T, width, t0 = int(R["T"]), int(R["width"]), int(R["t0"])
     days = (T - WARMUP) * width / 86400
@@ -367,9 +375,10 @@ def report():
         print()
     rep = [str(c) for c in R["replay"]]
     idx = [names.index(c) for c in rep]
-    print("### The replay's 12 cells: alarms per day (Layer 0 today should equal replay.py's current model)\n")
-    print("| cell | " + " | ".join(variants) + " |")
-    print("|---|" + "---|" * len(variants))
+    if rep:
+        print("### The replay's 12 cells: alarms per day (Layer 0 today should equal replay.py's current model)\n")
+        print("| cell | " + " | ".join(variants) + " |")
+        print("|---|" + "---|" * len(variants))
     for c, i in zip(rep, idx, strict=True):
         print(f"| {c} | " + " | ".join(f"{R['alarms'][v][i] / days:.2f}" for v in range(len(variants))) + " |")
     keep = dict(zip([str(x) for x in R["keep_names"]], R["keep"], strict=True))
@@ -385,7 +394,7 @@ def report():
     onset = datetime(2026, 9, 1, tzinfo=UTC).timestamp()
     main_shock = datetime(2026, 9, 3, 11, 17, tzinfo=UTC).timestamp()
     print(f"\n### The Alaska sequence ({ALASKA})\n")
-    for v, name in enumerate(variants):
+    for v, name in enumerate(variants if ALASKA in keep else []):
         dq = keep[ALASKA][v]
         first = np.flatnonzero((dq >= ALARM) & (ts >= onset))
         after = np.flatnonzero((dq >= ALARM) & (ts >= main_shock))
