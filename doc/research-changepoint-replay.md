@@ -1,6 +1,6 @@
 # Replay: change-point model vs the Layer-0 count model (USGS seismic counts)
 
-Date: 2026-09-27 · Status: first experiments: a Poisson-only change-point model, then one with a burst factor
+Date: 2026-09-27 · Status: first experiments: a Poisson-only change-point model, then one with a burst factor; pooling over the H3 tree (2026-10-01)
 
 ## Question
 
@@ -197,3 +197,107 @@ length, prior); the M1+ catalogue is dominated by US networks.
    in this replay (the current and Poisson-only models together took 2.9 ms): fine
    for 5-minute windows, but worth a coarser grid, or one dispersion per stream
    once it has been learnt.
+
+## Pooling over the H3 tree (2026-10-01)
+
+The streams above are single cells. A sparse cell's baseline is noisy; pooling
+it with its neighbours helps if they share its rate and hurts if they do not.
+Over the H3 tree the data can decide, region by region: each node is one bin,
+or its children differ (bayesbin's
+[docs/NOTES.md](https://github.com/petfold/bayesbin/blob/main/docs/NOTES.md#where-the-method-stops-being-1-d)).
+Does that, with a change-point stream per node, predict the cells' counts
+better?
+
+**Method** (`research/replay_changepoint/tree_replay.py`):
+
+- Nodes: the resolution-0 cells that hold the replay's 12 cells (6 of them:
+  California, Nevada and Utah; Texas; Hawaii; Puerto Rico; southern Alaska; the
+  Aleutians), their resolution-3 cells with events (378) and every ancestor:
+  506 nodes, 18,810 of the 24,500 events. The world itself is taken to split.
+- Each node runs `ChangePointStream.poisson` on its region's summed 5-minute
+  counts, set up as `replay.py` sets up its streams: prior Gamma(1, 1/m), m the
+  node's 2-day warm-up mean (at least 0.5 events per warm-up), expected segment
+  a week. A child region with no events is one empty bin.
+- After each window the tree recursion on the streams' running evidences gives
+  P(ν is cell c's bin | data so far), for c and its four ancestors (ρ = 0.1 and
+  0.5). The evidence of the finest cells' counts is the stream's marginal plus
+  Σ (log Y! − Y log area): the summed count's own Poisson normaliser out, the
+  allocation to the cells in.
+- The cell's predictive for the next window is the mixture of its five
+  candidates' predictives, each at the cell's share of the candidate's area,
+  scored before the update as `replay.py` scores (randomized PIT, `q_detect`,
+  alarms at 0.999), plus the log predictive probability.
+- Baselines: the cell's own stream, which is `replay.py`'s Poisson change-point
+  model (its alarms reproduce the table above, cell by cell), and fixed pooling
+  with the cell's resolution-2 or resolution-1 ancestor.
+- Scored: the replay's 12 cells, and 40 sparse cells drawn from the same
+  subtrees (3-30 events in 3 months).
+
+**The 12 busiest cells** (pooled; log score per cell and day, against the cell
+alone):
+
+| model | KS D | P(q>0.99) | P(q>0.999) | alarms/day per cell | log score |
+|---|---|---|---|---|---|
+| cell alone | 0.002 | 0.0117 | 0.00173 | 0.21 | |
+| fixed pooling, resolution 2 | 0.017 | 0.0263 | 0.00565 | 0.49 | −5.74 |
+| fixed pooling, resolution 1 | 0.021 | 0.0303 | 0.01440 | 1.91 | −13.64 |
+| tree, ρ = 0.1 | 0.002 | 0.0117 | 0.00173 | 0.21 | −0.00 |
+| tree, ρ = 0.5 | 0.002 | 0.0117 | 0.00174 | 0.21 | −0.00 |
+
+**40 sparse cells** (pooled):
+
+| model | KS D | P(q>0.99) | P(q>0.999) | alarms/day per cell | log score |
+|---|---|---|---|---|---|
+| cell alone | 0.000 | 0.0097 | 0.00066 | 0.07 | |
+| fixed pooling, resolution 2 | 0.001 | 0.0095 | 0.00078 | 0.07 | −0.13 |
+| fixed pooling, resolution 1 | 0.001 | 0.0095 | 0.00072 | 0.06 | −0.11 |
+| tree, ρ = 0.1 | 0.001 | 0.0099 | 0.00082 | 0.08 | +0.00 |
+| tree, ρ = 0.5 | 0.001 | 0.0099 | 0.00084 | 0.08 | +0.00 |
+
+- **The busy cells are never pooled.** Their weight on the cell itself is 1.00
+  in every window, through the Alaska sequence too, so their predictions,
+  calibration and alarms are the cell model's to the digit (first alarm 09-01
+  07:30, and 09-03 11:20 after the M6.3, as above). Fixed pooling dilutes them:
+  2.3 times the alarms at resolution 2 and 9 times at resolution 1, and 5.7 and
+  13.6 nats a day worse per cell.
+- **The sparse cells are.** With ρ = 0.1, 0.60 of their weight stays on the
+  cell on average and 0.37 goes to the resolution-2 parent; half of them have
+  weight below 0.5 on themselves in more than a tenth of the windows. Over 90
+  days pooling gains the sparsest (3-5 events) 2.8 nats each, costs the 6-12
+  event cells 0.4 and the 13-30 event cells 1.4: +15.5 nats for the 40, too
+  little to show per day. The upper tail runs a little hotter (P(q > 0.999)
+  0.00082 against 0.00066; 0.08 alarms a day against 0.07).
+- ρ hardly matters (0.1 against 0.5: the same within the digits shown, and
+  +15.7 nats for the sparse cells).
+- Cost: 86 minutes on 4 cores for the 3-month replay (506 nodes × 26,496
+  windows, about 1 ms per node and window under load, most of it the stream's
+  merging of old run lengths); the tree's weights and mixtures, 3-4 s per ρ.
+  Live, the world's 2,798 nodes would take 2-3 s of one core per 5-minute
+  window.
+
+**Conclusions.**
+
+1. On this catalogue pooling over the tree changes little. The busy cells keep
+   their own rates, since the evidence says their neighbours differ, and for the
+   sparse cells gains and losses nearly cancel. The cell's own change-point
+   stream with its warm-up prior is already a strong baseline: a long quiet
+   stretch pins a low rate down without help.
+2. The tree is safe where fixed pooling is not. It reproduces the cell model
+   where cells differ, while pooling into a fixed coarser cell costs badly.
+3. Pooling pays for the sparsest cells, so it should matter more for sources
+   whose cells are mostly empty, and early in a stream, than for an established
+   catalogue.
+
+**Caveats.** One pooling pattern over the whole history so far (the weights
+move with the evidence, but every past count weighs in); priors from each
+node's own warm-up; ρ fixed; the world assumed to split; 52 of the 378 cells in
+these subtrees scored.
+
+**Next.**
+
+1. All 378 cells scored, which needs faster streams (merging dominates
+   bayesbin's per-update cost).
+2. A common prior per unit area instead of each node's warm-up prior: weaker
+   cell models early on, where pooling should help most.
+3. Pooling that differs by epoch (the tree over time blocks), and grouping of
+   siblings.
