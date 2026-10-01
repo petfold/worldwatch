@@ -22,3 +22,12 @@ and h3 in one environment (bayesbin's `paper/twod/.venv` has both):
 
 `TREE_T=1200` runs the first 1,200 windows only, as a quick check; `TREE_WORKERS`
 sets the number of processes (default 4).
+
+`tree_layer0.py` does the same with Layer 0's own model (`BayesianCount`,
+vectorized over the nodes and checked against the class), over the whole tree,
+scoring every cell with events. It needs only h3 and scipy (Worldwatch's
+environment):
+
+    .venv/bin/python research/replay_changepoint/tree_layer0.py check    # the replica against the class, ~2 min
+    .venv/bin/python research/replay_changepoint/tree_layer0.py          # ~22 min on 4 cores
+    .venv/bin/python research/replay_changepoint/tree_layer0.py report

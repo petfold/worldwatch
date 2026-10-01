@@ -1,6 +1,6 @@
 # Replay: change-point model vs the Layer-0 count model (USGS seismic counts)
 
-Date: 2026-09-27 · Status: first experiments: a Poisson-only change-point model, then one with a burst factor; pooling over the H3 tree (2026-10-01)
+Date: 2026-09-27 · Status: first experiments: a Poisson-only change-point model, then one with a burst factor; pooling over the H3 tree (2026-10-01), with Layer 0's own model (2026-10-02)
 
 ## Question
 
@@ -301,3 +301,86 @@ these subtrees scored.
    cell models early on, where pooling should help most.
 3. Pooling that differs by epoch (the tree over time blocks), and grouping of
    siblings.
+
+## Pooling Layer 0 over the H3 tree (2026-10-02)
+
+The same pooling with Worldwatch's own count model instead of the change-point
+stream, over the whole tree, every cell scored
+(`research/replay_changepoint/tree_layer0.py`).
+
+**Method.** Every node of the H3 tree (the 1,708 resolution-3 cells with
+events and their 1,090 ancestors; the world taken to split) runs `BayesianCount`
+with the `usgs_seismic` stanza's settings on its region's summed 5-minute counts,
+vectorized over the nodes and checked against the class itself (3,000 windows ×
+12 cells: P(y) within 1.4e-7 relative, no alarm decision different). A cell's
+predictive is the mixture of its own and its three ancestors' predictives, each
+at the cell's share of the ancestor's area, weighted by P(node is the cell's bin)
+from the tree recursion on the nodes' log predictive scores (ρ = 0.1), summed
+with a forgetting time of 3 days, 30 days, or none. Every cell with events is
+scored in every window after the warm-up (fully observed: zero counts
+included), as `replay.py` scores. Ground truth: the 571 quakes of M ≥ 5 after
+the warm-up, each in its resolution-3 cell. Layer 0 today (the cell alone)
+reproduces the current model's alarms in the table above, cell by cell.
+22 minutes on 4 cores.
+
+**By how many events a cell had in the 3 months** (log score per cell and day
+against Layer 0 today; nominal P(q > 0.999) = 0.001):
+
+| cells | model | P(q>0.999) | alarms/day per cell | log score |
+|---|---|---|---|---|
+| 15 busy (300+) | Layer 0 today | 0.00119 | 0.119 | |
+| | the resolution-2 cell | 0.00475 | 0.344 | −4.648 |
+| | tree, memory 3 days | 0.00122 | 0.127 | −0.014 |
+| | tree, memory 30 days | 0.00128 | 0.133 | −0.052 |
+| 118 with 31-299 | Layer 0 today | 0.00091 | 0.044 | |
+| | the resolution-2 cell | 0.00162 | 0.142 | −0.300 |
+| | tree, memory 3 days | 0.00107 | 0.073 | −0.024 |
+| | tree, memory 30 days | 0.00112 | 0.093 | −0.080 |
+| 514 with 3-30 | Layer 0 today | 0.00051 | 0.045 | |
+| | the resolution-2 cell | 0.00095 | 0.065 | +0.009 |
+| | tree, memory 3 days | 0.00102 | 0.059 | +0.031 |
+| | tree, memory 30 days | 0.00108 | 0.070 | +0.001 |
+| 1,061 with 1-2 | Layer 0 today | 0.00044 | 0.013 | |
+| | the resolution-2 cell | 0.00090 | 0.013 | +0.108 |
+| | tree, memory 3 days | 0.00099 | 0.014 | +0.118 |
+| | tree, memory 30 days | 0.00099 | 0.014 | +0.117 |
+
+KS D is at most 0.003 for every model and class (0.015 for the busy cells
+pooled into the resolution-2 cell).
+
+**Over the whole catalogue:**
+
+| model | log score vs today, 90 days | alarms/day, all cells | M ≥ 5 quakes alarmed in their window | within an hour |
+|---|---|---|---|---|
+| Layer 0 today | | 44.3 | 329 of 571 (58%) | 349 |
+| the resolution-2 cell | +1,338 nats | 69.7 | 463 (81%) | 478 |
+| tree, memory 3 days | +12,448 nats | 55.6 | 409 (72%) | 427 |
+| tree, memory 30 days | +10,279 nats | 63.7 | 444 (78%) | 454 |
+| tree, no forgetting | +9,539 nats | 67.3 | 468 (82%) | 475 |
+
+- **Sparse cells are too cold today.** With few events, a cell's own model stays
+  wide, so its upper tail has half the nominal mass (P(q > 0.999) 0.00044-0.00051
+  against 0.001) and a single real event often does not stand out: Layer 0 today
+  alarms on only 58% of the M ≥ 5 quakes, which mostly fall in cells with few
+  M ≥ 1 events (the catalogue is complete to M 1 only near US networks). Pooled,
+  those cells borrow their parents' rates (weight on the cell itself: 0.02 for
+  cells with 1-2 events, 0.13 for 3-30), their tail comes to nominal, and 72-82%
+  of the big quakes alarm.
+- **Busy cells are left alone** (weight 0.98 on the cell): their alarms and log
+  score barely move, where pooling them into a fixed coarser cell triples their
+  alarms and costs 4.6 nats a day each.
+- **The cost** is in the medium cells (31-299 events, weight 0.79 on the cell):
+  their upper tail runs a little hot with long memories (0.00112-0.00121) and
+  their log score drops slightly; the 3-day memory keeps that smallest.
+- **The memory**: 3 days gives the best prediction overall (+138 nats a day) and
+  the smallest rise in alarms (+26%); longer memories catch more big quakes at
+  more alarms. The extra alarms are mostly calibration restored: today's sparse
+  cells give fewer extreme q's than a calibrated model should.
+- The Alaska cell is not pooled through its sequence (first alarm 09-01 07:30,
+  then 09-03 11:35 after the M6.3, as today).
+
+**Conclusion.** Pooling Layer 0 over the H3 tree is worth having: it improves the
+predictive distribution of the whole catalogue, calibrates the sparse cells'
+upper tail and makes single notable events in sparse cells stand out, while
+leaving the busy cells' models as they are. A 3-day forgetting time is the
+default to start with. Next: an opt-in for count stanzas.
