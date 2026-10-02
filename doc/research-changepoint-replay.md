@@ -534,3 +534,72 @@ Enabling it would change what reaches the corroboration rules and the notifier
 strong enough for an unconfirmed alert from this stream alone), so it is left
 off: an alerting decision, best taken with the alert engine replayed on these
 rows.
+
+## News counts: `gdelt_events` (2026-10-02)
+
+The tree replay on news (`fetch_gdelt.py 2026-09-03 2026-10-01`: GDELT 2.0's
+15-minute exports, counted by the stream's own parser, distinct articles per
+resolution-3 cell; 847,914 articles in 6,552 cells, 8,954 nodes;
+`TREE_CATALOGUE=gdelt tree_layer0.py`, 15-minute windows, 26 days scored after
+the warm-up, 9 minutes on 4 cores). News is busier, burstier and strongly daily
+and weekly, which the count model does not model (no seasonal exposure on this
+stream), and its places are cities rather than fault zones.
+
+| cells | model | P(q>0.999) | alarms/day per cell | log score |
+|---|---|---|---|---|
+| 422 busy (300+) | Layer 0 today | 0.00186 | 0.120 | |
+| | the resolution-2 cell | 0.04018 | 2.928 | −37.384 |
+| | tree, memory 3 days | 0.00188 | 0.121 | −0.004 |
+| 1,329 with 31-299 | Layer 0 today | 0.00156 | 0.072 | |
+| | the resolution-2 cell | 0.00319 | 0.142 | −3.975 |
+| | tree, memory 3 days | 0.00164 | 0.075 | −0.001 |
+| 2,954 with 3-30 | Layer 0 today | 0.00078 | 0.007 | |
+| | the resolution-2 cell | 0.00115 | 0.040 | −1.668 |
+| | tree, memory 3 days | 0.00101 | 0.022 | +0.017 |
+| 1,847 with 1-2 | Layer 0 today | 0.00025 | 0.000 | |
+| | the resolution-2 cell | 0.00060 | 0.024 | −0.573 |
+| | tree, memory 3 days | 0.00056 | 0.012 | +0.058 |
+
+| model | log score vs today, 26 days | alarms/day, all cells |
+|---|---|---|
+| Layer 0 today | | 165.7 |
+| the resolution-2 cell | −703,187 nats | 1,587.7 |
+| tree, memory 3 days | +3,991 nats | 239.0 |
+| tree, memory 30 days | −1,620 nats | 354.3 |
+| tree, no forgetting | −2,951 nats | 361.8 |
+
+- **Pooling with the 3-day memory helps news too, less than quakes.** Sparse
+  cells' tail from 0.00078 to nominal, the rarest cells' from 0.00025 to
+  0.00056 (still thin), and the record's log score up by 3,991 nats.
+- **Busy and medium cells are left alone** (weight 1.00 and 0.92 on the cell);
+  their tails run hot today (0.00186, 0.00156: daily cycles and bursts the
+  model lacks), and pooling neither causes nor fixes that.
+- **A fixed coarser cell is a disaster for news** (−703,187 nats: a city is not
+  its region), and so are long memories for the tree (−1,620 and −2,951): news
+  geography changes from week to week, and the 3-day memory follows it.
+
+**Through `LiveScorer`** (`live_replay.py pooled|unpooled gdelt_events
+2026-09-20 2026-09-23`: 86,658 articles, from an empty database), it is less
+clear-cut:
+
+| live path | ms per tick | rows | P(q>0.99) | P(q>0.999) | alarms (q_detect ≥ 0.999) |
+|---|---|---|---|---|---|
+| Layer 0 today | 1,388 | 652,633 | 0.0079 | 0.00130 | 504 |
+| pooled (ADR 0005) | 319 | 652,633 | 0.0128 | 0.00250 | 907 |
+
+On the third day alone (past most of the warm-up): P(q > 0.999) 0.00135 today,
+0.00198 pooled; alarms 247 against 341 (0.08% and 0.11% of cell-windows). Of the
+alarms only the pooled run raises that day, 88 of 94 are a single article in a
+place mentioned at most five times in the three days and not in the previous
+six hours. Two things meet there. A cell's share of its region's rate is its
+share of the area, while news follows people: a cell with a small town in a
+mostly empty region is given less than it gets. And live, a cell is scored
+while it is active, from the report that wakes it, so the first article after a
+quiet spell is always in the record, judged by that small share. Fully
+observed, the same cells are calibrated or cold; live, they become isolated
+one-article hotspots.
+
+**Conclusion.** Not switched on for `gdelt_events`. Before that: a longer live
+replay with the warm-up left out, and a share that follows where the stream's
+reports fall in the region (the cell's own long-run fraction of the region's
+counts, or population) rather than area.

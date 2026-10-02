@@ -48,6 +48,12 @@ The EMSC catalogue (the events `emsc_seismic` ingests) for the same replays:
     TREE_CATALOGUE=emsc .venv/bin/python research/replay_changepoint/tree_layer0.py report
     PYTHONPATH=src .venv/bin/python research/replay_changepoint/live_replay.py pooled emsc_seismic
 
+GDELT's news counts (the `gdelt_events` stream) for the tree and the live path:
+
+    PYTHONPATH=src .venv/bin/python research/replay_changepoint/fetch_gdelt.py 2026-09-03 2026-10-01   # ~20 min
+    TREE_CATALOGUE=gdelt .venv/bin/python research/replay_changepoint/tree_layer0.py                   # ~9 min on 4 cores
+    PYTHONPATH=src .venv/bin/python research/replay_changepoint/live_replay.py pooled gdelt_events 2026-09-20 2026-09-23
+
 `live_replay.py KIND STREAM START END` replays another stream and span (emsc_*
 streams read the EMSC files), with the stream's pooling switched on or off;
 `live_compare.py STREAM` compares its pooled and unpooled databases over the

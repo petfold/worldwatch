@@ -106,7 +106,14 @@ with S summed over a 3-day forgetting time and ρ = 0.1:
   enough for an unconfirmed alert on their own: that changes what reaches
   corroboration and the notifier, so it is an alerting decision, to take with
   the alert engine replayed on those rows.
+- News (`gdelt_events`, replayed on 28 days of GDELT): fully observed, the
+  3-day tree helps (+3,991 nats, sparse cells to nominal, busy cells on their
+  own), but through `LiveScorer` it turns single articles in rarely mentioned
+  places into alarms (P(q > 0.999) 0.00198 against 0.00135 on the third day):
+  shares by area underweight towns, and a waking cell's first report is always
+  scored. Left off; a share that follows the stream's own spatial distribution
+  would be the fix to try.
 - Open: one pooling pattern per window over every live cell (pooling that
   differs by epoch, and grouping siblings rather than all seven children, are
-  not done); other count streams (news, fires) need their own replay first,
-  since seasonality and burstiness differ.
+  not done); shares by area (news needs better); fires need their own replay
+  first.
