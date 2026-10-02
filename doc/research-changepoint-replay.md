@@ -488,13 +488,13 @@ Alaska cell, busy by then, in both. `emsc_seismic` now pools (ADR 0005).
 What pooling would do to the M4.5+ detection stream, through `LiveScorer`
 itself (`live_replay.py pooled|unpooled usgs_m45 2026-06-29 2026-09-27`: the
 catalogue's events at M ≥ 4.5, about 23 a day, written and ingested as the
-poller would, from an empty database; `live_compare.py usgs_m45` over the
-span both runs had scored when this was written, 24 days):
+poller would, from an empty database; `live_compare.py usgs_m45` over the span
+both runs had scored, 34 days: the unpooled run is slow, 1-2 s a tick):
 
 | run | cell-windows | P(q>0.99) | P(q>0.999) | first reports (q = 0.5) | candidates/day | alarms/day |
 |---|---|---|---|---|---|---|
-| unpooled (today) | 1,070,784 | 0.0083 | 0.00025 | 310 | 3.4 | 1.9 |
-| pooled | 1,070,784 | 0.0098 | 0.00111 | 58 | 14.5 | 13.1 |
+| unpooled (today) | 2,119,965 | 0.0086 | 0.00030 | 410 | 4.5 | 2.8 |
+| pooled | 2,119,965 | 0.0098 | 0.00107 | 64 | 15.2 | 13.7 |
 
 A candidate is a window whose q_detect makes one reading cross the alert
 engine's CUSUM (h = 4, k = 2: q_detect ≥ 0.9975). Which reports (windows with
@@ -503,12 +503,15 @@ the span:
 
 | region's reports | report windows | candidates today | pooled |
 |---|---|---|---|
-| 1 (the quake alone) | 49 | 0 (0%) | 31 (63%) |
-| 2-5 | 143 | 10 (7%) | 100 (70%) |
-| 6-30 | 279 | 64 (23%) | 195 (70%) |
-| 31 or more | 102 | 6 (6%) | 20 (20%) |
+| 1 (the quake alone) | 54 | 0 (0%) | 36 (67%) |
+| 2-5 | 182 | 23 (13%) | 135 (74%) |
+| 6-30 | 379 | 82 (22%) | 253 (67%) |
+| 31 or more | 221 | 49 (22%) | 92 (42%) |
 
-And how strong they are, as the engine scores them (−log10 of 1 − q_detect):
+Of the 12 quakes of M ≥ 6 in the span, 1 is a candidate in its own cell and
+window today, 5 pooled; over the pooled run's whole 90 days, 20 of 30. And how
+strong the candidates are, as the engine scores them (−log10 of 1 − q_detect;
+the first 24 days):
 
 | strength | today | pooled |
 |---|---|---|
@@ -519,12 +522,15 @@ And how strong they are, as the engine scores them (−log10 of 1 − q_detect):
 
 Today the stream is cold where it matters most: an M4.5 is rare in a
 resolution-3 cell, so its cell is usually new or near its prior, its first
-report scores 0.5 and its tail has a quarter of the nominal mass; a quake that
-is alone in its region is never a candidate. Pooled, the stream is calibrated,
-and a quake in a quiet region stands out (63-70% are candidates, mostly at
-p 1e-4 to 1e-6) while one in a busy region mostly does not (20%): the rate it
-is judged by is its region's. Enabling it would change what reaches the
-corroboration rules and the notifier (about four times as many candidates, far
-stronger ones, and two in 24 days strong enough for an unconfirmed alert from
-this stream alone), so it is left off: an alerting decision, best taken with the
-alert engine replayed on these rows.
+report scores 0.5 and its tail has under a third of the nominal mass; a quake
+that is alone in its region is never a candidate, and most M ≥ 6 quakes are
+not either. Pooled, the stream is calibrated, and a quake in a quiet region
+stands out (67-74% are candidates, mostly at p 1e-4 to 1e-6) while one in a
+busy region less often does (42%): the rate it is judged by is its region's.
+(A q_detect of exactly 0.5 pooled is an ordinary count: one more event during
+an aftershock sequence, say; the stream counts events, not magnitudes.)
+Enabling it would change what reaches the corroboration rules and the notifier
+(about three times as many candidates, far stronger ones, and two in 24 days
+strong enough for an unconfirmed alert from this stream alone), so it is left
+off: an alerting decision, best taken with the alert engine replayed on these
+rows.

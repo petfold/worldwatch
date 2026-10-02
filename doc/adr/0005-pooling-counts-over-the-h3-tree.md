@@ -97,13 +97,15 @@ with S summed over a 3-day forgetting time and ρ = 0.1:
   nats, M ≥ 5 quakes alarmed in their window 51% → 62%
   (doc/research-changepoint-replay.md, "A second catalogue").
 - The detection streams are left unpooled. Replayed through `LiveScorer`
-  (`usgs_m45`, 24 days of M ≥ 4.5), pooling calibrates them (P(q > 0.999)
-  0.00025 → 0.00111) and turns a quake in a quiet region into a candidate
-  (63-70% of reports where their resolution-1 region had at most 30, against
-  0-23% today), at p mostly 1e-4 to 1e-6: about four times as many candidates,
-  and two in 24 days strong enough for an unconfirmed alert on their own. That
-  changes what reaches corroboration and the notifier, so it is an alerting
-  decision, to take with the alert engine replayed on those rows.
+  (`usgs_m45`, 34 days of M ≥ 4.5), pooling calibrates them (P(q > 0.999)
+  0.00030 → 0.00107) and turns a quake in a quiet region into a candidate
+  (67-74% of reports where their resolution-1 region had at most 30, against
+  0-22% today), at p mostly 1e-4 to 1e-6; of the M ≥ 6 quakes, 5 of 12 are
+  candidates in their window against 1 of 12 (20 of 30 over the pooled run's
+  90 days). About three times as many candidates, and two in 24 days strong
+  enough for an unconfirmed alert on their own: that changes what reaches
+  corroboration and the notifier, so it is an alerting decision, to take with
+  the alert engine replayed on those rows.
 - Open: one pooling pattern per window over every live cell (pooling that
   differs by epoch, and grouping siblings rather than all seven children, are
   not done); other count streams (news, fires) need their own replay first,

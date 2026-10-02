@@ -28,7 +28,8 @@ sibling projects, where the tag is what publishes.
   (`research/replay_changepoint/fetch_emsc.py`, `TREE_CATALOGUE=emsc`): the same
   as on USGS's (sparse cells' tails to nominal, busy cells on their own, +18,373
   nats over 90 days). The detection streams (`usgs_m45`, `emsc_m45`) stay
-  unpooled: pooled, `usgs_m45` is calibrated but raises four times the
+  unpooled: pooled, `usgs_m45` is calibrated and 5 of 12 M ≥ 6 quakes become
+  candidates in their window (1 of 12 today), but it raises three times the
   candidates (a quake in a quiet region becomes one), an alerting decision
   (ADR 0005).
 

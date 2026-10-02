@@ -7,6 +7,7 @@ resolution-1 region was over the span (its events, all magnitudes in the stream)
 
 from __future__ import annotations
 
+import csv
 import sqlite3
 import sys
 from datetime import UTC, datetime
@@ -63,6 +64,18 @@ def main(stream: str) -> None:
     quiet = sum(1 for c, b in cand["pooled"] if (c, b) not in set(reports))
     print(f"\nPooled candidates in windows without a report: {quiet:,} (unpooled: "
           f"{sum(1 for c, b in cand['unpooled'] if (c, b) not in set(reports)):,})")
+    big = []  # the M >= 6 quakes in the span (the seismic catalogues' files)
+    catalogue = CACHE / ("emsc" if stream.startswith("emsc") else "usgs")
+    for f in sorted(catalogue.glob("*.csv")):
+        with open(f) as fh:
+            for r in csv.DictReader(fh):
+                ts = int(datetime.fromisoformat(r["time"].replace("Z", "+00:00")).timestamp())
+                if start <= ts // 300 * 300 <= end and float(r["mag"] or 0.0) >= 6.0:
+                    big.append((h3.latlng_to_cell(float(r["latitude"]), float(r["longitude"]), 3), ts // 300 * 300))
+    if big:
+        hits = {k: sum(cb in sets[k] for cb in big) for k in sets}
+        print(f"M >= 6 quakes that are candidates in their own cell and window: unpooled {hits['unpooled']} of "
+              f"{len(big)}, pooled {hits['pooled']} of {len(big)}")
 
 
 if __name__ == "__main__":
