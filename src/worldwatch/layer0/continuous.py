@@ -26,6 +26,21 @@ prior guess worth `scale_prior_dof` observations and fading over
 `scale_memory_seconds`. The predictive's degrees of freedom are
 ν_t = min(n_t, obs_dof): while evidence on the scale is thin the predictive is
 correspondingly wide; with ample evidence the configured heavy tail remains.
+
+Process noise is relative (model v3): the stanza's level_var, trend_var and
+seasonal_var are the absolute rates at its `obs_scale`, and scale with the
+learned variance, Q_t = q · S_t / obs_scale². A stanza whose scale guess is
+right behaves as before; one whose guess is off by 10x no longer gets a level
+noise 100x its observation noise (which piled every PIT in the middle: 38 of
+82 streams failed the nursery so, ADR 0007). W&H's model is scale-free the same
+way: every variance is in units of the observation variance.
+
+Values recorded to a `quantum` (whole centimetres, whole counts behind log1p)
+get a randomized PIT, as counts do (ADR 0003): q uniform between the
+predictive CDF at the quantum's edges, mapped through the stanza's
+`transform`; `last_detect_q` is the least extreme value in that interval.
+The noise variance is then learned net of the rounding's (quantum²/12,
+Sheppard's correction), which the randomized PIT already accounts for.
 """
 
 from __future__ import annotations
@@ -37,7 +52,7 @@ from dataclasses import dataclass, field
 import numpy as np
 from scipy.stats import t as student_t
 
-MODEL_VERSION = 2
+MODEL_VERSION = 3
 
 
 @dataclass
@@ -48,6 +63,11 @@ class Harmonic:
     @property
     def omega(self) -> float:
         return 2.0 * math.pi * self.harmonic / self.period_seconds
+
+
+def _least_extreme(q_lo: float, q_hi: float) -> float:
+    """The least extreme PIT in [q_lo, q_hi] (as count.conservative_q)."""
+    return q_lo if q_lo > 0.5 else q_hi if q_hi < 0.5 else 0.5
 
 
 def make_harmonics(periods_seconds: list[float], n_harmonics: int = 1) -> list[Harmonic]:
@@ -67,6 +87,9 @@ class ContinuousSSM:
     time_scale: float = 3600.0  # seconds per internal time unit (level/trend)
     scale_prior_dof: float = 1.0  # how many observations the obs_scale guess is worth
     scale_memory_seconds: float = 7 * 86400.0  # e-folding time of scale evidence
+    quantum: float = 0.0  # resolution of the raw values (0: continuous)
+    transform: str = ""  # "", "log1p" or "log": raw → modelled value
+    seed: int = 0  # the randomized PIT's stream (per cell)
 
     # state (initialized on first observation)
     _x: np.ndarray | None = field(default=None, repr=False)
@@ -75,6 +98,8 @@ class ContinuousSSM:
     _t0: int | None = None
     _S: float | None = None  # observation-variance estimate
     _n: float | None = None  # its degrees of freedom (evidence)
+    _rng: np.random.Generator | None = field(default=None, repr=False)
+    last_detect_q: float | None = field(default=None, repr=False)  # of the last update
 
     @property
     def dim(self) -> int:
@@ -115,13 +140,29 @@ class ContinuousSSM:
         pred_var = state_var + self._S
         scale = math.sqrt(max(pred_var, 1e-12))
 
-        std_innov = (y - yhat) / scale
-        q = float(student_t.cdf(std_innov, df=min(n, self.obs_dof)))
+        df = min(n, self.obs_dof)
+        rounding_var = 0.0
+        if self.quantum > 0:
+            lo_edge, hi_edge = self._edges(y)
+            rounding_var = (hi_edge - lo_edge) ** 2 / 12  # Sheppard: rounding's own variance
+            q_lo = float(student_t.cdf((lo_edge - yhat) / scale, df=df))
+            q_hi = float(student_t.cdf((hi_edge - yhat) / scale, df=df))
+            if self._rng is None:
+                self._rng = np.random.default_rng(self.seed)
+            q = q_lo + (q_hi - q_lo) * float(self._rng.random())
+            self.last_detect_q = _least_extreme(q_lo, q_hi)
+        else:
+            q = float(student_t.cdf((y - yhat) / scale, df=df))
+            self.last_detect_q = None
 
         w = self._robust_update(x_pred, P_pred, z, y, yhat, state_var)
         # learn the observation variance from the standardized innovation
         # (W&H: S ← S·(n + e²/Q)/(n + 1), with the robust weight as the count)
-        s_new = self._S * (n + w * (y - yhat) ** 2 / pred_var) / (n + w)
+        # recorded values carry their rounding's variance on top of the noise's;
+        # the randomized PIT already spreads over the quantum, so learn the noise
+        # without it (Sheppard's correction), keeping the step positive
+        e2 = max((y - yhat) ** 2 - rounding_var, -0.5 * pred_var)
+        s_new = self._S * (n + w * e2 / pred_var) / (n + w)
         # state uncertainty is learned in units of the noise variance (W&H
         # scale C by S): when the scale estimate moves, so does P
         assert self._P is not None
@@ -142,6 +183,17 @@ class ContinuousSSM:
         s = self.obs_scale**2 if self._S is None else self._S
         scale = math.sqrt(max(float(z @ P_pred @ z) + s, 1e-12))
         return yhat, scale
+
+    def _edges(self, y: float) -> tuple[float, float]:
+        """The modelled values at the edges of y's quantum (raw ± quantum/2)."""
+        half = self.quantum / 2
+        if self.transform == "log1p":
+            raw = math.expm1(y)
+            return math.log1p(max(raw - half, -1 + 1e-12)), math.log1p(raw + half)
+        if self.transform == "log":
+            raw = math.exp(y)
+            return math.log(max(raw - half, 1e-12)), math.log(raw + half)
+        return y - half, y + half
 
     def _discounted_dof(self, ts: int) -> float:
         assert self._n is not None and self._last_ts is not None
@@ -174,7 +226,9 @@ class ContinuousSSM:
         q[0] = self.level_var * dt
         q[1] = self.trend_var * dt
         q[2:] = self.seasonal_var * dt
-        return np.diag(q)
+        # relative: the configured rates hold at S = obs_scale², and scale with S
+        rel = (self._S if self._S is not None else self.obs_scale**2) / self.obs_scale**2
+        return np.diag(q * rel)
 
     def _predict(self, dt: float) -> tuple[np.ndarray, np.ndarray]:
         assert self._x is not None and self._P is not None
@@ -220,6 +274,10 @@ class ContinuousSSM:
             "time_scale": self.time_scale,
             "scale_prior_dof": self.scale_prior_dof,
             "scale_memory_seconds": self.scale_memory_seconds,
+            "quantum": self.quantum,
+            "transform": self.transform,
+            "seed": self.seed,
+            "rng": self._rng.bit_generator.state if self._rng is not None else None,
             "S": self._S,
             "n": self._n,
             "x": None if self._x is None else self._x.tolist(),
@@ -244,7 +302,13 @@ class ContinuousSSM:
             time_scale=p["time_scale"],
             scale_prior_dof=p["scale_prior_dof"],
             scale_memory_seconds=p["scale_memory_seconds"],
+            quantum=p["quantum"],
+            transform=p["transform"],
+            seed=p["seed"],
         )
+        if p.get("rng") is not None:
+            m._rng = np.random.default_rng(m.seed)
+            m._rng.bit_generator.state = p["rng"]
         m._S = p["S"]
         m._n = p["n"]
         m._x = None if p["x"] is None else np.array(p["x"])

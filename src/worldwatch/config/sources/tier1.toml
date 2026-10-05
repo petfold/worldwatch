@@ -116,6 +116,8 @@ cell             = "GLOBAL"
 [btc_usd.model]
 obs_scale        = 0.001   # prior guess, ~0.1% per minute; the scale is learned
 level_var        = 2e-5
+scale_memory_seconds = 3600  # volatility clusters within the hour (replay: ADR 0007)
+obs_dof          = 3.0     # minute returns are heavier-tailed than t(4)
 
 [btc_usd.display]
 label            = "Bitcoin"
@@ -156,6 +158,8 @@ cell             = "GLOBAL"
 [eth_usd.model]
 obs_scale        = 0.0015  # prior guess; ETH runs a touch more volatile than BTC
 level_var        = 4e-5
+scale_memory_seconds = 3600  # volatility clusters within the hour (replay: ADR 0007)
+obs_dof          = 3.0
 
 [eth_usd.display]
 label            = "Ether"
@@ -414,6 +418,13 @@ unit             = "% of 7-day peak"
 percent          = true
 links            = [["Cloudflare Radar", "https://radar.cloudflare.com/"]]
 
+[cf_radar_netflows_global.model]
+obs_scale        = 0.02      # traffic is a share of its peak: noise ~2%
+level_var        = 1e-4
+periods_seconds  = [86400, 604800]  # the day's and the week's shape
+n_harmonics      = 3
+seasonal_var     = 1e-6      # the shape drifts slowly (replay of 28 days: ADR 0007)
+
 [cf_radar_netflows_global.alerts]
 tail             = "lower"   # a drop is the outage: only a fall is evidence
 reach_km         = "global"
@@ -445,6 +456,13 @@ about            = "Internet traffic in the UK as seen by Cloudflare, every 15 m
 unit             = "% of 7-day peak"
 percent          = true
 links            = [["Cloudflare Radar", "https://radar.cloudflare.com/gb"], ["IODA country", "https://ioda.inetintel.cc.gatech.edu/country/GB"]]
+
+[cf_radar_netflows_gb.model]
+obs_scale        = 0.02      # traffic is a share of its peak: noise ~2%
+level_var        = 1e-4
+periods_seconds  = [86400, 604800]  # the day's and the week's shape
+n_harmonics      = 3
+seasonal_var     = 1e-6      # the shape drifts slowly (replay of 28 days: ADR 0007)
 
 [cf_radar_netflows_gb.alerts]
 tail             = "lower"   # a drop is the outage: only a fall is evidence
@@ -478,6 +496,13 @@ unit             = "% of 7-day peak"
 percent          = true
 links            = [["Cloudflare Radar", "https://radar.cloudflare.com/us"], ["IODA country", "https://ioda.inetintel.cc.gatech.edu/country/US"]]
 
+[cf_radar_netflows_us.model]
+obs_scale        = 0.02      # traffic is a share of its peak: noise ~2%
+level_var        = 1e-4
+periods_seconds  = [86400, 604800]  # the day's and the week's shape
+n_harmonics      = 3
+seasonal_var     = 1e-6      # the shape drifts slowly (replay of 28 days: ADR 0007)
+
 [cf_radar_netflows_us.alerts]
 tail             = "lower"   # a drop is the outage: only a fall is evidence
 reach_km         = 300
@@ -509,6 +534,13 @@ about            = "Internet traffic in Japan as seen by Cloudflare, every 15 mi
 unit             = "% of 7-day peak"
 percent          = true
 links            = [["Cloudflare Radar", "https://radar.cloudflare.com/jp"], ["IODA country", "https://ioda.inetintel.cc.gatech.edu/country/JP"]]
+
+[cf_radar_netflows_jp.model]
+obs_scale        = 0.02      # traffic is a share of its peak: noise ~2%
+level_var        = 1e-4
+periods_seconds  = [86400, 604800]  # the day's and the week's shape
+n_harmonics      = 3
+seasonal_var     = 1e-6      # the shape drifts slowly (replay of 28 days: ADR 0007)
 
 [cf_radar_netflows_jp.alerts]
 tail             = "lower"   # a drop is the outage: only a fall is evidence

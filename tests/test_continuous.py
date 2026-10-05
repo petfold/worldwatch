@@ -155,3 +155,60 @@ def test_first_observation_returns_half():
     m = _model()
     assert m.update(T0, 100.0) == 0.5
     assert m.level == 100.0
+
+
+def _tv_tails(qs):
+    h = np.histogram(qs, bins=10, range=(0, 1))[0] / len(qs)
+    return 0.5 * np.abs(h - 0.1).sum(), (qs <= 0.01).mean() / 0.01, (qs >= 0.99).mean() / 0.01
+
+
+def test_process_noise_follows_the_learned_scale():
+    """Model v3: a stanza whose scale guess is 10x too big (σ guessed 1, truth
+    0.1, with the level walk in proportion) is still calibrated. With process
+    noise in absolute units (v2) the level noise was 100x the true observation
+    noise and every PIT sat near 0.5 (Cloudflare Radar, BTC, rivers: ADR 0007)."""
+    ts, ys = _gaussian_seasonal_series(3000, seed=21, sigma=0.1, level_walk=1e-4, amp=0.3)
+    m = _model(obs_scale=1.0, level_var=0.01)
+    qs = np.array([m.update(t, y) for t, y in zip(ts, ys, strict=False)][500:])
+    tv, lo, hi = _tv_tails(qs)
+    assert tv < 0.05 and 0.5 < lo < 2 and 0.5 < hi < 2, (tv, lo, hi)
+
+
+def _rounded_series(n, seed):
+    """Whole-unit readings (a slow gauge in cm): a level walk plus noise of 0.3 units, rounded."""
+    rng = np.random.default_rng(seed)
+    level, ys = 120.0, []
+    for _ in range(n):
+        level += rng.normal(0.0, 0.05)
+        ys.append(float(round(level + rng.normal(0.0, 0.3))))
+    return _times(n), ys
+
+
+def test_quantized_values_get_a_randomized_pit():
+    ts, ys = _rounded_series(4000, seed=22)
+    plain = _model(harmonics=[], obs_scale=0.4, level_var=0.0025)
+    qs = np.array([plain.update(t, y) for t, y in zip(ts, ys, strict=False)][500:])
+    assert _tv_tails(qs)[0] > 0.05  # whole units pile PITs up near repeated values
+    m = _model(harmonics=[], obs_scale=0.4, level_var=0.0025, quantum=1.0, seed=5)
+    qs = np.array([m.update(t, y) for t, y in zip(ts, ys, strict=False)][500:])
+    tv, lo, hi = _tv_tails(qs)
+    assert tv < 0.05 and 0.5 < lo < 2 and 0.5 < hi < 2, (tv, lo, hi)
+    assert m.last_detect_q is not None  # detection reads the least extreme value
+
+
+def test_quantum_edges_follow_the_transform():
+    m = _model(quantum=1.0, transform="log1p")
+    lo, hi = m._edges(float(np.log1p(4.0)))
+    assert np.isclose(lo, np.log1p(3.5)) and np.isclose(hi, np.log1p(4.5))
+    lo, hi = m._edges(0.0)  # a zero count: the lower edge stays above log1p(-1)
+    assert np.isfinite(lo) and np.isclose(hi, np.log1p(0.5))
+
+
+def test_quantized_state_round_trips_with_its_draws():
+    ts, ys = _rounded_series(50, seed=23)
+    a = _model(quantum=1.0, seed=9)
+    for t, y in zip(ts[:40], ys[:40], strict=False):
+        a.update(t, y)
+    b = ContinuousSSM.from_bytes(a.to_bytes())
+    assert [a.update(t, y) for t, y in zip(ts[40:], ys[40:], strict=False)] == \
+           [b.update(t, y) for t, y in zip(ts[40:], ys[40:], strict=False)]

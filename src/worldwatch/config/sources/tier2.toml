@@ -1215,8 +1215,10 @@ h3_resolution    = 8
 
 [pegelonline_water.model]
 obs_scale        = 5.0
-level_var        = 10.0
+level_var        = 3.0
 time_scale       = 3600.0
+periods_seconds  = [44712]   # the M2 tide (12.42 h): estuary gauges rise and fall with it
+quantum          = 1.0       # whole centimetres (replay: TV 0.35 -> 0.025, ADR 0007)
 
 [pegelonline_water.display]
 label            = "River levels, Germany (PEGELONLINE)"
@@ -1440,6 +1442,7 @@ lon_field        = "5"
 h3_resolution    = 2
 
 [opensky_aircraft.model]
+quantum          = 1.0       # whole counts behind log1p: a randomized PIT (ADR 0007)
 obs_scale        = 0.2
 level_var        = 1e-2
 time_scale       = 3600.0
@@ -1568,6 +1571,7 @@ lon_field        = "geometry.coordinates.0"
 h3_resolution    = 3
 
 [digitraffic_ships.model]
+quantum          = 1.0       # whole counts behind log1p: a randomized PIT (ADR 0007)
 obs_scale        = 0.2
 level_var        = 1e-2
 time_scale       = 3600.0
@@ -1621,6 +1625,7 @@ h3_resolution    = 3
 boxes            = { hormuz = [25.9, 55.9, 26.9, 57.0], bab_el_mandeb = [12.2, 42.9, 13.1, 43.8], suez = [29.6, 32.15, 31.5, 32.7] }
 
 [aisstream_chokepoints.model]
+quantum          = 1.0       # whole counts behind log1p: a randomized PIT (ADR 0007)
 obs_scale        = 0.2
 level_var        = 1e-2
 time_scale       = 3600.0
@@ -1705,6 +1710,7 @@ country_field    = "country_code"
 h3_resolution    = 3
 
 [ripe_atlas_probes.model]
+quantum          = 1.0       # whole counts behind log1p: a randomized PIT (ADR 0007)
 obs_scale        = 0.05
 level_var        = 1e-3
 time_scale       = 3600.0
@@ -1816,6 +1822,13 @@ unit             = "% of 7-day peak"
 percent          = true
 links            = [["Cloudflare Radar", "https://radar.cloudflare.com/ae"], ["IODA country", "https://ioda.inetintel.cc.gatech.edu/country/AE"]]
 
+[cf_radar_netflows_ae.model]
+obs_scale        = 0.02      # traffic is a share of its peak: noise ~2%
+level_var        = 1e-4
+periods_seconds  = [86400, 604800]  # the day's and the week's shape
+n_harmonics      = 3
+seasonal_var     = 1e-6      # the shape drifts slowly (replay of 28 days: ADR 0007)
+
 [cf_radar_netflows_ae.alerts]
 tail             = "lower"
 reach_km         = 300
@@ -1846,6 +1859,13 @@ about            = "Internet traffic in Saudi Arabia as seen by Cloudflare, ever
 unit             = "% of 7-day peak"
 percent          = true
 links            = [["Cloudflare Radar", "https://radar.cloudflare.com/sa"], ["IODA country", "https://ioda.inetintel.cc.gatech.edu/country/SA"]]
+
+[cf_radar_netflows_sa.model]
+obs_scale        = 0.02      # traffic is a share of its peak: noise ~2%
+level_var        = 1e-4
+periods_seconds  = [86400, 604800]  # the day's and the week's shape
+n_harmonics      = 3
+seasonal_var     = 1e-6      # the shape drifts slowly (replay of 28 days: ADR 0007)
 
 [cf_radar_netflows_sa.alerts]
 tail             = "lower"
@@ -1878,6 +1898,13 @@ unit             = "% of 7-day peak"
 percent          = true
 links            = [["Cloudflare Radar", "https://radar.cloudflare.com/qa"], ["IODA country", "https://ioda.inetintel.cc.gatech.edu/country/QA"]]
 
+[cf_radar_netflows_qa.model]
+obs_scale        = 0.02      # traffic is a share of its peak: noise ~2%
+level_var        = 1e-4
+periods_seconds  = [86400, 604800]  # the day's and the week's shape
+n_harmonics      = 3
+seasonal_var     = 1e-6      # the shape drifts slowly (replay of 28 days: ADR 0007)
+
 [cf_radar_netflows_qa.alerts]
 tail             = "lower"
 reach_km         = 300
@@ -1908,6 +1935,13 @@ about            = "Internet traffic in Kuwait as seen by Cloudflare, every 15 m
 unit             = "% of 7-day peak"
 percent          = true
 links            = [["Cloudflare Radar", "https://radar.cloudflare.com/kw"], ["IODA country", "https://ioda.inetintel.cc.gatech.edu/country/KW"]]
+
+[cf_radar_netflows_kw.model]
+obs_scale        = 0.02      # traffic is a share of its peak: noise ~2%
+level_var        = 1e-4
+periods_seconds  = [86400, 604800]  # the day's and the week's shape
+n_harmonics      = 3
+seasonal_var     = 1e-6      # the shape drifts slowly (replay of 28 days: ADR 0007)
 
 [cf_radar_netflows_kw.alerts]
 tail             = "lower"
@@ -1940,6 +1974,13 @@ unit             = "% of 7-day peak"
 percent          = true
 links            = [["Cloudflare Radar", "https://radar.cloudflare.com/bh"], ["IODA country", "https://ioda.inetintel.cc.gatech.edu/country/BH"]]
 
+[cf_radar_netflows_bh.model]
+obs_scale        = 0.02      # traffic is a share of its peak: noise ~2%
+level_var        = 1e-4
+periods_seconds  = [86400, 604800]  # the day's and the week's shape
+n_harmonics      = 3
+seasonal_var     = 1e-6      # the shape drifts slowly (replay of 28 days: ADR 0007)
+
 [cf_radar_netflows_bh.alerts]
 tail             = "lower"
 reach_km         = 300
@@ -1970,6 +2011,13 @@ about            = "Internet traffic in Oman as seen by Cloudflare, every 15 min
 unit             = "% of 7-day peak"
 percent          = true
 links            = [["Cloudflare Radar", "https://radar.cloudflare.com/om"], ["IODA country", "https://ioda.inetintel.cc.gatech.edu/country/OM"]]
+
+[cf_radar_netflows_om.model]
+obs_scale        = 0.02      # traffic is a share of its peak: noise ~2%
+level_var        = 1e-4
+periods_seconds  = [86400, 604800]  # the day's and the week's shape
+n_harmonics      = 3
+seasonal_var     = 1e-6      # the shape drifts slowly (replay of 28 days: ADR 0007)
 
 [cf_radar_netflows_om.alerts]
 tail             = "lower"
@@ -2002,6 +2050,13 @@ unit             = "% of 7-day peak"
 percent          = true
 links            = [["Cloudflare Radar", "https://radar.cloudflare.com/ir"], ["IODA country", "https://ioda.inetintel.cc.gatech.edu/country/IR"]]
 
+[cf_radar_netflows_ir.model]
+obs_scale        = 0.02      # traffic is a share of its peak: noise ~2%
+level_var        = 1e-4
+periods_seconds  = [86400, 604800]  # the day's and the week's shape
+n_harmonics      = 3
+seasonal_var     = 1e-6      # the shape drifts slowly (replay of 28 days: ADR 0007)
+
 [cf_radar_netflows_ir.alerts]
 tail             = "lower"
 reach_km         = 300
@@ -2032,6 +2087,13 @@ about            = "Internet traffic in Israel as seen by Cloudflare, every 15 m
 unit             = "% of 7-day peak"
 percent          = true
 links            = [["Cloudflare Radar", "https://radar.cloudflare.com/il"], ["IODA country", "https://ioda.inetintel.cc.gatech.edu/country/IL"]]
+
+[cf_radar_netflows_il.model]
+obs_scale        = 0.02      # traffic is a share of its peak: noise ~2%
+level_var        = 1e-4
+periods_seconds  = [86400, 604800]  # the day's and the week's shape
+n_harmonics      = 3
+seasonal_var     = 1e-6      # the shape drifts slowly (replay of 28 days: ADR 0007)
 
 [cf_radar_netflows_il.alerts]
 tail             = "lower"

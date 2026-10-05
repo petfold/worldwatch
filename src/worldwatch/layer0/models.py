@@ -50,6 +50,9 @@ def make_model(cfg: SourceConfig, cell: str | None = None) -> Layer0Model:
             time_scale=float(mp.get("time_scale", 3600.0)),
             scale_prior_dof=float(mp.get("scale_prior_dof", 1.0)),
             scale_memory_seconds=float(mp.get("scale_memory_seconds", 7 * 86400.0)),
+            quantum=float(mp.get("quantum", 0.0)),
+            transform=str(cfg.parse.get("transform", "")) if mp.get("quantum") else "",
+            **({"seed": cell_seed(cfg.stream_id, cell)} if cell is not None else {}),
         )
     if cfg.flavor == "count":
         return BayesianCount(

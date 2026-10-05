@@ -5,7 +5,8 @@ passes, then it is promoted automatically; drift flags it (quarantine). The
 pass criteria were left open (§15); they are set here and argued in ADR 0006.
 
 Per stream, over the surprise rows' q_value (the randomized PIT for counts,
-ADR 0003; uniform under a calibrated model), in a rolling window:
+ADR 0003; uniform under a calibrated model) from its newest model version
+only (a refitted model starts its record afresh), in a rolling window:
   n, span      enough evidence: at least MIN_N PITs spanning MIN_SPAN_DAYS
   tv           total-variation distance of the decile histogram from uniform
                (0 = flat, 0.5 = all in one decile): the shape overall
@@ -74,12 +75,20 @@ def stats(conn: sqlite3.Connection, *since: int) -> list[dict[str, Stats]]:
     window = " + ".join(f"(bin_start >= {b})" for b in bounds)  # how many windows hold the row
     # NOT INDEXED: a table scan; walking the primary key and looking up each row
     # is several times slower (71 s against 22 s for 8.7M rows)
-    sql = (f"SELECT stream_id, {window} AS w, MIN(CAST(q_value * 10 AS INTEGER), 9) AS d, "
+    sql = (f"SELECT stream_id, model_version AS v, {window} AS w, "
+           f"MIN(CAST(q_value * 10 AS INTEGER), 9) AS d, "
            f"(q_value <= {TAIL}) AS lo, (q_value >= {1 - TAIL}) AS hi, COUNT(*) AS k, "
            f"MIN(bin_start) AS t0, MAX(bin_start) AS t1 FROM surprise NOT INDEXED "
-           f"WHERE bin_start >= {bounds[0]} AND q_value IS NOT NULL GROUP BY 1, 2, 3, 4, 5")
+           f"WHERE bin_start >= {bounds[0]} AND q_value IS NOT NULL GROUP BY 1, 2, 3, 4, 5, 6")
+    rows = conn.execute(sql).fetchall()
+    # a model is judged on its own PITs: a stream's newest model version only
+    newest: dict[str, int] = {}
+    for r in rows:
+        newest[r["stream_id"]] = max(newest.get(r["stream_id"], r["v"]), r["v"])
     acc: list[dict[str, list[Any]]] = [{} for _ in bounds]  # n, t0, t1, lo, hi, deciles
-    for r in conn.execute(sql):
+    for r in rows:
+        if r["v"] != newest[r["stream_id"]]:
+            continue
         for i in range(int(r["w"])):  # a row in window i is in every wider one
             a = acc[i].setdefault(r["stream_id"], [0, r["t0"], r["t1"], 0, 0, [0] * 10])
             a[0] += r["k"]

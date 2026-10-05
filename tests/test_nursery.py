@@ -24,13 +24,13 @@ def _register(db, cfg, status=None):
                                       "flavor": cfg.flavor, "status": status or cfg.status})
 
 
-def _pits(db, sid, q, days=10, end=NOW):
+def _pits(db, sid, q, days=10, end=NOW, version=1, cell="c"):
     """PITs q spread evenly over the `days` before `end`, one cell."""
     ts = np.linspace(end - days * DAY, end - 60, len(q)).astype(int)
     db.executemany(
         "INSERT INTO surprise (stream_id, cell, scale, bin_start, q_value, presence_q, precision, "
-        "n_obs, tail_index, model_version) VALUES (?, 'c', -1, ?, ?, 1.0, 1.0, 1, NULL, 1)",
-        [(sid, int(t), float(v)) for t, v in zip(ts, q, strict=True)])
+        "n_obs, tail_index, model_version) VALUES (?, ?, -1, ?, ?, 1.0, 1.0, 1, NULL, ?)",
+        [(sid, cell, int(t), float(v), version) for t, v in zip(ts, q, strict=True)])
     db.commit()
 
 
@@ -146,3 +146,18 @@ def test_rerun_is_idempotent(db, sources):
     nursery.run_nursery(db, {"good": cfg}, now=NOW)
     again = nursery.run_nursery(db, {"good": cfg}, now=NOW)
     assert again["promoted"] == 0 and _status(db, "good") == "active"
+
+
+def test_only_the_newest_model_version_is_judged(db, sources):
+    """A refit starts a model's record afresh: the old version's bad PITs no
+    longer count, and the new one needs its own evidence."""
+    from scipy import stats
+
+    rng = np.random.default_rng(10)
+    cfg = _cfg(sources, "refit")
+    _register(db, cfg)
+    _pits(db, "refit", stats.norm.cdf(rng.normal(scale=0.3, size=5000)), days=10, version=2)
+    _pits(db, "refit", rng.uniform(size=3000), days=4, version=3, cell="d")
+    nursery.run_nursery(db, {"refit": cfg}, now=NOW)
+    assert _status(db, "refit") == "active"
+    assert nursery.latest(db)[0]["n"] == 3000

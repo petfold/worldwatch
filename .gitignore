@@ -22,3 +22,4 @@ venv/
 *.db-wal
 *.db-shm
 *.parquet
+research/replay_continuous/data/
