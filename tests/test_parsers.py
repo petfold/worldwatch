@@ -1,6 +1,6 @@
 """Parser stability against checked-in golden fixtures."""
 
-from conftest import load_fixture
+from conftest import FIXTURES, load_fixture
 from worldwatch.ingest import parsers
 
 
@@ -311,6 +311,141 @@ def test_vnp46a2_groups_blocks_into_h3_cells(sources):
     assert math.isclose(values[0], math.log1p(1.0))
     assert math.isclose(values[1], math.log1p(4.0))
     assert len({o.cell for o in obs}) == 2
+
+
+def _vnp46a1_payload(rad, cloud, lat, lon, dnb_qf=None, solar_zenith=None,
+                     hours=1.5, time_start="2026-10-03T00:00:00.000Z"):
+    """Synthetic VNP46A1 granule bytes: the datasets vnp46a1_grid reads."""
+    import io
+
+    import h5py
+    import numpy as np
+
+    rad = np.asarray(rad, "float32")
+    shape = rad.shape
+    buf = io.BytesIO()
+    with h5py.File(buf, "w") as f:
+        grid = f.create_group("HDFEOS/GRIDS/VIIRS_Grid_DNB_2d/Data Fields")
+        ds = grid.create_dataset("DNB_At_Sensor_Radiance", data=rad)
+        ds.attrs["_FillValue"] = np.array([-999.9], dtype="float32")
+        ds = grid.create_dataset("UTC_Time", data=np.full(shape, hours, "float32"))
+        ds.attrs["_FillValue"] = np.array([-999.9], dtype="float32")
+        sz = np.full(shape, 120.0) if solar_zenith is None else np.asarray(solar_zenith)
+        ds = grid.create_dataset("Solar_Zenith", data=np.round(sz * 100).astype("int16"))
+        ds.attrs["_FillValue"] = np.array([-32768], dtype="int16")
+        ds.attrs["scale_factor"] = np.array([0.01], dtype="float32")
+        ds.attrs["add_offset"] = np.array([0.0], dtype="float32")
+        grid.create_dataset("QF_Cloud_Mask", data=np.asarray(cloud, "uint16"))
+        qf = np.zeros(shape) if dnb_qf is None else np.asarray(dnb_qf)
+        grid.create_dataset("QF_DNB", data=qf.astype("uint16"))
+        grid.create_dataset("lat", data=np.asarray(lat, "float64"))
+        grid.create_dataset("lon", data=np.asarray(lon, "float64"))
+    return {"granule_id": "TEST", "time_start": time_start, "content": buf.getvalue()}
+
+
+def _nrt_cfg(sources, **parse):
+    import dataclasses
+
+    base = sources["night_lights_nrt_h18v04"]
+    return dataclasses.replace(
+        base,
+        geocode={**base.geocode, "h3_resolution": 1},  # coarse: one cell
+        parse={**base.parse, "block_pixels": 16, **parse},
+    )
+
+
+_NRT_LAT = [48.9 - 0.004 * i for i in range(32)]
+_NRT_LON = [2.3 + 0.004 * j for j in range(32)]
+
+
+def test_vnp46a1_real_granule_crop(sources):
+    """A 192² crop of a real VNP46A1_NRT granule (Paris, 3 Oct 2026, moon 55%)."""
+    import math
+
+    from worldwatch.ingest.geocode import h3_cell
+
+    cfg = sources["night_lights_nrt_h18v04"]
+    content = (FIXTURES / "vnp46a1_nrt_paris_crop.h5").read_bytes()
+    payload = {"granule_id": "LANCEMODIS:3057015263",
+               "time_start": "2026-10-03T00:00:00.000Z", "content": content}
+    obs = parsers.parse(payload, cfg)
+
+    assert len(obs) >= 3
+    assert len({o.cell for o in obs}) == len(obs)
+    # the overpass was at ~01:38 UTC on the granule's day
+    assert all(1790985600 + 5400 <= o.ts <= 1790985600 + 6600 for o in obs)
+    by_cell = {o.cell: math.expm1(o.value) for o in obs}
+    paris = by_cell[h3_cell(48.857, 2.352, 4)]
+    assert paris > 10.0  # central Paris: tens of nW/cm²/sr above its background
+    assert paris == max(by_cell.values())
+    assert all(v >= 0.0 for v in by_cell.values())
+
+
+def test_vnp46a1_screens_day_cloud_quality_and_snow(sources):
+    import math
+
+    import numpy as np
+
+    cfg = _nrt_cfg(sources, background_percentile=0)
+    rad = np.full((32, 32), 4.0)
+    cloud = np.zeros((32, 32), dtype="uint16")
+    poison = 9999.0
+    rad[0:4, :] = poison
+    cloud[0:4, :] = 3 << 6  # confident cloudy
+    rad[4:8, :] = poison
+    cloud[4:8, :] = 1  # day
+    rad[8:12, :] = poison
+    cloud[8:12, :] = 1 << 10  # snow/ice
+    rad[12:16, :] = poison
+    cloud[12:16, :] = 1 << 9  # cirrus
+    rad[16:20, :] = poison
+    qf = np.zeros((32, 32))
+    qf[16:20, :] = 4  # saturation
+    rad[20:22, :] = poison
+    sz = np.full((32, 32), 120.0)
+    sz[20:22, :] = 105.0  # twilight, not astronomically dark
+    cloud[22:32, :] = 1 << 6  # probably clear: kept
+
+    obs = parsers.parse(
+        _vnp46a1_payload(rad, cloud, _NRT_LAT, _NRT_LON, dnb_qf=qf, solar_zenith=sz),
+        cfg,
+    )
+    assert len(obs) == 1
+    assert math.isclose(obs[0].value, math.log1p(4.0), rel_tol=1e-6)
+    assert obs[0].ts == 1790985600 + 5400  # 2026-10-03 + 1.5 h view time
+    assert obs[0].stream_id == "night_lights_nrt_h18v04"
+
+
+def test_vnp46a1_background_cancels_moonlight(sources):
+    """An even glow (moonlight) over the cell leaves the value unchanged."""
+    import math
+
+    import numpy as np
+
+    cfg = _nrt_cfg(sources)  # background_percentile defaults to 10
+    rad = np.full((32, 32), 0.5)
+    rad[:8, :8] = 40.5  # a town in a dark countryside
+    cloud = np.zeros((32, 32), dtype="uint16")
+
+    dark = parsers.parse(_vnp46a1_payload(rad, cloud, _NRT_LAT, _NRT_LON), cfg)
+    moonlit = parsers.parse(_vnp46a1_payload(rad + 2.0, cloud, _NRT_LAT, _NRT_LON), cfg)
+    assert len(dark) == len(moonlit) == 1
+    assert math.isclose(dark[0].value, math.log1p(40.0 * 64 / 1024), rel_tol=1e-6)
+    assert math.isclose(dark[0].value, moonlit[0].value, rel_tol=1e-6)
+
+    blackout = parsers.parse(_vnp46a1_payload(np.full((32, 32), 2.5), cloud,
+                                              _NRT_LAT, _NRT_LON), cfg)
+    assert blackout[0].value == 0.0
+
+
+def test_vnp46a1_drops_low_coverage_cells(sources):
+    import numpy as np
+
+    cfg = _nrt_cfg(sources)
+    rad = np.full((32, 32), 5.0)
+    cloud = np.full((32, 32), 3 << 6, dtype="uint16")  # all cloudy...
+    cloud[0, 0] = 0  # ...but one pixel: coverage 1/1024 < min_valid_frac
+    assert parsers.parse(_vnp46a1_payload(rad, cloud, _NRT_LAT, _NRT_LON), cfg) == []
 
 
 def test_colocated_detectors_are_one_series(sources):

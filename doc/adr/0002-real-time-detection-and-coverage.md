@@ -398,3 +398,14 @@ poll process:
   its moon-fraction and cloud-mask fields). It needs a new parser designed
   against a real granule, which can only be downloaded with the VPS's
   Earthdata login.
+- **Night lights NRT: added 2026-10-05** (`night_lights_nrt_*`, the same four
+  tiles, nursery). Parser `vnp46a1_grid`, designed against a real granule
+  (h18v04, 3 Oct, produced 28 h after the pass, moon 55% lit). It keeps
+  pixels that are night, astronomically dark (solar zenith ≥ 108°), clear or
+  probably clear, free of cirrus/snow/aurora/eclipse flags and QF_DNB 0
+  (45% of that tile). Moonlight: each cell reports its mean radiance minus its
+  own 10th-percentile pixel. Against the archived VNP46A2 (moon-corrected) cell
+  medians that tracked better than the plain mean (log correlation 0.955 vs
+  0.920; the ~+0.6 nW moonlight bias on dark cells is gone). One moonlit night
+  is thin evidence: compare again with VNP46A2 for the same days once it
+  arrives (~9 days). The A2 streams stay until then.

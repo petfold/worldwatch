@@ -381,6 +381,123 @@ def parse_vnp46a2_grid(payload: Any, cfg: SourceConfig) -> list[Observation]:
     return obs
 
 
+@register("vnp46a1_grid")
+def parse_vnp46a1_grid(payload: Any, cfg: SourceConfig) -> list[Observation]:
+    """NASA Black Marble VNP46A1 (NRT) granule → per-H3-cell artificial light.
+
+    VNP46A1 is uncorrected at-sensor radiance, a day after the overpass
+    (VNP46A2's lunar/atmospheric correction takes ~9 days). A pixel is kept
+    only if it is a night-time, clear-sky, good-quality retrieval: night bit
+    set and solar zenith ≥ 108° (astronomical darkness), cloud confidence at
+    most `max_cloud_confidence` (0 confident clear, 1 probably clear), no
+    cirrus, snow/ice, aurora or lunar eclipse flag, QF_DNB == 0, radiance not
+    fill. Cells below min_valid_frac are dropped, never imputed (guardrail 4).
+
+    Moonlight is uncorrected here. It adds a roughly even glow over a cell, so
+    the value is the cell's mean radiance minus its own dark background (the
+    `background_percentile`-th percentile of its clean pixels; 0 = plain mean):
+    a power cut takes the excess to ~0 whatever the moon. On the 3 Oct 2026
+    h18v04 granule (moon 55% lit) this tracked VNP46A2's corrected cell values
+    better than the plain mean (log correlation 0.955 vs 0.920).
+
+    ts = the granule's day plus the cell's mean view time (UTC_Time), so the
+    observation carries the actual overpass time.
+    value = log1p(excess radiance in nW/(cm²·sr)) by default.
+    """
+    import io
+
+    import h5py
+    import numpy as np
+
+    group_path = str(
+        cfg.parse.get("grid_group", "HDFEOS/GRIDS/VIIRS_Grid_DNB_2d/Data Fields")
+    )
+    block = int(cfg.parse.get("block_pixels", 16))
+    min_valid_frac = float(cfg.parse.get("min_valid_frac", 0.2))
+    max_cloud = int(cfg.parse.get("max_cloud_confidence", 1))
+    background_pct = float(cfg.parse.get("background_percentile", 10))
+    use_log1p = str(cfg.parse.get("transform", "log1p")) == "log1p"
+    resolution = int(cfg.geocode.get("h3_resolution", 4))
+    day_start = _iso_to_epoch(str(payload["time_start"]))
+
+    def scaled(ds: Any) -> Any:
+        raw = ds[:]
+        out = raw.astype(np.float32)  # float32 halves a 2400² tile's footprint
+        out *= np.float32(ds.attrs.get("scale_factor", [1.0])[0])
+        out += np.float32(ds.attrs.get("add_offset", [0.0])[0])
+        if "_FillValue" in ds.attrs:
+            out[raw == ds.attrs["_FillValue"][0]] = np.nan
+        return out
+
+    with h5py.File(io.BytesIO(payload["content"]), "r") as f:
+        grid = f[group_path]
+        radiance = scaled(grid["DNB_At_Sensor_Radiance"])
+        hours = scaled(grid["UTC_Time"])
+        solar_zenith = scaled(grid["Solar_Zenith"])
+        cloud = grid["QF_Cloud_Mask"][:]
+        dnb_qf = grid["QF_DNB"][:]
+        lat = grid["lat"][:]
+        lon = grid["lon"][:]
+
+    # QF_Cloud_Mask bits (Black Marble user guide, Table 6): 0 day, 6-7 cloud
+    # confidence, 9 cirrus, 10 snow/ice, 12 aurora, 13 lunar eclipse.
+    valid = (
+        (cloud != 65535)
+        & ((cloud & 1) == 0)
+        & (((cloud >> 6) & 3) <= max_cloud)
+        & ((cloud & ((1 << 9) | (1 << 10) | (1 << 12) | (1 << 13))) == 0)
+        & (dnb_qf == 0)
+        & (solar_zenith >= 108.0)
+        & (radiance >= 0.0)
+        & ~np.isnan(hours)
+    )
+
+    # Label each block with its H3 cell, then every pixel with its block's label.
+    nrow = (radiance.shape[0] // block) * block
+    ncol = (radiance.shape[1] // block) * block
+    block_lat = lat[:nrow].reshape(nrow // block, block).mean(axis=1)
+    block_lon = lon[:ncol].reshape(ncol // block, block).mean(axis=1)
+    cell_ids: list[str] = []
+    index: dict[str, int] = {}
+    labels = np.empty((nrow // block, ncol // block), dtype=np.int32)
+    for i, la in enumerate(block_lat):
+        for j, lo in enumerate(block_lon):
+            cell = h3_cell(float(la), float(lo), resolution)
+            labels[i, j] = index.setdefault(cell, len(cell_ids))
+            if labels[i, j] == len(cell_ids):
+                cell_ids.append(cell)
+    pixel_labels = np.repeat(np.repeat(labels, block, axis=0), block, axis=1)
+    total = np.bincount(pixel_labels.ravel(), minlength=len(cell_ids))
+
+    keep = valid[:nrow, :ncol]
+    lab = pixel_labels[keep]
+    order = np.argsort(lab, kind="stable")
+    lab = lab[order]
+    rad = radiance[:nrow, :ncol][keep][order]
+    hrs = hours[:nrow, :ncol][keep][order]
+    bounds = np.searchsorted(lab, np.arange(len(cell_ids) + 1))
+
+    obs: list[Observation] = []
+    for k in sorted(range(len(cell_ids)), key=lambda k: cell_ids[k]):
+        lo_i, hi_i = int(bounds[k]), int(bounds[k + 1])
+        count = hi_i - lo_i
+        if count == 0 or count / total[k] < min_valid_frac:
+            continue
+        values = rad[lo_i:hi_i]
+        excess = float(values.mean(dtype=np.float64))
+        if background_pct > 0:
+            excess = max(excess - float(np.percentile(values, background_pct)), 0.0)
+        obs.append(
+            Observation(
+                stream_id=cfg.stream_id,
+                cell=cell_ids[k],
+                ts=day_start + int(round(float(hrs[lo_i:hi_i].mean(dtype=np.float64)) * 3600.0)),
+                value=float(np.log1p(excess)) if use_log1p else excess,
+            )
+        )
+    return obs
+
+
 @register("gdelt_export_events")
 def parse_gdelt_export_events(payload: Any, cfg: SourceConfig) -> list[Observation]:
     """GDELT 2.0 export batch (zipped TSV, one row per coded event) → one

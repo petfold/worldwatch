@@ -659,6 +659,147 @@ links            = [["Night lights", "https://worldview.earthdata.nasa.gov/?v={w
 reach_km         = 300
 
 
+# --- Night lights, near real time: VNP46A1_NRT (LANCE) ----------------------
+# The same tiles as above, a day after the overpass instead of ~9 days
+# (measured 3 Oct 2026: produced ~28 h after, 42 MB per tile; the A2 streams
+# stay as the moon-corrected cross-check until these have a few weeks of
+# history). Uncorrected at-sensor radiance: the parser keeps clear-sky,
+# good-quality, astronomically dark pixels and reports each cell's light above
+# its own dark background, which cancels most moonlight (see vnp46a1_grid).
+# Same Earthdata login; the files come from nrt3.modaps, not earthdatacloud.
+
+[night_lights_nrt_h17v03]
+class            = "night_lights"
+modality         = "physical"
+topic_tags       = ["nightlights", "power", "activity"]
+flavor           = "continuous"
+endpoint         = "https://cmr.earthdata.nasa.gov/search/granules.json?short_name=VNP46A1_NRT&version=2&page_size=1&sort_key=-start_date&options[readable_granule_name][pattern]=true&readable_granule_name[]=*.h17v03.*"
+cadence_seconds  = 10800
+status           = "nursery"
+notes            = "VIIRS Black Marble NRT tile h17v03: UK + Ireland (50-60N: dark-season only, no retrievals ~May-Jul)"
+
+[night_lights_nrt_h17v03.fetch]
+kind             = "earthdata_granule"
+data_host_contains = "nrt3.modaps.eosdis.nasa.gov"
+
+[night_lights_nrt_h17v03.parse]
+format           = "vnp46a1_grid"
+
+[night_lights_nrt_h17v03.geocode]
+strategy         = "granule_grid"
+h3_resolution    = 4
+
+[night_lights_nrt_h17v03.display]
+label            = "Night lights (next day), UK + Ireland"
+about            = "Artificial light at night from NASA's VIIRS satellite (UK and Ireland), a day after the pass: power cuts darken it."
+unit             = " nW/cm²/sr"
+inverse          = "expm1"
+digits           = 1
+links            = [["Night lights", "https://worldview.earthdata.nasa.gov/?v={west},{south},{east},{north}&l=VIIRS_SNPP_DayNightBand_At_Sensor_Radiance,Coastlines_15m&t={date}"]]
+
+[night_lights_nrt_h17v03.alerts]
+reach_km         = 300
+
+
+[night_lights_nrt_h18v04]
+class            = "night_lights"
+modality         = "physical"
+topic_tags       = ["nightlights", "power", "activity"]
+flavor           = "continuous"
+endpoint         = "https://cmr.earthdata.nasa.gov/search/granules.json?short_name=VNP46A1_NRT&version=2&page_size=1&sort_key=-start_date&options[readable_granule_name][pattern]=true&readable_granule_name[]=*.h18v04.*"
+cadence_seconds  = 10800
+status           = "nursery"
+notes            = "VIIRS Black Marble NRT tile h18v04: France, S. Germany, Switzerland, N. Italy"
+
+[night_lights_nrt_h18v04.fetch]
+kind             = "earthdata_granule"
+data_host_contains = "nrt3.modaps.eosdis.nasa.gov"
+
+[night_lights_nrt_h18v04.parse]
+format           = "vnp46a1_grid"
+
+[night_lights_nrt_h18v04.geocode]
+strategy         = "granule_grid"
+h3_resolution    = 4
+
+[night_lights_nrt_h18v04.display]
+label            = "Night lights (next day), France to N. Italy"
+about            = "Artificial light at night from NASA's VIIRS satellite (France to northern Italy), a day after the pass: power cuts darken it."
+unit             = " nW/cm²/sr"
+inverse          = "expm1"
+digits           = 1
+links            = [["Night lights", "https://worldview.earthdata.nasa.gov/?v={west},{south},{east},{north}&l=VIIRS_SNPP_DayNightBand_At_Sensor_Radiance,Coastlines_15m&t={date}"]]
+
+[night_lights_nrt_h18v04.alerts]
+reach_km         = 300
+
+
+[night_lights_nrt_h10v05]
+class            = "night_lights"
+modality         = "physical"
+topic_tags       = ["nightlights", "power", "activity"]
+flavor           = "continuous"
+endpoint         = "https://cmr.earthdata.nasa.gov/search/granules.json?short_name=VNP46A1_NRT&version=2&page_size=1&sort_key=-start_date&options[readable_granule_name][pattern]=true&readable_granule_name[]=*.h10v05.*"
+cadence_seconds  = 10800
+status           = "nursery"
+notes            = "VIIRS Black Marble NRT tile h10v05: US mid-Atlantic / Southeast coast"
+
+[night_lights_nrt_h10v05.fetch]
+kind             = "earthdata_granule"
+data_host_contains = "nrt3.modaps.eosdis.nasa.gov"
+
+[night_lights_nrt_h10v05.parse]
+format           = "vnp46a1_grid"
+
+[night_lights_nrt_h10v05.geocode]
+strategy         = "granule_grid"
+h3_resolution    = 4
+
+[night_lights_nrt_h10v05.display]
+label            = "Night lights (next day), US mid-Atlantic"
+about            = "Artificial light at night from NASA's VIIRS satellite (US mid-Atlantic), a day after the pass: power cuts darken it."
+unit             = " nW/cm²/sr"
+inverse          = "expm1"
+digits           = 1
+links            = [["Night lights", "https://worldview.earthdata.nasa.gov/?v={west},{south},{east},{north}&l=VIIRS_SNPP_DayNightBand_At_Sensor_Radiance,Coastlines_15m&t={date}"]]
+
+[night_lights_nrt_h10v05.alerts]
+reach_km         = 300
+
+
+[night_lights_nrt_h31v05]
+class            = "night_lights"
+modality         = "physical"
+topic_tags       = ["nightlights", "power", "activity"]
+flavor           = "continuous"
+endpoint         = "https://cmr.earthdata.nasa.gov/search/granules.json?short_name=VNP46A1_NRT&version=2&page_size=1&sort_key=-start_date&options[readable_granule_name][pattern]=true&readable_granule_name[]=*.h31v05.*"
+cadence_seconds  = 10800
+status           = "nursery"
+notes            = "VIIRS Black Marble NRT tile h31v05: Japan (main islands)"
+
+[night_lights_nrt_h31v05.fetch]
+kind             = "earthdata_granule"
+data_host_contains = "nrt3.modaps.eosdis.nasa.gov"
+
+[night_lights_nrt_h31v05.parse]
+format           = "vnp46a1_grid"
+
+[night_lights_nrt_h31v05.geocode]
+strategy         = "granule_grid"
+h3_resolution    = 4
+
+[night_lights_nrt_h31v05.display]
+label            = "Night lights (next day), Japan"
+about            = "Artificial light at night from NASA's VIIRS satellite (Japan), a day after the pass: power cuts darken it."
+unit             = " nW/cm²/sr"
+inverse          = "expm1"
+digits           = 1
+links            = [["Night lights", "https://worldview.earthdata.nasa.gov/?v={west},{south},{east},{north}&l=VIIRS_SNPP_DayNightBand_At_Sensor_Radiance,Coastlines_15m&t={date}"]]
+
+[night_lights_nrt_h31v05.alerts]
+reach_km         = 300
+
+
 # --- Radiation: EURDEP + German ODL (BfS open data, WFS GeoJSON) ------------
 # EURDEP: ~17,000 official gamma dose-rate stations in ~40 countries, hourly,
 # republished openly by Germany's BfS (no access constraints or fees declared;

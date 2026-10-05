@@ -49,6 +49,11 @@ granule's own day (frozen-archive semantics accept the late fold). Known
 seasonal gap: tiles above ~50°N have no high-quality retrievals near midsummer
 (verified live on h17v03 in July — twilight never reaches astronomical
 darkness), so h17v03 is dark-season-only; the presence channel sees the gap.
+The same tiles also come a day after the pass as VNP46A1_NRT
+(`night_lights_nrt_*`, ~42 MB per tile, from LANCE's nrt3.modaps host; parser
+`vnp46a1_grid`: clear, dark, good-quality pixels, each cell's light above its
+own dark background so moonlight mostly cancels; ts = the cell's view time; see
+ADR 0002 §H follow-up).
 EDL token is listed/minted automatically from `WW_EARTHDATA_USER`/`PASS`
 (or supplied directly via `WW_EARTHDATA_TOKEN`).
 

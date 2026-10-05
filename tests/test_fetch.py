@@ -205,6 +205,42 @@ async def test_earthdata_granule_end_to_end(db, sources, monkeypatch):
     assert counters["cmr"] == 2
 
 
+async def test_earthdata_nrt_granule_from_lance(db, sources, monkeypatch):
+    """VNP46A1_NRT: CMR lists the file on nrt3.modaps (LANCE), not earthdatacloud."""
+    from conftest import FIXTURES
+
+    monkeypatch.setenv("WW_EARTHDATA_TOKEN", "edl-token")
+    cfg = sources["night_lights_nrt_h18v04"]
+    name = "VNP46A1_NRT.A2026276.h18v04.002.2026277050716.h5"
+    entry = {  # trimmed from the live CMR response, 5 Oct 2026
+        "title": "LANCEMODIS:3057015263",
+        "time_start": "2026-10-03T00:00:00.000Z",
+        "links": [
+            {"href": f"https://nrt3.modaps.eosdis.nasa.gov/api/v2/content/archives/allData/5200/VNP46A1_NRT/2026/276/{name}"},
+            {"href": "http://doi.org/10.5067/VIIRS/VNP46A1_NRT.002"},
+            {"href": "https://nrt3.modaps.eosdis.nasa.gov/archive/allData/5200/VNP46A1_NRT/"},
+        ],
+    }
+    downloads = []
+
+    def handler(request):
+        if request.url.host == "cmr.earthdata.nasa.gov":
+            assert request.url.params["short_name"] == "VNP46A1_NRT"
+            return httpx.Response(200, json={"feed": {"entry": [entry]}})
+        if request.url.host == "nrt3.modaps.eosdis.nasa.gov":
+            downloads.append(request.url.path)
+            assert request.headers["Authorization"] == "Bearer edl-token"
+            return httpx.Response(200, content=(FIXTURES / "vnp46a1_nrt_paris_crop.h5").read_bytes())
+        raise AssertionError(f"unexpected request: {request.url}")
+
+    async with _client(handler) as client:
+        outcome = await poll_once(client, db, cfg, CacheValidators(), now=1791200000)
+
+    assert outcome.event == "ok"
+    assert outcome.rows_written >= 3
+    assert downloads == [f"/api/v2/content/archives/allData/5200/VNP46A1_NRT/2026/276/{name}"]
+
+
 async def test_earthdata_token_reused_from_urs_and_cached(db, sources, monkeypatch):
     monkeypatch.setenv("WW_EARTHDATA_USER", "peter")
     monkeypatch.setenv("WW_EARTHDATA_PASS", "pw")
