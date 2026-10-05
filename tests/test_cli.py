@@ -78,7 +78,7 @@ def test_main_dispatch_uses_env(tmp_path, monkeypatch, capsys):
     assert summary["opened"] == 0
 
 
-def test_consolidate_prunes_superseded_model_states(db, sources):
+def test_daily_prune_drops_superseded_model_states(db, sources):
     from worldwatch.layer0.models import MODEL_VERSION
     from worldwatch.layer0.pool import POOL_SCALE, POOL_STATE_VERSION
     from worldwatch.store import upsert_source
@@ -98,9 +98,9 @@ def test_consolidate_prunes_superseded_model_states(db, sources):
     db.executemany("INSERT INTO model_state (stream_id, cell, scale, version, state, updated_at) "
                    "VALUES (?, ?, ?, ?, x'00', 0)", rows)
     db.commit()
-    cli.cmd_consolidate(db, fine_window_seconds=0)
+    assert cli.cmd_prune(db) == 2
     left = {tuple(r) for r in db.execute("SELECT stream_id, cell, scale, version FROM model_state")}
     assert left == set(rows) - {rows[0], rows[4]}
     assert db.execute("SELECT detail FROM health WHERE component='model_state'").fetchone()[0] == "rows=2"
-    cli.cmd_consolidate(db, fine_window_seconds=0)  # idempotent: nothing more to prune
+    assert cli.cmd_prune(db) == 0  # idempotent: nothing more to prune
     assert db.execute("SELECT COUNT(*) FROM health WHERE component='model_state'").fetchone()[0] == 1

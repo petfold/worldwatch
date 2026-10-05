@@ -104,7 +104,9 @@ WHERE day = strftime('%s', 'now') / 86400 * 86400 ORDER BY bytes_in DESC LIMIT 1
 
 What lasts is exported; what rolls over is not. `worldwatch-export.timer` runs
 `worldwatch export` at 00:30 UTC into `/var/lib/worldwatch/export/`
-(`WW_EXPORT_DIR`):
+(`WW_EXPORT_DIR`). It first drops model states of superseded model versions,
+which only a model-version deploy leaves behind (health: `model_state` /
+`pruned`), so the snapshot carries live states only:
 
 - `surprise/` and `bins/`: a numbered batch a day with the rows written since
   the last one (~20 MB); nothing deletes them.

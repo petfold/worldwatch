@@ -75,11 +75,16 @@ def cmd_consolidate(
         kwargs["context_budget_bytes"] = context_budget_bytes
     if live_streams is not None:
         kwargs["live_streams"] = live_streams  # fold only what the live scorer consumed
-    n = consolidate(conn, fine_window_seconds=fine_window_seconds, **kwargs)
-    pruned = prune_states(conn)  # superseded model versions' states
+    return consolidate(conn, fine_window_seconds=fine_window_seconds, **kwargs)
+
+
+def cmd_prune(conn: sqlite3.Connection) -> int:
+    """Daily housekeeping, before the export: drop model states of superseded
+    versions (they appear only after a model-version deploy)."""
+    pruned = prune_states(conn)
     if pruned:
         record_health(conn, "model_state", "pruned", f"rows={pruned}")
-    return n
+    return pruned
 
 
 def live_stream_ids(sources: dict[str, SourceConfig]) -> set[str]:
@@ -234,6 +239,7 @@ def main(argv: list[str] | None = None) -> int:
         week = cmd_digest(conn, sources)
         print(f"digest for the week to {week}" if week else "this week's digest exists")
     elif args.command == "export":
+        print(f"pruned {cmd_prune(conn)} model states")
         print(json.dumps(cmd_export(conn)))
     elif args.command == "poll":
         with contextlib.suppress(KeyboardInterrupt):
