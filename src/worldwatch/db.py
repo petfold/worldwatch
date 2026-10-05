@@ -215,6 +215,32 @@ MIGRATIONS: list[str] = [
         model       TEXT
     );
     """,
+    # v11 — resource use as data (worldwatch.usage): bytes per source per UTC day,
+    # and a sample of the slice's memory/CPU/network, disk and DB size every 10 min.
+    """
+    CREATE TABLE IF NOT EXISTS usage (
+        component   TEXT NOT NULL,
+        day         INTEGER NOT NULL,
+        bytes_in    INTEGER NOT NULL DEFAULT 0,
+        bytes_out   INTEGER NOT NULL DEFAULT 0,
+        requests    INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY (component, day)
+    );
+    CREATE TABLE IF NOT EXISTS resources (
+        ts          INTEGER PRIMARY KEY,
+        mem_current INTEGER,
+        mem_peak    INTEGER,
+        mem_max     INTEGER,
+        cpu_usec    INTEGER,
+        net_in      INTEGER,
+        net_out     INTEGER,
+        host_in     INTEGER,
+        host_out    INTEGER,
+        disk_free   INTEGER,
+        disk_total  INTEGER,
+        db_bytes    INTEGER
+    );
+    """,
 ]
 
 

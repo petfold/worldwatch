@@ -214,6 +214,23 @@ def create_app(
             raise HTTPException(status_code=404, detail="no weekly report yet")
         return HTMLResponse(page)
 
+    @app.get("/api/resources")
+    def resources_json(conn: sqlite3.Connection = Depends(get_conn)) -> JSONResponse:
+        """What Worldwatch costs the machine: memory, CPU, disk, network, and
+        each source's downloads; with warnings when one is disproportionate."""
+        from worldwatch import usage
+
+        return JSONResponse(usage.report(conn, _now()))
+
+    @app.get("/resources")
+    def resources_page(conn: sqlite3.Connection = Depends(get_conn)) -> HTMLResponse:
+        from worldwatch import usage
+        from worldwatch.api.digest import PAGE, markdown
+
+        text = "\n".join(usage.summary_lines(usage.report(conn, _now()), top=40))
+        return HTMLResponse(PAGE.format(title="WW resources", nav='<a href="/api/resources">JSON</a>',
+                                        analysis="", digest=markdown(text)))
+
     @app.get("/alert/{alert_id}")
     def alert_report(alert_id: int, conn: sqlite3.Connection = Depends(get_conn)) -> HTMLResponse:
         """The alert's full report (a push's tap opens it)."""

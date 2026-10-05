@@ -82,6 +82,23 @@ SELECT component, event, COUNT(*) FROM health GROUP BY 1, 2 ORDER BY 1;
 SELECT * FROM alerts ORDER BY opened_at DESC LIMIT 20;
 ```
 
+Resource use is data too (`worldwatch.usage`): every HTTP request of the poll
+process is charged to its source (`usage`: bytes in/out and requests per source
+per UTC day), and every 10 min the poll process samples the slice's memory and
+CPU, its network bytes (`IPAccounting=yes` on `worldwatch.slice`), the host's
+interfaces, free disk and the database size (`resources`). See it at
+`/resources` (or `/api/resources`) and in the weekly digest. A warning is
+recorded in `health` (component `resources`) and pushed at most once a day per
+kind when memory passes 85% of the cap, free disk drops below 10 GB, downloads
+exceed 3 GB/day, or one source takes over 25% of a day's downloads (above
+100 MB) or over 1 GB/day. Limits: `WW_MEM_WARN_FRAC`, `WW_DISK_MIN_FREE_GB`,
+`WW_BANDWIDTH_BUDGET_MB`, `WW_SOURCE_SHARE_MAX`, `WW_SOURCE_DAY_MAX_MB`.
+
+```sql
+SELECT component, bytes_in / 1e6 AS mb, requests FROM usage
+WHERE day = strftime('%s', 'now') / 86400 * 86400 ORDER BY bytes_in DESC LIMIT 15;
+```
+
 ## Backups: the daily Parquet export, pulled to the local machine
 
 What lasts is exported; what rolls over is not. `worldwatch-export.timer` runs

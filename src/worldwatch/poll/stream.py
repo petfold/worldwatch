@@ -40,6 +40,7 @@ import time
 from collections.abc import Awaitable, Callable
 from typing import Any
 
+from worldwatch import usage
 from worldwatch.config.loader import SourceConfig
 from worldwatch.ingest import parsers
 from worldwatch.ingest.models import Observation
@@ -164,6 +165,7 @@ async def _pump(
         now = clock()
         if raw is not None:
             messages += 1
+            usage.add(cfg.stream_id, bytes_in=len(raw))
             last_message = now
             try:
                 msg = json.loads(raw)

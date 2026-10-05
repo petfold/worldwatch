@@ -178,6 +178,9 @@ def build_digest(conn: sqlite3.Connection, sources: dict[str, SourceConfig], wee
         out += ["## Feed and system health (events other than ok)", ""]
         out += [f"- {r['component']}: {r['event']} x{r['n']}" for r in health]
         out.append("")
+    from worldwatch import usage
+
+    out += usage.summary_lines(usage.report(conn, week_end))
     return "\n".join(out)
 
 

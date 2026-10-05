@@ -442,6 +442,24 @@ async def send_ntfy(
     return True
 
 
+async def send_ntfy_note(
+    client: httpx.AsyncClient, cfg: NtfyConfig, title: str, message: str, priority: int = 3,
+) -> bool:
+    """Publish a plain note about the system itself (not an alert): resource warnings."""
+    if cfg.silent():
+        priority = min(priority, 2)
+    headers = {"Title": _ascii(title), "Priority": str(priority), "Tags": "gear"}
+    if cfg.dashboard_url:
+        headers["Click"] = f"{cfg.dashboard_url}/api/resources"
+    if cfg.token:
+        headers["Authorization"] = f"Bearer {cfg.token}"
+    resp = await client.post(
+        f"{cfg.server}/{cfg.topic}", content=message.encode(), headers=headers, timeout=15.0
+    )
+    resp.raise_for_status()
+    return True
+
+
 def _pushes_since(conn: sqlite3.Connection, kinds: tuple[str, ...], since: int) -> int:
     marks = ",".join("?" * len(kinds))
     return int(conn.execute(f"SELECT COUNT(*) FROM push_log WHERE kind IN ({marks}) AND ts >= ?",

@@ -27,6 +27,7 @@ import time
 
 import httpx
 
+from worldwatch import usage
 from worldwatch.alerts.engine import open_alerts, run_alerts
 from worldwatch.api.notify import notify_alerts
 from worldwatch.cascade.consolidator import consolidate
@@ -109,7 +110,7 @@ async def cmd_poll(conn: sqlite3.Connection, sources: dict[str, SourceConfig]) -
     now = int(time.time())
     record_health(conn, "poll", "start", f"sources={len(active)}", ts=now)
     live = LiveScorer(conn, sources, now=now)
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(transport=usage.CountingTransport()) as client:
 
         async def alert_and_notify(t: int) -> None:
             opened = open_alerts(conn, sources, live.candidates(t), t)
@@ -121,6 +122,7 @@ async def cmd_poll(conn: sqlite3.Connection, sources: dict[str, SourceConfig]) -
             await alert_and_notify(t)
 
         async def ticker() -> None:
+            usage.tag("live")  # pushes sent from here
             while True:
                 t = int(time.time())
                 try:
@@ -135,14 +137,29 @@ async def cmd_poll(conn: sqlite3.Connection, sources: dict[str, SourceConfig]) -
         replayed = live.replay(now)
         if replayed:
             record_health(conn, "live", "replay", f"rows={replayed}", ts=now)
-        def runner(cfg: SourceConfig):  # push feeds stream, the prober probes, the rest poll
-            if cfg.fetch.get("kind") == "websocket":
-                return run_stream(conn, cfg, on_new=on_new)
-            if cfg.fetch.get("kind") == "probe":
-                return run_prober(conn, cfg, client, on_new=on_new, register_cells=live.register_cells)
-            return run_poller(client, conn, cfg, on_new=on_new)
+        async def resources() -> None:
+            usage.tag("resources")
+            from worldwatch.runtime import db_path
 
-        await asyncio.gather(ticker(), *(runner(cfg) for cfg in active))
+            while True:
+                t = int(time.time())
+                try:
+                    usage.flush(conn, t)
+                    usage.sample(conn, t, db_path())
+                    await usage.check(conn, client, t)
+                except Exception as e:  # never let the sampler die silently
+                    record_health(conn, "resources", "sample_error", f"{type(e).__name__}: {e}", ts=t)
+                await asyncio.sleep(usage.SAMPLE_SECONDS)
+
+        async def runner(cfg: SourceConfig) -> None:  # push feeds stream, the prober probes, the rest poll
+            usage.tag(cfg.stream_id)  # this task's traffic is charged to its source
+            if cfg.fetch.get("kind") == "websocket":
+                return await run_stream(conn, cfg, on_new=on_new)
+            if cfg.fetch.get("kind") == "probe":
+                return await run_prober(conn, cfg, client, on_new=on_new, register_cells=live.register_cells)
+            return await run_poller(client, conn, cfg, on_new=on_new)
+
+        await asyncio.gather(ticker(), resources(), *(runner(cfg) for cfg in active))
 
 
 def cmd_export(conn: sqlite3.Connection) -> dict[str, int]:

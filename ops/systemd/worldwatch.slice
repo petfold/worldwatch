@@ -9,3 +9,5 @@ MemoryMax=3600M
 # Half the default weight: under contention the website gets the CPU/disk.
 CPUWeight=50
 IOWeight=50
+# Count this slice's network bytes (worldwatch.usage reads them via systemctl show).
+IPAccounting=yes
