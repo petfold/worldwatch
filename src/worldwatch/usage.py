@@ -238,15 +238,20 @@ def _delta(new: int | None, old: int | None) -> int | None:
     return new - old if new >= old else new  # a counter that restarted (reboot)
 
 
-def _per_day(conn: sqlite3.Connection, now: int, col: str) -> float | None:
-    """Bytes a day of a cumulative counter, from samples over the last 24 h."""
+WARN_SPAN = 6 * 3600  # a rate is judged only over this much: a restart's burst is no day
+
+
+def _per_day(conn: sqlite3.Connection, now: int, col: str) -> tuple[float, int] | None:
+    """Bytes a day of a cumulative counter from samples over the last 24 h, and
+    the seconds the samples span."""
     rows = conn.execute(
         f"SELECT ts, {col} AS v FROM resources WHERE ts >= ? AND {col} IS NOT NULL ORDER BY ts",
         (now - DAY,)).fetchall()
     if len(rows) < 2 or rows[-1]["ts"] - rows[0]["ts"] < 3600:
         return None
+    span = rows[-1]["ts"] - rows[0]["ts"]
     total = sum(_delta(b["v"], a["v"]) or 0 for a, b in zip(rows, rows[1:], strict=False))
-    return total * DAY / (rows[-1]["ts"] - rows[0]["ts"])
+    return total * DAY / span, span
 
 
 def report(conn: sqlite3.Connection, now: int | None = None) -> dict[str, Any]:
@@ -267,7 +272,8 @@ def report(conn: sqlite3.Connection, now: int | None = None) -> dict[str, Any]:
         out["memory_peak_fraction"] = round((last["mem_peak"] or 0) / last["mem_max"], 3)
     for col in ("net_in", "net_out", "host_in", "host_out"):
         rate = _per_day(conn, now, col)
-        out[f"{col}_mb_day"] = None if rate is None else round(rate / 1e6, 1)
+        out[f"{col}_mb_day"] = None if rate is None else round(rate[0] / 1e6, 1)
+        out[f"{col}_hours"] = None if rate is None else round(rate[1] / 3600, 1)
 
     today = now // DAY * DAY
     days = {}
@@ -298,7 +304,7 @@ def _warnings(rep: dict[str, Any], lim: dict[str, float], now: int) -> list[dict
     if s.get("disk_free") is not None and s["disk_free"] < lim["disk_min_gb"] * 1e9:
         warn.append({"kind": "disk", "text": f"only {s['disk_free'] / 1e9:.1f} GB disk free"})
     net = rep.get("net_in_mb_day")
-    if net is not None and net > lim["budget_mb_day"]:
+    if net is not None and (rep.get("net_in_hours") or 0) * 3600 >= WARN_SPAN and net > lim["budget_mb_day"]:
         warn.append({"kind": "bandwidth", "text": f"downloading {net:.0f} MB/day, budget "
                      f"{lim['budget_mb_day']:.0f}"})
     # a source's cost: a full day's, or today's so far scaled to a day once 6 h are in
@@ -356,8 +362,9 @@ def summary_lines(rep: dict[str, Any], top: int = 10) -> list[str]:
         out.append(f"- CPU, last hour: {rep['cpu_percent_of_one_core']}% of one core")
     if s.get("disk_free") is not None:
         out.append(f"- Disk: {s['disk_free'] / 1e9:,.1f} GB free; database {s['db_bytes'] / 1e9:,.2f} GB")
+    hours = f" (from {rep['net_in_hours']} h of samples)" if rep.get("net_in_hours") and rep["net_in_hours"] < 24 else ""
     out.append(f"- Network, Worldwatch (last 24 h): {mb(rep.get('net_in_mb_day'))} in, "
-               f"{mb(rep.get('net_out_mb_day'))} out a day")
+               f"{mb(rep.get('net_out_mb_day'))} out a day{hours}")
     out.append(f"- Network, whole host (last 24 h): {mb(rep.get('host_in_mb_day'))} in, "
                f"{mb(rep.get('host_out_mb_day'))} out a day")
     for label in ("yesterday", "today"):

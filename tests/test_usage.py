@@ -168,3 +168,16 @@ def test_api_resources(tmp_path, monkeypatch):
     assert body["traffic"]["today"]["sources"][0]["component"] == "goes19_fire"
     page = client.get("/resources")
     assert page.status_code == 200 and "Downloads by source" in page.text
+
+
+def test_a_restart_burst_is_not_a_bandwidth_warning(tmp_path, monkeypatch):
+    """Two hours of samples at 200 MB an hour extrapolate to 4.8 GB a day; too
+    short a span to judge (a restart re-fetching what it lost), so no warning."""
+    conn = open_db(tmp_path / "u.db")
+    for h in range(3):
+        _fake_slice(tmp_path, monkeypatch, 1_000_000_000, 1_000_000_000, 3_774_873_600, h,
+                    (h * 200_000_000, 0))
+        usage.sample(conn, NOW - (2 - h) * 3600, tmp_path / "u.db")
+    rep = usage.report(conn, NOW)
+    assert rep["net_in_mb_day"] == 4800.0 and rep["net_in_hours"] == 2.0
+    assert rep["warnings"] == []
