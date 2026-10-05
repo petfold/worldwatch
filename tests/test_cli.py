@@ -76,3 +76,31 @@ def test_main_dispatch_uses_env(tmp_path, monkeypatch, capsys):
     assert cli.main(["detect"]) == 0
     summary = json.loads(capsys.readouterr().out)
     assert summary["opened"] == 0
+
+
+def test_consolidate_prunes_superseded_model_states(db, sources):
+    from worldwatch.layer0.models import MODEL_VERSION
+    from worldwatch.layer0.pool import POOL_SCALE, POOL_STATE_VERSION
+    from worldwatch.store import upsert_source
+
+    for sid, flavor in (("cont", "continuous"), ("cnt", "count")):
+        upsert_source(db, sid, {"class": "x", "modality": "physical", "flavor": flavor})
+    cur_c, cur_n = MODEL_VERSION["continuous"], MODEL_VERSION["count"]
+    rows = [
+        ("cont", "a", -1, cur_c - 1),           # superseded: goes
+        ("cont", "a", -1, cur_c),               # current: stays
+        ("cnt", "b", -1, cur_n),                # current count model: stays
+        ("cnt", "node", POOL_SCALE, POOL_STATE_VERSION),      # the pool's own version: stays
+        ("cnt", "node", POOL_SCALE, POOL_STATE_VERSION + 7),  # a superseded pool version: goes
+        ("cnt", "b", 3, 1),                     # another scale: left alone
+        ("unknown", "c", -1, 1),                # not a registered source: left alone
+    ]
+    db.executemany("INSERT INTO model_state (stream_id, cell, scale, version, state, updated_at) "
+                   "VALUES (?, ?, ?, ?, x'00', 0)", rows)
+    db.commit()
+    cli.cmd_consolidate(db, fine_window_seconds=0)
+    left = {tuple(r) for r in db.execute("SELECT stream_id, cell, scale, version FROM model_state")}
+    assert left == set(rows) - {rows[0], rows[4]}
+    assert db.execute("SELECT detail FROM health WHERE component='model_state'").fetchone()[0] == "rows=2"
+    cli.cmd_consolidate(db, fine_window_seconds=0)  # idempotent: nothing more to prune
+    assert db.execute("SELECT COUNT(*) FROM health WHERE component='model_state'").fetchone()[0] == 1

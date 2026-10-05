@@ -11,6 +11,7 @@ plain source stanza still onboards.
 
 from __future__ import annotations
 
+import sqlite3
 from typing import Protocol
 
 from worldwatch.config.loader import SourceConfig
@@ -87,3 +88,23 @@ def load_model(
             m.reseed(cell_seed(*key))
         return m
     raise ValueError(f"Unsupported flavor {flavor!r}")
+
+
+def prune_states(conn: sqlite3.Connection) -> int:
+    """Delete model states no reader can load any more: native-scale states of a
+    superseded model version (the live scorer reads only its flavor's current
+    one) and pool states of a superseded pool version. States are caches, the
+    surprise archive is the record; other scales and unknown streams are left."""
+    from worldwatch.layer0.native import NATIVE_SCALE
+    from worldwatch.layer0.pool import POOL_SCALE, POOL_STATE_VERSION
+
+    n = 0
+    for flavor, version in MODEL_VERSION.items():
+        n += conn.execute(
+            "DELETE FROM model_state WHERE scale = ? AND version != ? "
+            "AND stream_id IN (SELECT stream_id FROM sources WHERE flavor = ?)",
+            (NATIVE_SCALE, version, flavor)).rowcount
+    n += conn.execute("DELETE FROM model_state WHERE scale = ? AND version != ?",
+                      (POOL_SCALE, POOL_STATE_VERSION)).rowcount
+    conn.commit()
+    return n

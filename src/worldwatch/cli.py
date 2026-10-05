@@ -36,7 +36,7 @@ from worldwatch.instrument import record_health
 from worldwatch.layer0.presence import run_presence
 from worldwatch.layer0.live import LiveScorer
 from worldwatch.layer0.nursery import run_nursery
-from worldwatch.layer0.models import SUPPORTED_FLAVORS
+from worldwatch.layer0.models import SUPPORTED_FLAVORS, prune_states
 from worldwatch.poll.poller import run_poller
 from worldwatch.poll.stream import run_stream
 from worldwatch.probe.prober import run_prober
@@ -75,7 +75,11 @@ def cmd_consolidate(
         kwargs["context_budget_bytes"] = context_budget_bytes
     if live_streams is not None:
         kwargs["live_streams"] = live_streams  # fold only what the live scorer consumed
-    return consolidate(conn, fine_window_seconds=fine_window_seconds, **kwargs)
+    n = consolidate(conn, fine_window_seconds=fine_window_seconds, **kwargs)
+    pruned = prune_states(conn)  # superseded model versions' states
+    if pruned:
+        record_health(conn, "model_state", "pruned", f"rows={pruned}")
+    return n
 
 
 def live_stream_ids(sources: dict[str, SourceConfig]) -> set[str]:
