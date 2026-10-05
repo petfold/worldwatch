@@ -109,8 +109,8 @@ def test_uniform_magnitude_detects_small_quakes_are_context(sources):
 
 
 def test_a_stream_contributes_at_most_three_cells_to_an_alert(db, sources):
-    quake = dataclasses.replace(sources["usgs_m45"], stream_id="q")
-    traffic = dataclasses.replace(sources["cf_radar_netflows_gb"], stream_id="t")
+    quake = dataclasses.replace(sources["usgs_m45"], stream_id="q", status="active")
+    traffic = dataclasses.replace(sources["cf_radar_netflows_gb"], stream_id="t", status="active")
     region = h3.latlng_to_cell(54.0, -2.5, 2)
     kids = h3.cell_to_children(region, 3)
     cands = [Anomaly("q", c, -1, 1000, 0.9999, 1, 1, "physical", 0.9999, evidence=10 + i, bin_seconds=300)

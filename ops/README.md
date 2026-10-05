@@ -35,6 +35,7 @@ sudo systemctl restart 'worldwatch-*'
 | `worldwatch-consolidate.timer` | timer | 5 min | fold aged, scored rows → `bins` (archive) |
 | `worldwatch-detect.timer` | timer | 5 min | alert sweep over the surprise archive → push |
 | `worldwatch-presence.timer` | timer | 15 min | silence detection |
+| `worldwatch-nursery.timer` | timer | 6 h | calibration audit: promote calibrated sources, quarantine drifted ones (ADR 0006; also run by `init`) |
 | `worldwatch-api.service` | service | continuous | dashboard + read API (+ label write) |
 
 All passes are idempotent and crash-safe, so timers can fire freely and a

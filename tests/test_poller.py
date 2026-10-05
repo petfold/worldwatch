@@ -222,3 +222,44 @@ async def test_idempotent_reingest(db, sources, rest_spot, sid, payload):
 
     assert first == second
     assert first > 0
+
+
+async def test_validators_survive_a_restart(db, sources):
+    """The poller's memo (here an ETag) is stored, so a restarted poller sends
+    If-None-Match instead of downloading the same document again."""
+    import asyncio
+
+    import httpx
+
+    from worldwatch.poll.poller import load_validators, run_poller
+
+    cfg = sources["usgs_seismic"]
+    seen = []
+
+    def handler(request):
+        seen.append(request.headers.get("If-None-Match"))
+        if request.headers.get("If-None-Match") == '"v1"':
+            return httpx.Response(304)
+        return httpx.Response(200, json={"type": "FeatureCollection", "features": []},
+                              headers={"ETag": '"v1"'})
+
+    async def one_run():
+        stop = asyncio.Event()
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+            task = asyncio.create_task(run_poller(client, db, cfg, stop=stop))
+            want = len(seen) + 1
+            while len(seen) < want:
+                await asyncio.sleep(0.01)
+            stop.set()
+            task.cancel()
+
+    import worldwatch.poll.poller as poller
+    orig = poller.jitter_seconds
+    poller.jitter_seconds = lambda sid, cadence: 0.0
+    try:
+        await one_run()          # first life: downloads, remembers the ETag
+        assert load_validators(db, cfg.stream_id).etag == '"v1"'
+        await one_run()          # a restart: asks conditionally
+    finally:
+        poller.jitter_seconds = orig
+    assert seen == [None, '"v1"']

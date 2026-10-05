@@ -35,6 +35,7 @@ from worldwatch.config.loader import SourceConfig
 from worldwatch.instrument import record_health
 from worldwatch.layer0.presence import run_presence
 from worldwatch.layer0.live import LiveScorer
+from worldwatch.layer0.nursery import run_nursery
 from worldwatch.layer0.models import SUPPORTED_FLAVORS
 from worldwatch.poll.poller import run_poller
 from worldwatch.poll.stream import run_stream
@@ -191,7 +192,7 @@ def cmd_api() -> None:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="worldwatch")
     sub = parser.add_subparsers(dest="command", required=True)
-    for name in ("init", "poll", "consolidate", "detect", "presence", "digest", "export", "api"):
+    for name in ("init", "poll", "consolidate", "detect", "presence", "nursery", "digest", "export", "api"):
         sub.add_parser(name)
     args = parser.parse_args(argv)
 
@@ -211,6 +212,10 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "init":
         n = cmd_init(conn, sources)
         print(f"registered {n} sources")
+        # judge calibration now, so a deploy's restart already alerts on the calibrated
+        print(json.dumps(run_nursery(conn, sources)))
+    elif args.command == "nursery":
+        print(json.dumps(run_nursery(conn, sources)))
     elif args.command == "consolidate":
         n = cmd_consolidate(
             conn, fine_window_seconds(), seen_retention_seconds(), context_budget_bytes(),

@@ -178,6 +178,15 @@ def build_digest(conn: sqlite3.Connection, sources: dict[str, SourceConfig], wee
         out += ["## Feed and system health (events other than ok)", ""]
         out += [f"- {r['component']}: {r['event']} x{r['n']}" for r in health]
         out.append("")
+    changes = conn.execute(
+        "SELECT component, event, detail FROM health WHERE ts >= ? AND ts < ? "
+        "AND event IN ('promoted', 'quarantined', 'released') ORDER BY ts", (t0, week_end)).fetchall()
+    counts = dict(conn.execute("SELECT status, COUNT(*) FROM sources GROUP BY 1").fetchall())
+    out += ["## Calibration (the nursery)", "",
+            f"- Sources: {counts.get('active', 0)} active, {counts.get('nursery', 0)} in the nursery, "
+            f"{counts.get('quarantined', 0)} quarantined. Only active sources' surprises count toward alerts."]
+    out += [f"- {r['component']}: {r['event']} ({r['detail']})" for r in changes]
+    out.append("")
     from worldwatch import usage
 
     out += usage.summary_lines(usage.report(conn, week_end))

@@ -1,0 +1,10 @@
+[Unit]
+Description=Worldwatch nursery (calibration audit: promote, quarantine, release)
+
+[Service]
+Slice=worldwatch.slice
+Type=oneshot
+User=worldwatch
+EnvironmentFile=/etc/worldwatch/worldwatch.env
+Nice=10
+ExecStart=/opt/worldwatch/.venv/bin/python -m worldwatch nursery

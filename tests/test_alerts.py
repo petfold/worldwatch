@@ -12,13 +12,14 @@ NOW = 2_000_000_000
 BW = 300  # a bin width for spacing anomalous bins
 
 
-def _src(sources, stream_id, modality, base="usgs_seismic"):
+def _src(sources, stream_id, modality, base="usgs_seismic", status="active"):
     """A synthetic stream copied from a real stanza, minus its alert policy
-    (the base's [alerts] table must not leak into the test's streams)."""
+    (the base's [alerts] table must not leak into the test's streams). Active:
+    the alert logic is about calibrated streams; the nursery gate is tested below."""
     base_cfg = sources[base]
     extra = {k: v for k, v in base_cfg.extra.items() if k != "alerts"}
     return dataclasses.replace(
-        base_cfg, stream_id=stream_id, modality=modality, status="nursery", extra=extra
+        base_cfg, stream_id=stream_id, modality=modality, status=status, extra=extra
     )
 
 
@@ -197,7 +198,7 @@ def test_retired_source_excluded(db, sources):
 # --- per-source policies (doc/adr/0001-per-source-alert-policy.md) -----------
 
 
-def _with_policy(sources, stream_id, modality, alerts, base="usgs_seismic", status="nursery"):
+def _with_policy(sources, stream_id, modality, alerts, base="usgs_seismic", status="active"):
     cfg = _src(sources, stream_id, modality, base=base)
     return dataclasses.replace(cfg, status=status, extra={**cfg.extra, "alerts": alerts})
 
@@ -255,12 +256,51 @@ def test_single_source_alerts_on_first_reading_when_sensors_agree(db, sources):
     assert len(run_alerts(db, src, now=NOW)) == 1
 
 
-def test_nursery_single_source_is_capped_below_waking(db, sources):
+def test_nursery_single_source_is_shadowed(db, sources):
     src = {"rad": _with_policy(sources, "rad", "physical", RAD, status="nursery")}
     for i in range(3):
         _anomalous_series(db, "rad", _station(i), scale=2, k=2, q=1 - 1e-8)
-    run_alerts(db, src, now=NOW)
-    assert db.execute("SELECT severity FROM alerts").fetchone()[0] <= 0.85  # priority 4
+    assert run_alerts(db, src, now=NOW) == []
+
+
+def test_nursery_stream_does_not_corroborate(db, sources):
+    src = {
+        "quake": _src(sources, "quake", "physical"),
+        "probe": _src(sources, "probe", "infrastructural", status="nursery"),
+    }
+    _anomalous_series(db, "quake", _cellA())
+    _anomalous_series(db, "probe", _cell_near_A())
+    assert run_alerts(db, src, now=NOW) == []
+    src["probe"] = dataclasses.replace(src["probe"], status="active")
+    assert len(run_alerts(db, src, now=NOW)) == 1
+
+
+def test_database_status_overrides_the_stanza(db, sources):
+    """The nursery writes the status into the sources table; the stanza's is only
+    the starting point (retired excepted)."""
+    from worldwatch.store import upsert_source
+
+    src = {
+        "quake": _src(sources, "quake", "physical", status="nursery"),
+        "probe": _src(sources, "probe", "infrastructural", status="nursery"),
+    }
+    for sid, cfg in src.items():
+        upsert_source(db, sid, {"class": cfg.class_, "modality": cfg.modality, "flavor": cfg.flavor,
+                                "status": "active"})
+    _anomalous_series(db, "quake", _cellA())
+    _anomalous_series(db, "probe", _cell_near_A())
+    assert len(run_alerts(db, src, now=NOW)) == 1
+
+
+def test_quarantined_stream_is_shadowed_but_every_event_is_not(db, sources):
+    from worldwatch.ingest.models import Observation
+    from worldwatch.store import upsert_source, write_observations
+
+    src = {"sig": _with_policy(sources, "sig", "physical", {"every_event": True, "severity": 0.95})}
+    upsert_source(db, "sig", {"class": "x", "modality": "physical", "flavor": "count", "status": "quarantined"})
+    write_observations(db, [Observation("sig", h3.latlng_to_cell(-21.3, 168.6, 3), NOW - 600, 6.6)],
+                       now=NOW - 300)
+    assert len(run_alerts(db, src, now=NOW)) == 1  # authoritative items don't depend on calibration
 
 
 def test_every_event_alerts_from_fresh_ingestion(db, sources):

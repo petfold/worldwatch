@@ -120,6 +120,22 @@ def _with_ts(o: Observation, ts: int) -> Observation:
     return Observation(stream_id=o.stream_id, cell=o.cell, ts=ts, value=o.value, meta=o.meta)
 
 
+def load_validators(conn: sqlite3.Connection, stream_id: str) -> CacheValidators:
+    """The source's last conditional-request memo (ETag / Last-Modified, or a
+    fetcher's own: the last granule, key or file), so a restart doesn't fetch
+    again what is already stored."""
+    row = conn.execute("SELECT etag, last_modified FROM poll_state WHERE stream_id = ?",
+                       (stream_id,)).fetchone()
+    return CacheValidators(etag=row[0], last_modified=row[1]) if row else CacheValidators()
+
+
+def save_validators(conn: sqlite3.Connection, stream_id: str, validators: CacheValidators) -> None:
+    conn.execute(
+        "INSERT OR REPLACE INTO poll_state (stream_id, etag, last_modified, updated_at) VALUES (?, ?, ?, ?)",
+        (stream_id, validators.etag, validators.last_modified, int(time.time())))
+    conn.commit()
+
+
 async def run_poller(
     client: httpx.AsyncClient,
     conn: sqlite3.Connection,
@@ -131,7 +147,7 @@ async def run_poller(
     """Long-running loop for one source: jittered cadence (or the stanza's
     slot on the clock), exponential backoff on transient failure (capped at
     the cadence)."""
-    validators = CacheValidators()
+    validators = load_validators(conn, cfg.stream_id)
     backoff = 0.0
     phase = cfg.extra.get("phase_seconds")
     # Stagger startup across sources, or wait for the source's slot.
@@ -141,7 +157,10 @@ async def run_poller(
         await asyncio.sleep(slot_delay(time.time(), cfg.cadence_seconds, int(phase)))
 
     while stop is None or not stop.is_set():
+        before = (validators.etag, validators.last_modified)
         outcome = await poll_once(client, conn, cfg, validators, on_new=on_new)
+        if (validators.etag, validators.last_modified) != before:
+            save_validators(conn, cfg.stream_id, validators)
         if outcome.event in ("timeout", "http_error", "fetch_error"):
             backoff = min(cfg.cadence_seconds, max(1.0, backoff * 2 or 1.0))
             sleep_for = backoff

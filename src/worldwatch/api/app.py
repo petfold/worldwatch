@@ -214,6 +214,18 @@ def create_app(
             raise HTTPException(status_code=404, detail="no weekly report yet")
         return HTMLResponse(page)
 
+    @app.get("/api/nursery")
+    def nursery_json(conn: sqlite3.Connection = Depends(get_conn)) -> JSONResponse:
+        """Each source's calibration verdict: active (alerts on its q-values),
+        nursery (not yet proven) or quarantined (drifted), and why."""
+        from worldwatch.layer0 import nursery
+
+        return JSONResponse({"criteria": {
+            "window_days": nursery.WINDOW_DAYS, "recent_days": nursery.RECENT_DAYS,
+            "min_n": nursery.MIN_N, "min_span_days": nursery.MIN_SPAN_DAYS,
+            "tv_pass": nursery.TV_PASS, "tv_quarantine": nursery.TV_QUARANTINE, "tail": nursery.TAIL},
+            "streams": nursery.latest(conn)})
+
     @app.get("/api/resources")
     def resources_json(conn: sqlite3.Connection = Depends(get_conn)) -> JSONResponse:
         """What Worldwatch costs the machine: memory, CPU, disk, network, and

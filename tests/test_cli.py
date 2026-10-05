@@ -48,6 +48,11 @@ def test_cmd_detect_sweeps_alerts_and_returns_summary(db, sources):
             (sid, cell, now - 60, q),
         )
     db.commit()
+    import dataclasses
+
+    # both streams calibrated (out of the nursery), else the gate shadows them
+    sources = {**sources, **{sid: dataclasses.replace(sources[sid], status="active")
+                             for sid in ("usgs_m45", "cf_radar_netflows_gb")}}
     # physical + infrastructural in one region → one alert; no push channel configured
     assert cli.cmd_detect(db, sources) == {"opened": 1, "notified": 0}
     assert cli.cmd_detect(db, sources) == {"opened": 0, "notified": 0}  # idempotent

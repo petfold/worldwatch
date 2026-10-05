@@ -23,7 +23,7 @@ Two layers:
    - single_source = true: may alert alone when ≥ min_sensors distinct cells
      of the stream in one region each carry evidence of a single reading at
      p ≤ q_tail (h = −ln q_tail − k): "confirm in space before time".
-     Nursery streams are capped below waking severity. One alert per region
+     (Nursery streams never get here: open_alerts gates them.) One alert per region
      and stream per episode: none again within cooldown_seconds (6 h), however
      the evidence's window moves on. max_regions: when more regions than that
      alert at once, the fault is more likely at our end (a prober losing its
@@ -242,7 +242,12 @@ def open_alerts(
     per_stream: int = DEFAULT_PER_STREAM_QUOTA,
 ) -> list[int]:
     """Apply the corroboration and per-source policies. Shared by the sweep
-    and the live path; idempotent."""
+    and the live path; idempotent. Only active (calibrated) streams' q-values
+    count: nursery and quarantined ones are shadowed (layer0.nursery)."""
+    from worldwatch.layer0.nursery import GATED, statuses
+
+    status = statuses(conn, sources)
+    candidates = [c for c in candidates if status.get(c.stream_id) not in GATED]
     created: list[int] = []
 
     corroborating = [
@@ -319,9 +324,6 @@ def _single_source_alerts(
             # round must not open a new alert each round
             since = min(min(m.bin_start for m in members), now - cooldown)
             severity = sum(m.extremity for m in members) / len(members)
-            if cfg.status == "nursery":
-                # not yet proven calibrated: visible, but never priority 5
-                severity = min(severity, float(pol.get("nursery_severity_cap", 0.85)))
             aid = _insert_unless(conn, lambda r=region, s=since: _alert_since_exists(conn, r, s, sid),
                                  region, members, severity, now, sources=sources)
             if aid is not None:

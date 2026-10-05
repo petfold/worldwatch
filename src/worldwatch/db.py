@@ -241,6 +241,28 @@ MIGRATIONS: list[str] = [
         db_bytes    INTEGER
     );
     """,
+    # v12 — the nursery's verdicts (worldwatch.layer0.nursery), and each poller's
+    # conditional-request memo, so a restart doesn't re-download what it has.
+    """
+    CREATE TABLE IF NOT EXISTS calibration (
+        stream_id   TEXT NOT NULL,
+        ts          INTEGER NOT NULL,
+        n           INTEGER NOT NULL,
+        span_days   REAL NOT NULL,
+        tv          REAL,
+        lo_ratio    REAL,
+        hi_ratio    REAL,
+        status      TEXT NOT NULL,
+        verdict     TEXT NOT NULL,
+        PRIMARY KEY (stream_id, ts)
+    );
+    CREATE TABLE IF NOT EXISTS poll_state (
+        stream_id       TEXT PRIMARY KEY,
+        etag            TEXT,
+        last_modified   TEXT,
+        updated_at      INTEGER NOT NULL
+    );
+    """,
 ]
 
 
