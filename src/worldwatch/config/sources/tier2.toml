@@ -779,6 +779,86 @@ links            = [["Fire map", "https://firms.modaps.eosdis.nasa.gov/map/#d:24
 tail             = "upper"
 reach_km         = 100
 
+# --- fires from geostationary orbit: GOES-East/West ABI FDC (NOAA NODD) -----------
+# Full-disk fire detection every 10 min, on AWS within seconds of the scan;
+# public domain, no account. The Americas and the eastern/central Pacific.
+# A scan is 1–2 MB; taking every other one (cadence 20 min) is ~210 MB/day for
+# both satellites (every scan: ~410 MB/day). Same physics as FIRMS at 2 km
+# instead of 375 m, so it sees fewer, bigger fires, hours earlier; FIRMS stays
+# the finer cross-check. Meteosat (LSA SAF, account) and Himawari (JAXA) later.
+
+[goes19_fire]
+class            = "fire_hotspots"
+modality         = "physical"
+topic_tags       = ["fire", "hazard", "satellite"]
+flavor           = "count"
+endpoint         = "https://noaa-goes19.s3.amazonaws.com"
+cadence_seconds  = 1200
+status           = "nursery"
+notes            = "GOES-19 ABI Fire Detection and Characterization, full disk every 10 min, newest scan per poll (NOAA NODD, public domain, ~1.8 MB a scan); value = fire radiative power (MW)"
+
+[goes19_fire.fetch]
+kind             = "s3_latest"
+prefix           = "ABI-L2-FDCF/%Y/%j/%H/"
+timeout          = 120
+
+[goes19_fire.parse]
+format           = "goes_fdc"
+
+[goes19_fire.geocode]
+strategy         = "satellite_grid"
+h3_resolution    = 3
+
+[goes19_fire.model]
+native_seconds   = 1800
+
+[goes19_fire.display]
+label            = "Fires from geostationary orbit (GOES-19)"
+about            = "Fire hotspots seen every 10 minutes by GOES-19 over the Americas and the Atlantic, minutes after the scan: wildfires, industrial and conflict fires, gas flares."
+unit             = "hotspots"
+max_prefix       = "FRP "
+links            = [["Fire map", "https://firms.modaps.eosdis.nasa.gov/map/#d:24hrs;@{lon},{lat},9.0z"]]
+
+[goes19_fire.alerts]
+tail             = "upper"
+reach_km         = 100
+
+[goes18_fire]
+class            = "fire_hotspots"
+modality         = "physical"
+topic_tags       = ["fire", "hazard", "satellite"]
+flavor           = "count"
+endpoint         = "https://noaa-goes18.s3.amazonaws.com"
+cadence_seconds  = 1200
+status           = "nursery"
+notes            = "GOES-18 ABI Fire Detection and Characterization, full disk every 10 min, newest scan per poll (NOAA NODD, public domain, ~1.1 MB a scan); value = fire radiative power (MW)"
+
+[goes18_fire.fetch]
+kind             = "s3_latest"
+prefix           = "ABI-L2-FDCF/%Y/%j/%H/"
+timeout          = 120
+
+[goes18_fire.parse]
+format           = "goes_fdc"
+
+[goes18_fire.geocode]
+strategy         = "satellite_grid"
+h3_resolution    = 3
+
+[goes18_fire.model]
+native_seconds   = 1800
+
+[goes18_fire.display]
+label            = "Fires from geostationary orbit (GOES-18)"
+about            = "Fire hotspots seen every 10 minutes by GOES-18 over the western Americas and the Pacific, minutes after the scan: wildfires, industrial and conflict fires, gas flares."
+unit             = "hotspots"
+max_prefix       = "FRP "
+links            = [["Fire map", "https://firms.modaps.eosdis.nasa.gov/map/#d:24hrs;@{lon},{lat},9.0z"]]
+
+[goes18_fire.alerts]
+tail             = "upper"
+reach_km         = 100
+
 # --- trace gases from space: Sentinel-5P TROPOMI via Copernicus Data Space ----------
 # Daily box means from the Sentinel Hub Statistical API (no imagery downloaded).
 # Free CDSE account → OAuth client (WW_CDSE_CLIENT_ID / WW_CDSE_CLIENT_SECRET).

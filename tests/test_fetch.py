@@ -550,3 +550,56 @@ async def test_cdse_statistics_missing_credentials_is_isolated(db, sources, monk
         outcome = await poll_once(client, db, _s5p_cfg(sources), CacheValidators(), now=1791072000)
     assert outcome.event == "fetch_error"
     assert "WW_CDSE_CLIENT_ID" in (outcome.detail or "")
+
+
+# --- s3_latest (GOES on NOAA NODD) --------------------------------------------
+
+
+def _s3_listing(keys):
+    items = "".join(f"<Contents><Key>{k}</Key><Size>1</Size></Contents>" for k in keys)
+    return f'<?xml version="1.0"?><ListBucketResult>{items}</ListBucketResult>'
+
+
+async def test_s3_latest_downloads_newest_scan_once(db, sources):
+    from conftest import FIXTURES
+
+    cfg = sources["goes19_fire"]
+    hour = "ABI-L2-FDCF/2026/278/05/"
+    keys = [hour + f"OR_ABI-L2-FDCF-M6_G19_s2026278{m}0210_e0_c0.nc" for m in ("0510", "0530", "0520")]
+    keys.append(hour + "OR_ABI-L2-FDCF-M3_G19_s20262780500210_e0_c0.nc")  # older, other scan mode
+    log = []
+
+    def handler(request):
+        if request.url.path == "/":
+            log.append(request.url.params["prefix"])
+            return httpx.Response(200, text=_s3_listing(keys))
+        log.append(request.url.path)
+        return httpx.Response(200, content=(FIXTURES / "goes19_fdcf_crop.nc").read_bytes())
+
+    validators = CacheValidators()
+    async with _client(handler) as client:
+        now = 1791179100  # 2026-10-05 05:45 UTC
+        outcome = await poll_once(client, db, cfg, validators, now=now)
+        assert outcome.event == "ok" and outcome.rows_written == 17
+        assert log == [hour, "/" + keys[1]]  # the 05:30 scan
+        outcome2 = await poll_once(client, db, cfg, validators, now=now + 60)
+    assert outcome2.event == "not_modified"
+    assert log[2:] == [hour]  # listed again, not downloaded
+
+
+async def test_s3_latest_falls_back_to_previous_hour(db, sources):
+    cfg = sources["goes19_fire"]
+    seen = []
+
+    def handler(request):
+        if request.url.path == "/":
+            prefix = request.url.params["prefix"]
+            seen.append(prefix)
+            keys = [prefix + "OR_X_s20262780550210_e0_c0.nc"] if prefix.endswith("/05/") else []
+            return httpx.Response(200, text=_s3_listing(keys))
+        return httpx.Response(200, content=b"not a netcdf")
+
+    async with _client(handler) as client:
+        outcome = await poll_once(client, db, cfg, CacheValidators(), now=1791180030)  # 06:00:30
+    assert seen == ["ABI-L2-FDCF/2026/278/06/", "ABI-L2-FDCF/2026/278/05/"]
+    assert outcome.event == "parse_error"  # the fake bytes: fetched, then isolated at the parser

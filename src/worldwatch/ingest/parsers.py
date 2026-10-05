@@ -556,6 +556,81 @@ def parse_cdse_s5p_stats(payload: Any, cfg: SourceConfig) -> list[Observation]:
     return obs
 
 
+@register("goes_fdc")
+def parse_goes_fdc(payload: Any, cfg: SourceConfig) -> list[Observation]:
+    """GOES-R ABI Fire Detection and Characterization (FDC) scan → one
+    observation per fire pixel, like the FIRMS hotspots.
+
+    payload comes from the s3_latest fetcher: {key, content: netCDF4 bytes}.
+    A pixel is a fire when its Mask code is in `fire_codes` (default: good,
+    saturated, cloud-contaminated, high and medium probability fires, and
+    their temporally filtered twins: 10–14, 30–34; low probability 15/35 is
+    left out). Only those pixels are geolocated, from the fixed-grid scan
+    angles (GOES-R PUG vol. 4, §7.1.2.8.1). value = fire radiative power (MW;
+    0 where the algorithm could not characterise the fire).
+
+    Fires in one H3 cell share the scan's start time; the k-th (in pixel
+    order) is stamped k seconds later, within the ~10 min scan, so the
+    (stream, cell, ts) key keeps each and a re-read gives the same rows.
+    """
+    import io
+    import math
+
+    import h5py
+    import numpy as np
+
+    codes = [int(c) for c in cfg.parse.get("fire_codes", [10, 11, 12, 13, 14, 30, 31, 32, 33, 34])]
+    resolution = int(cfg.geocode.get("h3_resolution", 3))
+
+    with h5py.File(io.BytesIO(payload["content"]), "r") as f:
+        start = _iso_to_epoch(f.attrs["time_coverage_start"].decode().split(".")[0] + "Z")
+        end = _iso_to_epoch(f.attrs["time_coverage_end"].decode().split(".")[0] + "Z")
+        rows, cols = np.nonzero(np.isin(f["Mask"][:], codes))
+        if rows.size == 0:
+            return []
+        power = np.empty(rows.size)
+        for r in np.unique(rows):  # only the scan lines that hold fires
+            line = f["Power"][int(r)]
+            sel = rows == r
+            power[sel] = line[cols[sel]]
+        power_fill = float(f["Power"].attrs["_FillValue"][0])
+
+        def axis(name: str, idx: Any) -> Any:
+            ds = f[name]
+            return idx * float(ds.attrs["scale_factor"][0]) + float(ds.attrs["add_offset"][0])
+
+        x = axis("x", cols.astype(np.float64))
+        y = axis("y", rows.astype(np.float64))
+        proj = f["goes_imager_projection"].attrs
+        r_eq = float(proj["semi_major_axis"][0])
+        r_pol = float(proj["semi_minor_axis"][0])
+        height = float(proj["perspective_point_height"][0]) + r_eq
+        lon0 = math.radians(float(proj["longitude_of_projection_origin"][0]))
+
+    a = np.sin(x) ** 2 + np.cos(x) ** 2 * (np.cos(y) ** 2 + (r_eq / r_pol) ** 2 * np.sin(y) ** 2)
+    b = -2.0 * height * np.cos(x) * np.cos(y)
+    c = height**2 - r_eq**2
+    r_s = (-b - np.sqrt(np.maximum(b**2 - 4.0 * a * c, 0.0))) / (2.0 * a)
+    s_x = r_s * np.cos(x) * np.cos(y)
+    s_y = -r_s * np.sin(x)
+    s_z = r_s * np.cos(x) * np.sin(y)
+    lat = np.degrees(np.arctan((r_eq / r_pol) ** 2 * s_z / np.sqrt((height - s_x) ** 2 + s_y**2)))
+    lon = np.degrees(lon0 - np.arctan(s_y / (height - s_x)))
+
+    span = max(end - start, 1)
+    seen: dict[str, int] = {}
+    obs: list[Observation] = []
+    for la, lo, frp in zip(lat, lon, power, strict=True):
+        cell = h3_cell(float(la), float((lo + 180.0) % 360.0 - 180.0), resolution)
+        k = seen.get(cell, 0)
+        if k >= span:
+            continue  # more fires in one cell than seconds in a scan: the count is saturated anyway
+        seen[cell] = k + 1
+        value = float(frp) if frp != power_fill and frp >= 0 else 0.0
+        obs.append(Observation(stream_id=cfg.stream_id, cell=cell, ts=start + k, value=value))
+    return obs
+
+
 @register("gdelt_export_events")
 def parse_gdelt_export_events(payload: Any, cfg: SourceConfig) -> list[Observation]:
     """GDELT 2.0 export batch (zipped TSV, one row per coded event) → one

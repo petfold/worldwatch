@@ -500,3 +500,33 @@ def test_cdse_s5p_stats_so2_stays_linear(sources):
     payload = [{"box": "etna", "status": 200, "data": [
         _s5p_item("2026-10-02T18:00:00Z", -2.0e-4), _s5p_item("2026-10-03T18:00:00Z", 5.0e-3)]}]
     assert [round(o.value, 6) for o in parsers.parse(payload, cfg)] == [-0.2, 5.0]
+
+
+def test_goes_fdc_real_scan_crop(sources):
+    """A crop of a real GOES-19 full-disk FDC scan (5 Oct 2026 05:30 UTC,
+    eastern Amazon, Pará): 17 fire pixels in 5 cells. Geolocation was
+    checked on the full scan: a median 1 km from a VIIRS hotspot."""
+    import h3
+
+    cfg = sources["goes19_fire"]
+    obs = parsers.parse({"key": "k", "content": (FIXTURES / "goes19_fdcf_crop.nc").read_bytes()}, cfg)
+
+    assert len(obs) == 17
+    assert len({o.cell for o in obs}) == 5
+    assert len({(o.cell, o.ts) for o in obs}) == 17  # same-cell fires spread by a second each
+    start = 1791178221  # time_coverage_start 2026-10-05T05:30:21Z
+    assert all(start <= o.ts < start + 570 for o in obs)
+    assert round(sum(o.value for o in obs), 1) == 1814.3  # FRP, MW
+    for o in obs:  # all in Pará, Brazil
+        lat, lon = h3.cell_to_latlng(o.cell)
+        assert -5 < lat < -2 and -56 < lon < -49
+
+
+def test_goes_fdc_fire_codes_select_pixels(sources):
+    """The crop's fires are all code 30 (temporally filtered good fire)."""
+    import dataclasses
+
+    cfg = sources["goes19_fire"]
+    payload = {"key": "k", "content": (FIXTURES / "goes19_fdcf_crop.nc").read_bytes()}
+    low_only = dataclasses.replace(cfg, parse={**cfg.parse, "fire_codes": [15, 35]})
+    assert parsers.parse(payload, low_only) == []

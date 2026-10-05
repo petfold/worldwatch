@@ -81,6 +81,15 @@ request per box per local day. Waiting on the CDSE OAuth client
 (OPERATOR-TODO). The SO2 volcanic-layer product isn't on Sentinel Hub; only
 the total column is.
 
+**Status 2026-10-05, faster fires:** FIRMS shows geostationary fires on its map
+but exports none (no CSV, no Area API). Added `goes19_fire` and `goes18_fire`:
+GOES ABI FDC full disk from NOAA NODD (public, no account), the newest scan
+every 20 min (~210 MB/day for both), fetcher `s3_latest`, parser `goes_fdc`
+(geolocated on the 5 Oct scan: a median 1 km from a VIIRS hotspot). Next:
+Meteosat via EUMETSAT LSA SAF FRP-PIXEL (MSG 0° and IODC: Europe, Africa, the
+Middle East, India; HDF5 fire lists, ~20 MB/day; free account), then Himawari
+(JAXA P-Tree WLF CSV; free account, FTP/SFTP only, latency unconfirmed).
+
 ## Faster versions of what we have
 
 From `source-latency.tsv`: night lights arrive ~9 days late (VNP46A2); the

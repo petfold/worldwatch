@@ -43,6 +43,8 @@ kinds:
                      box with an OAuth client-credentials token from
                      `client_id_env`/`client_secret_env`; each box is asked
                      once per completed local day (memo in the ETag slot)
+  s3_latest          the newest object under a strftime-templated prefix of
+                     a public bucket (NOAA NODD); skip if the key is unchanged
 """
 
 from __future__ import annotations
@@ -601,3 +603,55 @@ def _s5p_has_value(data: list[dict[str, Any]], day_start: int) -> bool:
             stats = item.get("outputs", {}).get("gas", {}).get("bands", {}).get("B0", {}).get("stats", {})
             return int(stats.get("sampleCount", 0)) > int(stats.get("noDataCount", 0))
     return False
+
+
+# --- the newest file of a public S3 bucket (NOAA NODD) -------------------------
+
+
+@register("s3_latest")
+async def fetch_s3_latest(
+    client: httpx.AsyncClient,
+    cfg: SourceConfig,
+    validators: CacheValidators,
+    now: int,
+) -> FetchResult:
+    """The newest object under a time-templated prefix of a public bucket.
+
+    The endpoint is the bucket URL; `[fetch] prefix` is a strftime template
+    of the poll time (GOES: "ABI-L2-FDCF/%Y/%j/%H/", one folder per hour). If
+    the current folder is still empty (just past the hour) the previous one
+    is listed. The newest key is memoised in the ETag slot: an unchanged key
+    is not downloaded again. Payload: {"key", "content"}. No auth.
+    """
+    import re
+    from datetime import UTC, datetime
+
+    template = str(cfg.fetch["prefix"])
+    bucket = cfg.endpoint.rstrip("/")
+    keys: list[str] = []
+    for back in (0, 3600):
+        prefix = datetime.fromtimestamp(now - back, UTC).strftime(template)
+        resp = await client.get(
+            bucket, params={"list-type": "2", "prefix": prefix},
+            headers={"User-Agent": USER_AGENT}, timeout=30.0,
+        )
+        resp.raise_for_status()
+        keys = re.findall(r"<Key>([^<]+)</Key>", resp.text)
+        if keys:
+            break
+    if not keys:
+        raise ValueError(f"no objects under {template!r} this hour or the last")
+    # NODD names carry the scan start as _sYYYYDDDHHMMSSs; by it, not by the
+    # whole name (a scan-mode change, M6 → M3, would sort out of time order)
+    key = max(keys, key=lambda k: (m.group(1) if (m := re.search(r"_s(\d{13,})", k)) else k))
+    if validators.etag == key:
+        return FetchResult(304, None, validators, not_modified=True)
+    resp = await client.get(
+        f"{bucket}/{key}", headers={"User-Agent": USER_AGENT},
+        timeout=float(cfg.fetch.get("timeout", 120)),
+    )
+    resp.raise_for_status()
+    return FetchResult(
+        resp.status_code, {"key": key, "content": resp.content},
+        CacheValidators(etag=key, last_modified=validators.last_modified),
+    )

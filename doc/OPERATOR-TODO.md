@@ -36,6 +36,11 @@ Legend: 🔴 blocks a source/feature · 🟡 nice-to-have · ⚪ later (deploy p
       `/etc/worldwatch/worldwatch.env`. Free tier: 10,000 requests a month; the
       three stanzas use ≤ ~5,000. Until then they record a `fetch_error` per
       poll, nothing else.
+- [ ] 🟡 **EUMETSAT LSA SAF (Meteosat fires)** — for geostationary fire
+      detection over Europe, Africa, the Middle East and India (GOES covers
+      the Americas). Register free at https://mokey.lsasvcs.ipma.pt/auth/signup
+      (CC BY 4.0 data). Then tell Claude, and download one FRP-PIXEL
+      ListProduct file so the parser is built against a real one.
 
 ## Push notifications (needed before step 9 is useful)
 
