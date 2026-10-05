@@ -28,6 +28,15 @@ Legend: 🔴 blocks a source/feature · 🟡 nice-to-have · ⚪ later (deploy p
       off the shared DEMO_KEY). The rest of the source review's batch 2
       (OpenAQ, OpenSky account, ENTSO-E, ...) when you want them.
 
+- [ ] 🔴 **Copernicus Data Space (Sentinel-5P trace gases)** — blocks
+      `s5p_no2`, `s5p_so2`, `s5p_co`. Register free at
+      dataspace.copernicus.eu → Dashboard → User Settings → OAuth clients →
+      Create (no SPA tick; copy the secret at once, it is shown only once).
+      Put `WW_CDSE_CLIENT_ID` and `WW_CDSE_CLIENT_SECRET` in
+      `/etc/worldwatch/worldwatch.env`. Free tier: 10,000 requests a month; the
+      three stanzas use ≤ ~5,000. Until then they record a `fetch_error` per
+      poll, nothing else.
+
 ## Push notifications (needed before step 9 is useful)
 
 - [x] 🔴 **Choose a channel** — decided 2026-07-11: **self-hosted ntfy on

@@ -779,6 +779,142 @@ links            = [["Fire map", "https://firms.modaps.eosdis.nasa.gov/map/#d:24
 tail             = "upper"
 reach_km         = 100
 
+# --- trace gases from space: Sentinel-5P TROPOMI via Copernicus Data Space ----------
+# Daily box means from the Sentinel Hub Statistical API (no imagery downloaded).
+# Free CDSE account → OAuth client (WW_CDSE_CLIENT_ID / WW_CDSE_CLIENT_SECRET).
+# Free tier: 10,000 requests a month; each box costs one request per local day
+# (plus up to two retries when NRTI is late), ~57 boxes → ≤ ~5,000 a month.
+# NRTI only (~3 h after the pass): a mix with OFFL would change past days.
+# Clouds and low-QA pixels are no-data: a day with < 20% valid pixels is missing.
+# Contains modified Copernicus Sentinel data (licence: free, attribution).
+
+[s5p_no2]
+class            = "trace_gas"
+modality         = "physical"
+topic_tags       = ["air-quality", "industry", "activity", "satellite"]
+flavor           = "continuous"
+endpoint         = "https://sh.dataspace.copernicus.eu/statistics/v1"
+cadence_seconds  = 10800
+status           = "nursery"
+notes            = "Sentinel-5P TROPOMI tropospheric NO2, NRTI, minQa 75, daily mean per 1° box; value = log1p(µmol/m²)"
+
+[s5p_no2.fetch]
+kind             = "cdse_statistics"
+band             = "NO2"
+min_qa           = 75
+resolution_deg   = 0.05
+retry_hours      = 6
+
+[s5p_no2.parse]
+format           = "cdse_s5p_stats"
+scale            = 1e6
+transform        = "log1p"
+
+[s5p_no2.geocode]
+strategy         = "boxes"
+h3_resolution    = 3
+boxes            = { london = [51.00, -0.62, 52.00, 0.38], paris = [48.36, 1.85, 49.36, 2.85], ruhr = [50.95, 6.50, 51.95, 7.50], po_valley = [44.96, 8.69, 45.96, 9.69], madrid = [39.92, -4.20, 40.92, -3.20], istanbul = [40.51, 28.48, 41.51, 29.48], moscow = [55.25, 37.12, 56.25, 38.12], kyiv = [49.95, 30.02, 50.95, 31.02], cairo = [29.54, 30.74, 30.54, 31.74], tehran = [35.19, 50.89, 36.19, 51.89], riyadh = [24.21, 46.18, 25.21, 47.18], kuwait = [28.87, 47.48, 29.87, 48.48], karachi = [24.36, 66.50, 25.36, 67.50], delhi = [28.11, 76.71, 29.11, 77.71], mumbai = [18.58, 72.38, 19.58, 73.38], dhaka = [23.31, 89.91, 24.31, 90.91], beijing = [39.40, 115.90, 40.40, 116.90], shanghai = [30.73, 120.97, 31.73, 121.97], pearl_river = [22.50, 113.00, 23.50, 114.00], seoul = [37.07, 126.48, 38.07, 127.48], tokyo = [35.18, 139.19, 36.18, 140.19], jakarta = [-6.70, 106.35, -5.70, 107.35], highveld = [-26.50, 28.70, -25.50, 29.70], lagos = [6.02, 2.88, 7.02, 3.88], los_angeles = [33.55, -118.74, 34.55, -117.74], new_york = [40.21, -74.50, 41.21, -73.50], mexico_city = [18.93, -99.63, 19.93, -98.63], sao_paulo = [-24.05, -47.13, -23.05, -46.13], buenos_aires = [-35.10, -58.88, -34.10, -57.88] }
+
+[s5p_no2.model]
+native_seconds   = 86400
+obs_scale        = 0.4
+periods_seconds  = [604800]   # the working week
+
+[s5p_no2.display]
+label            = "Nitrogen dioxide from space (Sentinel-5P)"
+about            = "Daily NO2 over 29 cities and industrial areas from ESA's Sentinel-5P, a few hours after the midday pass: a drop is a shutdown, a rise is fires or industry."
+unit             = " µmol/m²"
+inverse          = "expm1"
+digits           = 1
+links            = [["Copernicus Browser", "https://browser.dataspace.copernicus.eu/?zoom=8&lat={lat}&lng={lon}"]]
+
+[s5p_no2.alerts]
+reach_km         = 200
+
+
+[s5p_so2]
+class            = "trace_gas"
+modality         = "physical"
+topic_tags       = ["volcano", "industry", "hazard", "satellite"]
+flavor           = "continuous"
+endpoint         = "https://sh.dataspace.copernicus.eu/statistics/v1"
+cadence_seconds  = 10800
+status           = "nursery"
+notes            = "Sentinel-5P TROPOMI total SO2, NRTI, minQa 50, daily mean per 1° box; value = mmol/m² (linear: noise goes negative)"
+
+[s5p_so2.fetch]
+kind             = "cdse_statistics"
+band             = "SO2"
+min_qa           = 50
+resolution_deg   = 0.05
+retry_hours      = 6
+
+[s5p_so2.parse]
+format           = "cdse_s5p_stats"
+scale            = 1e3
+
+[s5p_so2.geocode]
+strategy         = "boxes"
+h3_resolution    = 3
+boxes            = { etna = [37.25, 14.49, 38.25, 15.49], kilauea = [18.91, -155.78, 19.91, -154.78], popocatepetl = [18.52, -99.12, 19.52, -98.12], sakurajima = [31.09, 130.16, 32.09, 131.16], nyiragongo = [-2.02, 28.75, -1.02, 29.75], erta_ale = [13.10, 40.17, 14.10, 41.17], reykjanes = [63.38, -22.77, 64.38, -21.77], merapi = [-8.04, 109.95, -7.04, 110.95], masaya = [11.48, -86.66, 12.48, -85.66], klyuchevskoy = [55.56, 160.14, 56.56, 161.14], taal = [13.50, 120.49, 14.50, 121.49], fuego = [13.97, -91.38, 14.97, -90.38], ambrym = [-16.75, 167.62, -15.75, 168.62], norilsk = [68.85, 87.70, 69.85, 88.70], highveld = [-26.50, 28.70, -25.50, 29.70] }
+
+[s5p_so2.model]
+native_seconds   = 86400
+obs_scale        = 0.3
+
+[s5p_so2.display]
+label            = "Sulphur dioxide from space (Sentinel-5P)"
+about            = "Daily SO2 over 13 restless volcanoes and two big smelter/coal areas from ESA's Sentinel-5P: an eruption or industrial accident shows as a rise."
+unit             = " mmol/m²"
+digits           = 1
+links            = [["Copernicus Browser", "https://browser.dataspace.copernicus.eu/?zoom=8&lat={lat}&lng={lon}"]]
+
+[s5p_so2.alerts]
+tail             = "upper"
+reach_km         = 300
+
+
+[s5p_co]
+class            = "trace_gas"
+modality         = "physical"
+topic_tags       = ["fire", "smoke", "hazard", "satellite"]
+flavor           = "continuous"
+endpoint         = "https://sh.dataspace.copernicus.eu/statistics/v1"
+cadence_seconds  = 10800
+status           = "nursery"
+notes            = "Sentinel-5P TROPOMI total CO, NRTI, minQa 50, daily mean per 2° box; value = mmol/m²"
+
+[s5p_co.fetch]
+kind             = "cdse_statistics"
+band             = "CO"
+min_qa           = 50
+resolution_deg   = 0.1
+retry_hours      = 6
+
+[s5p_co.parse]
+format           = "cdse_s5p_stats"
+scale            = 1e3
+
+[s5p_co.geocode]
+strategy         = "boxes"
+h3_resolution    = 3
+boxes            = { rondonia = [-11.00, -64.00, -9.00, -62.00], para = [-7.00, -53.00, -5.00, -51.00], cerrado = [-13.00, -47.00, -11.00, -45.00], central_african = [6.00, 20.00, 8.00, 22.00], angola_zambia = [-14.00, 23.00, -12.00, 25.00], south_sudan = [7.00, 29.00, 9.00, 31.00], yakutia = [61.00, 128.00, 63.00, 130.00], british_columbia = [53.00, -125.00, 55.00, -123.00], california = [38.00, -122.50, 40.00, -120.50], se_australia = [-37.50, 147.00, -35.50, 149.00], kalimantan = [-3.00, 112.00, -1.00, 114.00], sumatra = [-2.00, 102.00, 0.00, 104.00], indochina = [18.00, 101.00, 20.00, 103.00] }
+
+[s5p_co.model]
+native_seconds   = 86400
+obs_scale        = 2.0
+
+[s5p_co.display]
+label            = "Carbon monoxide from space (Sentinel-5P)"
+about            = "Daily CO over 13 fire-prone regions from ESA's Sentinel-5P: large fires raise it, cloud or no cloud."
+unit             = " mmol/m²"
+digits           = 1
+links            = [["Copernicus Browser", "https://browser.dataspace.copernicus.eu/?zoom=8&lat={lat}&lng={lon}"]]
+
+[s5p_co.alerts]
+tail             = "upper"
+reach_km         = 300
+
 # --- air quality ------------------------------------------------------------------
 # harm (ADR 0004), PM2.5 in µg/m³: the US EPA AQI breakpoints (2024), read on the hour's
 # value (the AQI proper uses a 24-h mean)

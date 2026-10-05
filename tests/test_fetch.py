@@ -1,11 +1,13 @@
 """Fetchers: bearer auth on json_get, the Earthdata granule flow, token reuse."""
 
 import json
+import math
 
 import httpx
 import pytest
 
 from conftest import load_fixture
+from worldwatch.ingest.geocode import h3_cell
 from worldwatch.poll import fetch
 from worldwatch.poll.http import CacheValidators
 from worldwatch.poll.poller import poll_once
@@ -411,3 +413,140 @@ def test_stanzas_parse_fetch_table(sources):
     assert sources["night_lights_h17v03"].fetch["kind"] == "earthdata_granule"
     assert sources["usgs_seismic"].fetch == {}
     assert json.dumps(sources["cf_radar_netflows_global"].parse)  # sanity: serializable
+
+
+# --- cdse_statistics (Sentinel-5P) --------------------------------------------
+
+
+def _s5p_cfg(sources, **fetch_over):
+    import dataclasses
+
+    base = sources["s5p_no2"]
+    boxes = {"paris": [48.36, 1.85, 49.36, 2.85], "tokyo": [35.18, 139.19, 36.18, 140.19]}
+    return dataclasses.replace(
+        base, geocode={**base.geocode, "boxes": boxes},
+        fetch={**base.fetch, "pause_seconds": 0, **fetch_over},
+    )
+
+
+def _s5p_handler(log, valid=lambda box, day: True, fail_box=None):
+    """CDSE mock: a token endpoint, and P1D statistics for each requested day."""
+    from datetime import datetime
+
+    def iso_epoch(s):
+        return int(datetime.fromisoformat(s.replace("Z", "+00:00")).timestamp())
+
+    def handler(request):
+        if request.url.host == "identity.dataspace.copernicus.eu":
+            log["token"] += 1
+            form = dict(x.split("=") for x in request.content.decode().split("&"))
+            assert form["grant_type"] == "client_credentials"
+            assert form["client_id"] == "cid"
+            return httpx.Response(200, json={"access_token": "tok", "expires_in": 600})
+        assert request.url.host == "sh.dataspace.copernicus.eu"
+        assert request.headers["Authorization"] == "Bearer tok"
+        body = json.loads(request.content)
+        assert body["input"]["data"][0]["dataFilter"] == {"timeliness": "NRTI"}
+        assert body["input"]["data"][0]["processing"] == {"minQa": 75}
+        assert '"NO2", "dataMask"' in body["aggregation"]["evalscript"]
+        lon = (body["input"]["bounds"]["bbox"][0] + body["input"]["bounds"]["bbox"][2]) / 2
+        box = "paris" if lon < 100 else "tokyo"
+        log["requests"].append(box)
+        if box == fail_box:
+            return httpx.Response(503, json={"error": "busy"})
+        tr = body["aggregation"]["timeRange"]
+        data, t = [], iso_epoch(tr["from"])
+        while t < iso_epoch(tr["to"]):
+            ok = valid(box, t)
+            stats = {"min": 0, "max": 1, "mean": 1.0e-4 if ok else None, "stDev": 0,
+                     "sampleCount": 400, "noDataCount": 100 if ok else 400}
+            data.append({"interval": {"from": fetch._utc_iso(t), "to": fetch._utc_iso(t + 86400)},
+                         "outputs": {"gas": {"bands": {"B0": {"stats": stats}}}}})
+            t += 86400
+        return httpx.Response(200, json={"data": data, "status": "OK"})
+
+    return handler
+
+
+@pytest.fixture
+def _cdse_env(monkeypatch):
+    monkeypatch.setenv("WW_CDSE_CLIENT_ID", "cid")
+    monkeypatch.setenv("WW_CDSE_CLIENT_SECRET", "secret")
+    fetch._cdse_tokens.clear()
+    yield
+    fetch._cdse_tokens.clear()
+
+
+def test_s5p_window_follows_local_solar_time(sources):
+    cfg = sources["s5p_no2"]
+    # 19:00 local the evening before: Greenwich 19:00 UTC, Tokyo (~140°E) ~09:40 UTC
+    assert fetch.s5p_window_offset(cfg, 0.0) == -5 * 3600
+    assert fetch.s5p_window_offset(cfg, 139.69) == -51540  # -5 h - 9 h 18.76 min, to the minute
+
+
+async def test_cdse_statistics_one_request_per_box_per_day(db, sources, _cdse_env):
+    cfg = _s5p_cfg(sources)
+    log = {"token": 0, "requests": []}
+    validators = CacheValidators()
+    now = 1791072000  # 2026-10-04 00:00 UTC
+    async with _client(_s5p_handler(log)) as client:
+        outcome = await poll_once(client, db, cfg, validators, now=now)
+        assert outcome.event == "ok"
+        assert sorted(log["requests"]) == ["paris", "tokyo"]
+        # two days per box, each at its overpass (~13:30 local solar)
+        rows = db.execute("SELECT cell, ts, value FROM raw_ring ORDER BY ts").fetchall()
+        assert len(rows) == 4
+        paris = h3_cell(48.86, 2.35, 3)
+        # Paris's overpass, 13:30 local solar = 13:20:36 UTC, on 2 and 3 Oct
+        assert [r["ts"] for r in rows if r["cell"] == paris] == [
+            1790985600 - 86400 + 48036, 1790985600 + 48036]
+        assert all(math.isclose(r["value"], math.log1p(100.0)) for r in rows)
+
+        # the next poll, same day: nothing new to ask for, no request, no token
+        outcome2 = await poll_once(client, db, cfg, validators, now=now + 10800)
+        assert outcome2.event == "not_modified"
+        assert len(log["requests"]) == 2
+
+        # a day later each box is asked once more, with the cached token gone stale
+        await poll_once(client, db, cfg, validators, now=now + 86400)
+    assert len(log["requests"]) == 4
+    assert log["token"] == 2  # 600 s tokens: one per poll that made requests
+
+
+async def test_cdse_statistics_retries_an_empty_day_then_gives_up(db, sources, _cdse_env):
+    cfg = _s5p_cfg(sources, retry_hours=12)  # Paris's day ended 5 h before `now`
+    log = {"token": 0, "requests": []}
+    validators = CacheValidators()
+    now = 1791072000
+    async with _client(_s5p_handler(log, valid=lambda box, day: box != "paris")) as client:
+        await poll_once(client, db, cfg, validators, now=now)
+        await poll_once(client, db, cfg, validators, now=now + 3600)
+        assert log["requests"].count("paris") == 2  # still empty: asked again
+        assert log["requests"].count("tokyo") == 1
+        await poll_once(client, db, cfg, validators, now=now + 7 * 3600)
+        await poll_once(client, db, cfg, validators, now=now + 8 * 3600)
+    assert log["requests"].count("paris") == 3  # the last try past 12 h; then given up
+
+
+async def test_cdse_statistics_failing_box_is_isolated(db, sources, _cdse_env):
+    cfg = _s5p_cfg(sources)
+    log = {"token": 0, "requests": []}
+    validators = CacheValidators()
+    async with _client(_s5p_handler(log, fail_box="tokyo")) as client:
+        outcome = await poll_once(client, db, cfg, validators, now=1791072000)
+    assert outcome.event == "ok"
+    assert outcome.rows_written == 2  # paris's two days
+    assert json.loads(validators.etag).keys() == {"paris"}  # tokyo asked again next poll
+
+
+async def test_cdse_statistics_missing_credentials_is_isolated(db, sources, monkeypatch):
+    monkeypatch.delenv("WW_CDSE_CLIENT_ID", raising=False)
+    monkeypatch.delenv("WW_CDSE_CLIENT_SECRET", raising=False)
+
+    def handler(request):
+        raise AssertionError(f"unexpected request: {request.url}")
+
+    async with _client(handler) as client:
+        outcome = await poll_once(client, db, _s5p_cfg(sources), CacheValidators(), now=1791072000)
+    assert outcome.event == "fetch_error"
+    assert "WW_CDSE_CLIENT_ID" in (outcome.detail or "")

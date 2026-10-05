@@ -498,6 +498,64 @@ def parse_vnp46a1_grid(payload: Any, cfg: SourceConfig) -> list[Observation]:
     return obs
 
 
+@register("cdse_s5p_stats")
+def parse_cdse_s5p_stats(payload: Any, cfg: SourceConfig) -> list[Observation]:
+    """Sentinel-5P daily box means from the cdse_statistics fetcher → one
+    observation per box per local day.
+
+    A day counts only if at least `min_valid_frac` of the box's pixels passed
+    the QA filter (clouds and low-quality retrievals are no-data); otherwise it
+    is missing, never imputed (guardrail 4). The cell is the box centre's H3
+    cell, like the `boxes` geocode strategy. ts = the day's overpass, about
+    `overpass_local_hour` (13:30) local solar time.
+
+    value = mean column (mol/m²) × `scale`; transform = "log1p" takes
+    log(1 + max(value, 0)) for gases that are positive and multiplicative
+    across days (NO2); SO2 and CO stay linear (SO2 noise goes negative).
+    """
+    import math
+
+    from worldwatch.poll.fetch import s5p_window_offset
+
+    scale = float(cfg.parse.get("scale", 1e6))
+    min_valid_frac = float(cfg.parse.get("min_valid_frac", 0.2))
+    use_log1p = str(cfg.parse.get("transform", "")) == "log1p"
+    overpass = float(cfg.parse.get("overpass_local_hour", 13.5))
+    resolution = int(cfg.geocode.get("h3_resolution", 3))
+    boxes = dict(cfg.geocode.get("boxes") or {})
+
+    obs: list[Observation] = []
+    for entry in payload:
+        if entry.get("status") != 200 or entry.get("box") not in boxes:
+            continue
+        la0, lo0, la1, lo1 = boxes[entry["box"]]
+        lon = (lo0 + lo1) / 2
+        cell = h3_cell((la0 + la1) / 2, lon, resolution)
+        # the window starts at end_hour local the evening before the overpass
+        to_overpass = int(round(overpass * 3600 - lon * 240)) - s5p_window_offset(cfg, lon)
+        for item in entry.get("data", []):
+            if "error" in item:
+                continue
+            stats = item.get("outputs", {}).get("gas", {}).get("bands", {}).get("B0", {}).get("stats", {})
+            total = int(stats.get("sampleCount", 0))
+            valid = total - int(stats.get("noDataCount", 0))
+            mean = stats.get("mean")
+            if total <= 0 or valid / total < min_valid_frac or mean is None:
+                continue
+            value = float(mean) * scale
+            if not math.isfinite(value):
+                continue
+            obs.append(
+                Observation(
+                    stream_id=cfg.stream_id,
+                    cell=cell,
+                    ts=_iso_to_epoch(str(item["interval"]["from"])) + to_overpass,
+                    value=math.log1p(max(value, 0.0)) if use_log1p else value,
+                )
+            )
+    return obs
+
+
 @register("gdelt_export_events")
 def parse_gdelt_export_events(payload: Any, cfg: SourceConfig) -> list[Observation]:
     """GDELT 2.0 export batch (zipped TSV, one row per coded event) → one

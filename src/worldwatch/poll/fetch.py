@@ -38,6 +38,11 @@ kinds:
                      URL matching `file_marker`; skip if it matches the last
                      fetched one (ETag validator slot); else download the
                      zipped batch. No auth.
+  cdse_statistics    Copernicus Data Space (Sentinel Hub Statistical API):
+                     Sentinel-5P daily means per [geocode] box, one POST per
+                     box with an OAuth client-credentials token from
+                     `client_id_env`/`client_secret_env`; each box is asked
+                     once per completed local day (memo in the ETag slot)
 """
 
 from __future__ import annotations
@@ -433,3 +438,166 @@ async def fetch_earthdata_granule(
         payload,
         CacheValidators(etag=granule_id, last_modified=validators.last_modified),
     )
+
+
+# --- Copernicus Data Space: Sentinel Hub Statistical API ----------------------
+
+_CDSE_TOKEN_URL = (
+    "https://identity.dataspace.copernicus.eu/auth/realms/CDSE/protocol/openid-connect/token"
+)
+
+# OAuth client-credentials tokens live ~10 min; token requests are rate-limited,
+# so reuse one until a minute before it expires. Keyed by client id.
+_cdse_tokens: dict[str, tuple[str, int]] = {}
+_cdse_lock = asyncio.Lock()
+
+_S5P_EVALSCRIPT = """//VERSION=3
+function setup() {
+  return {input: [{bands: ["%s", "dataMask"]}],
+          output: [{id: "gas", bands: 1, sampleType: "FLOAT32"}, {id: "dataMask", bands: 1}]};
+}
+function evaluatePixel(s) { return {gas: [s.%s], dataMask: [s.dataMask]}; }
+"""
+
+
+async def _cdse_token(client: httpx.AsyncClient, cfg: SourceConfig, now: int) -> str:
+    f = cfg.fetch
+    id_env = str(f.get("client_id_env", "WW_CDSE_CLIENT_ID"))
+    secret_env = str(f.get("client_secret_env", "WW_CDSE_CLIENT_SECRET"))
+    client_id, secret = os.environ.get(id_env), os.environ.get(secret_env)
+    if not client_id or not secret:
+        raise RuntimeError(f"Source {cfg.stream_id!r} needs env vars {id_env} + {secret_env}")
+    async with _cdse_lock:
+        cached = _cdse_tokens.get(client_id)
+        if cached and cached[1] > now + 60:
+            return cached[0]
+        resp = await client.post(
+            str(f.get("token_url", _CDSE_TOKEN_URL)),
+            data={"grant_type": "client_credentials", "client_id": client_id,
+                  "client_secret": secret},
+            headers={"User-Agent": USER_AGENT},
+            timeout=30.0,
+        )
+        resp.raise_for_status()
+        body = resp.json()
+        token = str(body["access_token"])
+        _cdse_tokens[client_id] = (token, now + int(body.get("expires_in", 300)))
+        return token
+
+
+def s5p_window_offset(cfg: SourceConfig, lon: float) -> int:
+    """Seconds from a UTC midnight to the start of a box's daily window.
+
+    Sentinel-5P passes at ~13:30 local solar time; a box's day runs from
+    `window_end_local_hour` (19:00) local the evening before to 19:00 local,
+    so it holds that day's overpasses (adjacent orbits ~12–15 h) and NRTI
+    processing (~3 h) has finished by its end. Rounded to the minute."""
+    end_hour = float(cfg.fetch.get("window_end_local_hour", 19))
+    return int(round(((end_hour - 24.0) * 3600.0 - lon * 240.0) / 60.0)) * 60
+
+
+def _utc_iso(epoch: int) -> str:
+    from datetime import UTC, datetime
+
+    return datetime.fromtimestamp(epoch, UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+@register("cdse_statistics")
+async def fetch_cdse_statistics(
+    client: httpx.AsyncClient,
+    cfg: SourceConfig,
+    validators: CacheValidators,
+    now: int,
+) -> FetchResult:
+    """Sentinel-5P daily means over the stanza's [geocode] boxes, one
+    Statistical API request per box (no imagery leaves CDSE).
+
+    Each box asks for its last `days` complete local-solar days (see
+    s5p_window_offset) once those are `settle_hours` old. The newest day
+    fetched per box is memoised in the ETag slot as JSON, so a box costs one
+    request a day, not one per poll (the free tier allows 10,000 a month). A
+    box whose newest day came back empty (clouds, late NRTI) is asked again
+    until that day is `retry_hours` old. Payload: a list of {"box", "status",
+    "offset", "data"}; a failing box is recorded in its entry and never fails
+    the others.
+    """
+    import json
+
+    f = cfg.fetch
+    boxes = dict(cfg.geocode.get("boxes") or {})
+    days = int(f.get("days", 2))
+    settle = int(float(f.get("settle_hours", 1)) * 3600)
+    retry = int(float(f.get("retry_hours", 24)) * 3600)
+    resolution = float(f.get("resolution_deg", 0.05))
+    band = str(f.get("band", "NO2"))
+    data_entry: dict[str, Any] = {
+        "type": "sentinel-5p-l2",
+        "dataFilter": {"timeliness": str(f.get("timeliness", "NRTI"))},
+        "processing": {"minQa": int(f.get("min_qa", 75))},
+    }
+    memo: dict[str, int] = json.loads(validators.etag) if validators.etag else {}
+
+    due: list[tuple[str, list[float], int, int]] = []
+    for name, (la0, lo0, la1, lo1) in sorted(boxes.items()):
+        offset = s5p_window_offset(cfg, (lo0 + lo1) / 2)
+        newest = (now - settle - offset) // 86400 * 86400 + offset - 86400
+        if memo.get(name, -1) < newest:
+            due.append((name, [lo0, la0, lo1, la1], offset, newest))
+    if not due:
+        return FetchResult(304, None, validators, not_modified=True)
+
+    token = await _cdse_token(client, cfg, now)
+    pause = float(f.get("pause_seconds", 0.3))
+    out: list[dict[str, Any]] = []
+    for i, (name, bbox, offset, newest) in enumerate(due):
+        if i:
+            await asyncio.sleep(pause)
+        body = {
+            "input": {
+                "bounds": {"bbox": bbox,
+                           "properties": {"crs": "http://www.opengis.net/def/crs/OGC/1.3/CRS84"}},
+                "data": [data_entry],
+            },
+            "aggregation": {
+                "timeRange": {"from": _utc_iso(newest - (days - 1) * 86400),
+                              "to": _utc_iso(newest + 86400)},
+                "aggregationInterval": {"of": "P1D"},
+                "resx": resolution,
+                "resy": resolution,
+                "evalscript": _S5P_EVALSCRIPT % (band, band),
+            },
+        }
+        try:
+            resp = await client.post(
+                cfg.endpoint, json=body, timeout=60.0,
+                headers={"Authorization": f"Bearer {token}", "User-Agent": USER_AGENT},
+            )
+        except httpx.HTTPError as e:
+            out.append({"box": name, "status": 0, "offset": offset, "data": [], "error": str(e)})
+            continue
+        if resp.status_code in (401, 403):
+            _cdse_tokens.clear()  # revoked or expired early: mint afresh next poll
+        data = resp.json().get("data", []) if resp.status_code == 200 else []
+        out.append({"box": name, "status": resp.status_code, "offset": offset, "data": data})
+        if resp.status_code == 200 and (
+            now - (newest + 86400) >= retry or _s5p_has_value(data, newest)
+        ):
+            memo[name] = newest
+    if not any(o["status"] == 200 for o in out):
+        raise httpx.HTTPError(f"all {len(out)} boxes failed (first status {out[0]['status']})")
+    return FetchResult(
+        200, out, CacheValidators(etag=json.dumps(memo, sort_keys=True),
+                                  last_modified=validators.last_modified)
+    )
+
+
+def _s5p_has_value(data: list[dict[str, Any]], day_start: int) -> bool:
+    """Whether the Statistical API returned any valid pixel for the day."""
+    from datetime import datetime
+
+    for item in data:
+        stamp = str(item.get("interval", {}).get("from", ""))
+        if stamp and int(datetime.fromisoformat(stamp.replace("Z", "+00:00")).timestamp()) == day_start:
+            stats = item.get("outputs", {}).get("gas", {}).get("bands", {}).get("B0", {}).get("stats", {})
+            return int(stats.get("sampleCount", 0)) > int(stats.get("noDataCount", 0))
+    return False

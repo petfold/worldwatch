@@ -74,6 +74,13 @@ the EIA key (`eia_demand` off DEMO_KEY) added; the rest not yet registered.
 | USGS water (new API) | ~10k US gauges (the old API retires Nov 2026 – Feb 2027) | free key at api.waterdata.usgs.gov |
 | Copernicus Data Space | Sentinel-5P NO2/SO2/CO per area, daily, via the Statistical API (no imagery download) | free CDSE account; 10k requests/month |
 
+**Status 2026-10-05:** Sentinel-5P added as `s5p_no2` (29 city and industrial
+boxes), `s5p_so2` (13 volcanoes, Norilsk, the Highveld) and `s5p_co` (13 fire
+regions): fetcher `cdse_statistics`, parser `cdse_s5p_stats`, NRTI only, one
+request per box per local day. Waiting on the CDSE OAuth client
+(OPERATOR-TODO). The SO2 volcanic-layer product isn't on Sentinel Hub; only
+the total column is.
+
 ## Faster versions of what we have
 
 From `source-latency.tsv`: night lights arrive ~9 days late (VNP46A2); the

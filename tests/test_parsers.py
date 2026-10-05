@@ -460,3 +460,43 @@ def test_colocated_detectors_are_one_series(sources):
     payload = {"features": [feat("AT0002", 0.2), feat("AT0001", 0.1), feat("AT0009", 0.3, lon=16.5)]}
     obs = parsers.parse(payload, cfg)
     assert sorted((o.meta or {})["site"] for o in obs) == ["AT0001", "AT0009"]
+
+
+def _s5p_item(start, mean, total=400, nodata=100, error=None):
+    item = {"interval": {"from": start, "to": "x"},
+            "outputs": {"gas": {"bands": {"B0": {"stats": {
+                "mean": mean, "sampleCount": total, "noDataCount": nodata}}}}}}
+    if error:
+        item["error"] = {"type": "EXECUTION_ERROR", "message": error}
+    return item
+
+
+def test_cdse_s5p_stats_screens_coverage_and_errors(sources):
+    import math
+
+    from worldwatch.ingest.geocode import h3_cell
+
+    cfg = sources["s5p_no2"]  # scale 1e6, log1p
+    payload = [
+        {"box": "paris", "status": 200, "data": [
+            _s5p_item("2026-10-02T18:51:00Z", 1.0e-4),                 # kept
+            _s5p_item("2026-10-03T18:51:00Z", 2.0e-4, nodata=350),     # 12.5% valid: dropped
+            _s5p_item("2026-10-04T18:51:00Z", None, nodata=400),       # all cloud: dropped
+            _s5p_item("2026-10-05T18:51:00Z", 1.0e-4, error="boom"),   # failed interval: dropped
+            _s5p_item("2026-10-06T18:51:00Z", -3.0e-6),                # noise below zero → 0
+        ]},
+        {"box": "tokyo", "status": 503, "data": []},
+        {"box": "atlantis", "status": 200, "data": [_s5p_item("2026-10-02T18:51:00Z", 1.0)]},
+    ]
+    obs = parsers.parse(payload, cfg)
+    assert [round(o.value, 6) for o in obs] == [round(math.log1p(100.0), 6), 0.0]
+    assert obs[0].cell == h3_cell(48.86, 2.35, 3)
+    # 2 Oct window (18:51 UTC) → Paris's 3 Oct overpass at 13:20:36 UTC
+    assert obs[0].ts == 1790985600 + 48036
+
+
+def test_cdse_s5p_stats_so2_stays_linear(sources):
+    cfg = sources["s5p_so2"]  # scale 1e3, no transform: noise may go negative
+    payload = [{"box": "etna", "status": 200, "data": [
+        _s5p_item("2026-10-02T18:00:00Z", -2.0e-4), _s5p_item("2026-10-03T18:00:00Z", 5.0e-3)]}]
+    assert [round(o.value, 6) for o in parsers.parse(payload, cfg)] == [-0.2, 5.0]
