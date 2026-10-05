@@ -530,3 +530,28 @@ def test_goes_fdc_fire_codes_select_pixels(sources):
     payload = {"key": "k", "content": (FIXTURES / "goes19_fdcf_crop.nc").read_bytes()}
     low_only = dataclasses.replace(cfg, parse={**cfg.parse, "fire_codes": [15, 35]})
     assert parsers.parse(payload, low_only) == []
+
+
+def test_lsasaf_frp_list_real_slot(sources):
+    """A real Meteosat 0° FRP-PIXEL ListProduct (5 Oct 2026 00:00 UTC; contains
+    data from EUMETSAT LSA SAF, CC BY 4.0): 125 fires, 104 at confidence ≥ 0.5."""
+    cfg = sources["meteosat_fire"]
+    content = (FIXTURES / "lsasaf_msg_frp_list_202610050000.h5").read_bytes()
+    obs = parsers.parse({"key": "k", "content": content}, cfg)
+
+    assert len(obs) == 104
+    assert len({(o.cell, o.ts) for o in obs}) == 104
+    slot = 1791158400  # 2026-10-05 00:00 UTC
+    assert all(slot + 180 <= o.ts < slot + 900 for o in obs)  # ACQTIME 3–11 min into the slot
+    assert round(sum(o.value for o in obs), 1) == 11214.9  # FRP, MW
+
+
+def test_lsasaf_frp_list_confidence_threshold(sources):
+    import dataclasses
+
+    cfg = sources["meteosat_fire"]
+    payload = {"key": "k", "content": (FIXTURES / "lsasaf_msg_frp_list_202610050000.h5").read_bytes()}
+    everything = dataclasses.replace(cfg, parse={**cfg.parse, "min_confidence": 0.0})
+    strict = dataclasses.replace(cfg, parse={**cfg.parse, "min_confidence": 0.7})
+    assert len(parsers.parse(payload, everything)) == 125
+    assert len(parsers.parse(payload, strict)) == 82

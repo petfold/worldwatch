@@ -35,12 +35,17 @@ Legend: 🔴 blocks a source/feature · 🟡 nice-to-have · ⚪ later (deploy p
       Put `WW_CDSE_CLIENT_ID` and `WW_CDSE_CLIENT_SECRET` in
       `/etc/worldwatch/worldwatch.env`. Free tier: 10,000 requests a month; the
       three stanzas use ≤ ~5,000. Until then they record a `fetch_error` per
-      poll, nothing else.
+      poll, nothing else. **2026-10-05:** account and OAuth client
+      `worldwatch-vps` created (Client Credentials); env vars on the VPS still
+      to set.
 - [ ] 🟡 **EUMETSAT LSA SAF (Meteosat fires)** — for geostationary fire
       detection over Europe, Africa, the Middle East and India (GOES covers
       the Americas). Register free at https://mokey.lsasvcs.ipma.pt/auth/signup
       (CC BY 4.0 data). Then tell Claude, and download one FRP-PIXEL
       ListProduct file so the parser is built against a real one.
+      **2026-10-05:** account created; sample file downloaded (MSG-Disk
+      00:00, 125 fires). Newest slot listed ~40 min after its time. Env vars
+      `WW_LSASAF_USER`/`WW_LSASAF_PASS` on the VPS still to set.
 
 ## Push notifications (needed before step 9 is useful)
 
@@ -56,8 +61,9 @@ Legend: 🔴 blocks a source/feature · 🟡 nice-to-have · ⚪ later (deploy p
       pulled to the local machine (`ops/local/install-pull.sh`; `ops/README.md`
       § Backups). No restic/B2 exists (the earlier note was wrong). A cloud copy
       later, with your general backup plan.
-- [ ] ⚪ Register any per-source accounts flagged above on the VPS's IP if a
-      provider ties keys to an origin.
+- [x] ⚪ Register any per-source accounts flagged above on the VPS's IP if a
+      provider ties keys to an origin. — checked 2026-10-05: none of the
+      accounts so far (CDSE, LSA SAF included) tie keys to an IP.
 - [x] ⚪ Data dir + retention — done 2026-09-26 (`/var/lib/worldwatch`, fixed
       budgets); Parquet export daily (2026-09-30).
 

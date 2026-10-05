@@ -89,6 +89,11 @@ every 20 min (~210 MB/day for both), fetcher `s3_latest`, parser `goes_fdc`
 Meteosat via EUMETSAT LSA SAF FRP-PIXEL (MSG 0° and IODC: Europe, Africa, the
 Middle East, India; HDF5 fire lists, ~20 MB/day; free account), then Himawari
 (JAXA P-Tree WLF CSV; free account, FTP/SFTP only, latency unconfirmed).
+Meteosat added the same day: `meteosat_fire` (MSG 0°) and `meteosat_iodc_fire`
+(41.5°E), fetcher `index_latest` (public listing, Basic-auth files), parser
+`lsasaf_frp_list`; built against the 5 Oct 00:00 MSG slot (125 fires; at
+confidence ≥ 0.5 a median 3.4 km from a VIIRS hotspot). Measured delay: MSG
+~40 min, IODC ~75 min after the slot. Himawari remains.
 
 ## Faster versions of what we have
 

@@ -603,3 +603,78 @@ async def test_s3_latest_falls_back_to_previous_hour(db, sources):
         outcome = await poll_once(client, db, cfg, CacheValidators(), now=1791180030)  # 06:00:30
     assert seen == ["ABI-L2-FDCF/2026/278/06/", "ABI-L2-FDCF/2026/278/05/"]
     assert outcome.event == "parse_error"  # the fake bytes: fetched, then isolated at the parser
+
+
+# --- index_latest (Meteosat on LSA SAF) ----------------------------------------
+
+
+def _index_page(folder, names):
+    links = "".join(f'<a href="{folder}{n}">{n}</a>' for n in names)
+    return f"<html><body>{links}</body></html>"
+
+
+async def test_index_latest_basic_auth_and_memo(db, sources, monkeypatch):
+    import base64
+
+    from conftest import FIXTURES
+
+    monkeypatch.setenv("WW_LSASAF_USER", "ww")
+    monkeypatch.setenv("WW_LSASAF_PASS", "pw")
+    cfg = sources["meteosat_fire"]
+    folder = "/PRODUCTS/MSG/FRP-PIXEL/HDF5/2026/10/05/"
+    names = [f"HDF5_LSASAF_MSG_FRP-PIXEL-ListProduct_MSG-Disk_20261005{t}" for t in ("0000", "0015")]
+    log = []
+
+    def handler(request):
+        if request.url.path == folder:
+            log.append("list")
+            return httpx.Response(200, text=_index_page(folder, names))
+        log.append(request.url.path.rsplit("_", 1)[1])
+        expected = "Basic " + base64.b64encode(b"ww:pw").decode()
+        assert request.headers["Authorization"] == expected
+        return httpx.Response(200, content=(FIXTURES / "lsasaf_msg_frp_list_202610050000.h5").read_bytes())
+
+    validators = CacheValidators()
+    async with _client(handler) as client:
+        outcome = await poll_once(client, db, cfg, validators, now=1791160000)
+        assert outcome.event == "ok" and outcome.rows_written == 104
+        outcome2 = await poll_once(client, db, cfg, validators, now=1791160900)
+    assert outcome2.event == "not_modified"
+    assert log == ["list", "202610050015", "list"]  # the newest slot, downloaded once
+
+
+async def test_index_latest_lists_yesterday_just_past_midnight(db, sources, monkeypatch):
+    monkeypatch.setenv("WW_LSASAF_USER", "ww")
+    monkeypatch.setenv("WW_LSASAF_PASS", "pw")
+    cfg = sources["meteosat_fire"]
+    seen = []
+
+    def handler(request):
+        path = request.url.path
+        if path.endswith("/"):
+            seen.append(path)
+            names = ["HDF5_LSASAF_MSG_FRP-PIXEL-ListProduct_MSG-Disk_202610042345"] if "/10/04/" in path else []
+            return httpx.Response(200, text=_index_page(path, names))
+        assert "/10/04/" in path
+        return httpx.Response(200, content=b"not hdf5")
+
+    async with _client(handler) as client:
+        outcome = await poll_once(client, db, cfg, CacheValidators(), now=1791158700)  # 00:05
+    assert seen == ["/PRODUCTS/MSG/FRP-PIXEL/HDF5/2026/10/05/", "/PRODUCTS/MSG/FRP-PIXEL/HDF5/2026/10/04/"]
+    assert outcome.event == "parse_error"  # fetched from yesterday's folder; fake bytes isolated
+
+
+async def test_index_latest_missing_credentials_is_isolated(db, sources, monkeypatch):
+    monkeypatch.delenv("WW_LSASAF_USER", raising=False)
+    monkeypatch.delenv("WW_LSASAF_PASS", raising=False)
+    folder = "/PRODUCTS/MSG/FRP-PIXEL/HDF5/2026/10/05/"
+
+    def handler(request):
+        assert request.url.path == folder, "no download without credentials"
+        return httpx.Response(200, text=_index_page(
+            folder, ["HDF5_LSASAF_MSG_FRP-PIXEL-ListProduct_MSG-Disk_202610050000"]))
+
+    async with _client(handler) as client:
+        outcome = await poll_once(client, db, sources["meteosat_fire"], CacheValidators(), now=1791160000)
+    assert outcome.event == "fetch_error"
+    assert "WW_LSASAF_USER" in (outcome.detail or "")

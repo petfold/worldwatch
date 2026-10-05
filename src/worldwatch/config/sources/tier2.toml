@@ -859,6 +859,90 @@ links            = [["Fire map", "https://firms.modaps.eosdis.nasa.gov/map/#d:24
 tail             = "upper"
 reach_km         = 100
 
+# --- fires from geostationary orbit: Meteosat (EUMETSAT LSA SAF FRP-PIXEL) ------
+# Lists of fire pixels every 15 min, ~100 KB each, about 40 min after the slot
+# (measured 5 Oct 2026). MSG 0° sees Europe, Africa, the Middle East and eastern
+# South America; MSG IODC (41.5°E) the Middle East, India and Central Asia.
+# Free LSA SAF account (WW_LSASAF_USER / WW_LSASAF_PASS); listings are public,
+# files need HTTP Basic auth. Licence CC BY 4.0: "Contains data from EUMETSAT
+# LSA SAF". ~20 MB/day for both.
+
+[meteosat_fire]
+class            = "fire_hotspots"
+modality         = "physical"
+topic_tags       = ["fire", "hazard", "satellite"]
+flavor           = "count"
+endpoint         = "https://datalsasaf.lsasvcs.ipma.pt/PRODUCTS/MSG/FRP-PIXEL/HDF5/%Y/%m/%d/"
+cadence_seconds  = 900
+status           = "nursery"
+notes            = "EUMETSAT LSA SAF FRP-PIXEL ListProduct, Meteosat 0°, every 15 min (CC BY 4.0, free account); value = fire radiative power (MW)"
+
+[meteosat_fire.fetch]
+kind             = "index_latest"
+file_pattern     = 'HDF5_LSASAF_MSG_FRP-PIXEL-ListProduct_MSG-Disk_(\d{12})'
+user_env         = "WW_LSASAF_USER"
+pass_env         = "WW_LSASAF_PASS"
+
+[meteosat_fire.parse]
+format           = "lsasaf_frp_list"
+min_confidence   = 0.5
+
+[meteosat_fire.geocode]
+strategy         = "satellite_grid"
+h3_resolution    = 3
+
+[meteosat_fire.model]
+native_seconds   = 1800
+
+[meteosat_fire.display]
+label            = "Fires from geostationary orbit (Meteosat 0°)"
+about            = "Fire hotspots seen every 15 minutes by Meteosat 0° over Europe, Africa and the Middle East, within the hour: wildfires, industrial and conflict fires, gas flares."
+unit             = "hotspots"
+max_prefix       = "FRP "
+links            = [["Fire map", "https://firms.modaps.eosdis.nasa.gov/map/#d:24hrs;@{lon},{lat},9.0z"]]
+
+[meteosat_fire.alerts]
+tail             = "upper"
+reach_km         = 100
+
+[meteosat_iodc_fire]
+class            = "fire_hotspots"
+modality         = "physical"
+topic_tags       = ["fire", "hazard", "satellite"]
+flavor           = "count"
+endpoint         = "https://datalsasaf.lsasvcs.ipma.pt/PRODUCTS/MSG-IODC/FRP-PIXEL/HDF5/%Y/%m/%d/"
+cadence_seconds  = 900
+status           = "nursery"
+notes            = "EUMETSAT LSA SAF FRP-PIXEL ListProduct, Meteosat Indian Ocean, every 15 min (CC BY 4.0, free account); value = fire radiative power (MW)"
+
+[meteosat_iodc_fire.fetch]
+kind             = "index_latest"
+file_pattern     = 'HDF5_LSASAF_MSG-IODC_FRP-PIXEL-ListProduct_IODC-Disk_(\d{12})'
+user_env         = "WW_LSASAF_USER"
+pass_env         = "WW_LSASAF_PASS"
+
+[meteosat_iodc_fire.parse]
+format           = "lsasaf_frp_list"
+min_confidence   = 0.5
+
+[meteosat_iodc_fire.geocode]
+strategy         = "satellite_grid"
+h3_resolution    = 3
+
+[meteosat_iodc_fire.model]
+native_seconds   = 1800
+
+[meteosat_iodc_fire.display]
+label            = "Fires from geostationary orbit (Meteosat Indian Ocean)"
+about            = "Fire hotspots seen every 15 minutes by Meteosat Indian Ocean over the Middle East, India and Central Asia, within the hour: wildfires, industrial and conflict fires, gas flares."
+unit             = "hotspots"
+max_prefix       = "FRP "
+links            = [["Fire map", "https://firms.modaps.eosdis.nasa.gov/map/#d:24hrs;@{lon},{lat},9.0z"]]
+
+[meteosat_iodc_fire.alerts]
+tail             = "upper"
+reach_km         = 100
+
 # --- trace gases from space: Sentinel-5P TROPOMI via Copernicus Data Space ----------
 # Daily box means from the Sentinel Hub Statistical API (no imagery downloaded).
 # Free CDSE account → OAuth client (WW_CDSE_CLIENT_ID / WW_CDSE_CLIENT_SECRET).

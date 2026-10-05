@@ -631,6 +631,64 @@ def parse_goes_fdc(payload: Any, cfg: SourceConfig) -> list[Observation]:
     return obs
 
 
+@register("lsasaf_frp_list")
+def parse_lsasaf_frp_list(payload: Any, cfg: SourceConfig) -> list[Observation]:
+    """EUMETSAT LSA SAF FRP-PIXEL ListProduct (Meteosat, one 15-min slot) →
+    one observation per fire pixel, like FIRMS and GOES.
+
+    payload comes from the index_latest fetcher: {key, content: HDF5 bytes}.
+    The file is already a list of fire pixels. A fire is kept when its
+    FIRE_CONFIDENCE ≥ `min_confidence` (0.5; on the 5 Oct 00:00 MSG slot
+    those sat a median 3.4 km from a VIIRS hotspot, about one Meteosat
+    pixel). Datasets hold raw integers: physical = raw / SCALING_FACTOR.
+    value = fire radiative power (MW).
+
+    ts = the slot start (IMAGE_ACQUISITION_TIME) + ACQTIME minutes, the
+    scan line's time; same-cell fires in one minute are spread a second
+    apart, so the (stream, cell, ts) key keeps each.
+    """
+    import io
+    from datetime import UTC, datetime
+
+    import h5py
+    import numpy as np
+
+    min_conf = float(cfg.parse.get("min_confidence", 0.5))
+    resolution = int(cfg.geocode.get("h3_resolution", 3))
+
+    with h5py.File(io.BytesIO(payload["content"]), "r") as f:
+        stamp = f.attrs["IMAGE_ACQUISITION_TIME"]
+        stamp = stamp.decode() if isinstance(stamp, bytes) else str(stamp)
+        slot = int(datetime.strptime(stamp[:12], "%Y%m%d%H%M").replace(tzinfo=UTC).timestamp())
+
+        def field(name: str) -> Any:
+            ds = f[name]
+            raw = ds[:].astype(np.float64)
+            out = raw / float(ds.attrs.get("SCALING_FACTOR", 1.0))
+            out[raw == float(ds.attrs.get("MISSING_VALUE", -999))] = np.nan
+            return out
+
+        if "LATITUDE" not in f or f["LATITUDE"].shape[0] == 0:
+            return []
+        lat, lon = field("LATITUDE"), field("LONGITUDE")
+        frp, conf, minute = field("FRP"), field("FIRE_CONFIDENCE"), field("ACQTIME")
+
+    seen: dict[tuple[str, int], int] = {}
+    obs: list[Observation] = []
+    for la, lo, p, c, m in zip(lat, lon, frp, conf, minute, strict=True):
+        if np.isnan(la) or np.isnan(lo) or not (c >= min_conf):
+            continue
+        cell = h3_cell(float(la), float(lo), resolution)
+        base = slot + 60 * (int(m) if not np.isnan(m) else 0)
+        k = seen.get((cell, base), 0)
+        if k >= 60:
+            continue  # 60 fires in one cell in one minute: the count is saturated anyway
+        seen[(cell, base)] = k + 1
+        obs.append(Observation(stream_id=cfg.stream_id, cell=cell, ts=base + k,
+                               value=float(p) if p >= 0 else 0.0))
+    return obs
+
+
 @register("gdelt_export_events")
 def parse_gdelt_export_events(payload: Any, cfg: SourceConfig) -> list[Observation]:
     """GDELT 2.0 export batch (zipped TSV, one row per coded event) → one

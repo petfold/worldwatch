@@ -45,6 +45,8 @@ kinds:
                      once per completed local day (memo in the ETag slot)
   s3_latest          the newest object under a strftime-templated prefix of
                      a public bucket (NOAA NODD); skip if the key is unchanged
+  index_latest       the newest file named in a strftime-templated directory
+                     listing (LSA SAF), fetched with optional HTTP Basic auth
 """
 
 from __future__ import annotations
@@ -654,4 +656,60 @@ async def fetch_s3_latest(
     return FetchResult(
         resp.status_code, {"key": key, "content": resp.content},
         CacheValidators(etag=key, last_modified=validators.last_modified),
+    )
+
+
+# --- the newest file of a web directory listing (EUMETSAT LSA SAF) -------------
+
+
+@register("index_latest")
+async def fetch_index_latest(
+    client: httpx.AsyncClient,
+    cfg: SourceConfig,
+    validators: CacheValidators,
+    now: int,
+) -> FetchResult:
+    """The newest file named in a directory listing page.
+
+    The endpoint is a strftime template of the poll time (LSA SAF: one folder
+    per day, ".../HDF5/%Y/%m/%d/"); `[fetch] file_pattern` is a regex whose
+    group 1 sorts by time (the slot stamp). Just past midnight the previous
+    folder (`fallback_seconds` back) is listed. The listing is public; the
+    file is fetched with HTTP Basic auth from `user_env`/`pass_env` when set.
+    The newest name is memoised in the ETag slot. Payload: {"key", "content"}.
+    """
+    import re
+    from datetime import UTC, datetime
+
+    pattern = re.compile(str(cfg.fetch["file_pattern"]))
+    names: dict[str, str] = {}
+    folder = ""
+    for back in (0, int(cfg.fetch.get("fallback_seconds", 86400))):
+        folder = datetime.fromtimestamp(now - back, UTC).strftime(cfg.endpoint)
+        resp = await client.get(folder, headers={"User-Agent": USER_AGENT}, timeout=30.0)
+        resp.raise_for_status()
+        names = {m.group(0): m.group(1) for m in pattern.finditer(resp.text)}
+        if names:
+            break
+    if not names:
+        raise ValueError("no matching files in this folder or the previous one")
+    name = max(names, key=lambda n: names[n])
+    if validators.etag == name:
+        return FetchResult(304, None, validators, not_modified=True)
+
+    auth = None
+    user_env, pass_env = cfg.fetch.get("user_env"), cfg.fetch.get("pass_env")
+    if user_env and pass_env:
+        user, password = os.environ.get(str(user_env)), os.environ.get(str(pass_env))
+        if not user or not password:
+            raise RuntimeError(f"Source {cfg.stream_id!r} needs env vars {user_env} + {pass_env}")
+        auth = httpx.BasicAuth(user, password)
+    resp = await client.get(
+        folder.rstrip("/") + "/" + name, auth=auth, headers={"User-Agent": USER_AGENT},
+        timeout=float(cfg.fetch.get("timeout", 60)),
+    )
+    resp.raise_for_status()
+    return FetchResult(
+        resp.status_code, {"key": name, "content": resp.content},
+        CacheValidators(etag=name, last_modified=validators.last_modified),
     )
