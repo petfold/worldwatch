@@ -28,24 +28,17 @@ Legend: 🔴 blocks a source/feature · 🟡 nice-to-have · ⚪ later (deploy p
       off the shared DEMO_KEY). The rest of the source review's batch 2
       (OpenAQ, OpenSky account, ENTSO-E, ...) when you want them.
 
-- [ ] 🔴 **Copernicus Data Space (Sentinel-5P trace gases)** — blocks
-      `s5p_no2`, `s5p_so2`, `s5p_co`. Register free at
-      dataspace.copernicus.eu → Dashboard → User Settings → OAuth clients →
-      Create (no SPA tick; copy the secret at once, it is shown only once).
-      Put `WW_CDSE_CLIENT_ID` and `WW_CDSE_CLIENT_SECRET` in
-      `/etc/worldwatch/worldwatch.env`. Free tier: 10,000 requests a month; the
-      three stanzas use ≤ ~5,000. Until then they record a `fetch_error` per
-      poll, nothing else. **2026-10-05:** account and OAuth client
-      `worldwatch-vps` created (Client Credentials); env vars on the VPS still
-      to set.
-- [ ] 🟡 **EUMETSAT LSA SAF (Meteosat fires)** — for geostationary fire
-      detection over Europe, Africa, the Middle East and India (GOES covers
-      the Americas). Register free at https://mokey.lsasvcs.ipma.pt/auth/signup
-      (CC BY 4.0 data). Then tell Claude, and download one FRP-PIXEL
-      ListProduct file so the parser is built against a real one.
-      **2026-10-05:** account created; sample file downloaded (MSG-Disk
-      00:00, 125 fires). Newest slot listed ~40 min after its time. Env vars
-      `WW_LSASAF_USER`/`WW_LSASAF_PASS` on the VPS still to set.
+- [x] 🔴 **Copernicus Data Space (Sentinel-5P trace gases)** — done
+      2026-10-05: account and OAuth client `worldwatch-vps` (Client
+      Credentials, never expires), `WW_CDSE_CLIENT_ID`/`WW_CDSE_CLIENT_SECRET`
+      in `/etc/worldwatch/worldwatch.env`; first polls ok (`s5p_no2`, `s5p_so2`,
+      `s5p_co`). Free tier 10,000 requests a month; the three use ≤ ~5,000.
+- [x] 🟡 **EUMETSAT LSA SAF (Meteosat fires)** — done 2026-10-05: account,
+      `WW_LSASAF_USER`/`WW_LSASAF_PASS` on the VPS; `meteosat_fire` and
+      `meteosat_iodc_fire` polling ok (files ~40 and ~75 min after the slot).
+- [ ] ⚪ **Himawari (JAXA P-Tree), later** — the one gap left in geostationary
+      fire (East Asia, Oceania). Free registration, FTP/SFTP only; not needed
+      until Claude has a fetcher for it.
 
 ## Push notifications (needed before step 9 is useful)
 
