@@ -1040,6 +1040,8 @@ reach_km         = 200
 every_event      = true
 severity         = 0.8   # priority 4: shown, but doesn't wake you
 push_score       = 6   # US-only warnings: the dashboard, not pushed
+region_resolution = 1    # one region per storm (~600,000 km²), not per county
+cooldown_seconds = 43200 # NWS reissues a hurricane's warnings every few hours: one alert per 12 h
 
 
 # --- Earthquakes, pushed: EMSC seismicportal WebSocket ----------------------

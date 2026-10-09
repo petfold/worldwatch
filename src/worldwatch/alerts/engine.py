@@ -32,7 +32,10 @@ Two layers:
    - every_event = true: authoritative feeds alert on each newly ingested
      item (read from the `seen` keys), one alert per region per observation;
      with cooldown_seconds, none again for the region within it (a feed that
-     re-reports one ongoing outage every poll).
+     re-reports one ongoing outage every poll); region_resolution sets the
+     region's size (a hurricane's warnings: one state-sized region, not a
+     county each). Readings of the issuing feed's own class never escalate
+     its item (alert_score): only independent sources confirm it.
 
    - provisional: a stream that needs corroboration, with one candidate strong
      enough on its own (alert_score >= PROVISIONAL_SCORE, p ~ 1e-6), opens an
@@ -346,12 +349,13 @@ def _every_event_alerts(
             continue
         fresh_window = int(pol.get("fresh_seconds", 6 * 3600))
         cooldown = pol.get("cooldown_seconds")  # opt-in: distinct events may share a region
+        resolution = int(pol.get("region_resolution", corr_resolution))  # a storm's region
         for r in conn.execute(
             "SELECT cell, ts, first_seen FROM seen WHERE stream_id = ? AND first_seen >= ? "
             "AND ts >= ? ORDER BY ts",
             (sid, now - fresh_window, now - fresh_window),
         ).fetchall():
-            region = coarsen(r["cell"], corr_resolution)
+            region = coarsen(r["cell"], resolution)
             member = Anomaly(
                 stream_id=sid, cell=r["cell"], scale=0, bin_start=r["ts"], q_value=None,
                 presence_q=1.0, precision=1.0, modality=cfg.modality, extremity=1.0,
@@ -549,6 +553,9 @@ def alert_score(evidence: list[dict], sources: dict[str, SourceConfig] | None) -
     score: how improbable the evidence is under normal conditions, −log10 of each
     independent cell's two-sided tail p (the strongest per stream and cell), summed;
     an every-item feed's member counts its stanza's push_score instead (default 5).
+    Readings of the same class as a feed that issued an item in the alert (the
+    NWS's severe and extreme warning counts on an NWS warning; USGS and EMSC quake
+    counts on a USGS significant quake) restate that item: they add nothing.
     Confirmation by independent kinds of measurement multiplies it: × the number of
     modalities, when two or more. extreme-eligible (confirmed): two modalities or more,
     an item an authoritative feed issued (every_event), or a stanza that says extreme =
@@ -556,6 +563,12 @@ def alert_score(evidence: list[dict], sources: dict[str, SourceConfig] | None) -
     beyond its q_tail (default 1e-4) — weak readings of a radiation network merged
     into an alert confirm nothing (score thresholds are the notifier's).
     """
+    def class_of(sid: str) -> str | None:
+        cfg = (sources or {}).get(sid)
+        return cfg.class_ if cfg is not None else None
+
+    issuers = {class_of(e.get("stream_id", "")) for e in evidence if e.get("kind") == "source_alert"}
+    issuers.discard(None)
     per_cell: dict[tuple[str, str], float] = {}
     feed = 0.0
     strong: dict[str, set[str]] = defaultdict(set)  # extreme stanzas: their confirming cells
@@ -572,6 +585,8 @@ def alert_score(evidence: list[dict], sources: dict[str, SourceConfig] | None) -
             if e.get("kind") == "source_alert":
                 feed += float(pol.get("push_score", 5.0))
             continue
+        if class_of(e.get("stream_id", "")) in issuers:
+            continue  # the issued item again, counted by its own kind of source
         p = max(tail_p(float(q), str(pol.get("tail", "both"))), SCORE_P_FLOOR)
         key = (e.get("stream_id", ""), e.get("cell", ""))
         per_cell[key] = max(per_cell.get(key, 0.0), -math.log10(p))

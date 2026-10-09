@@ -466,3 +466,56 @@ def test_one_sided_tails_stay_calibrated():
     for tail in ("upper", "lower", "both"):
         m = sum(surprisal(rng.random(), tail) for _ in range(20000)) / 20000
         assert abs(m - 1.0) < 0.03  # Exp(1) under H0 either way
+
+
+# --- hurricane warnings (2026-10-08/09: 38 pushes in 40 h, the same NWS warnings counted
+# as their own confirmation, one alert per county update)
+
+
+def _nws(sources):
+    import dataclasses
+
+    return {sid: dataclasses.replace(sources[sid], status="active")
+            for sid in ("nws_extreme", "nws_severe_alerts")}
+
+
+def _issue(db, sid, cell, t):
+    db.execute("INSERT INTO seen (stream_id, cell, ts, first_seen) VALUES (?, ?, ?, ?)", (sid, cell, t, t))
+    db.commit()
+
+
+def test_a_feeds_own_kind_of_reading_does_not_escalate_its_warning(db, sources):
+    from worldwatch.alerts.engine import stage_of
+
+    src = _nws(sources)
+    florida = h3.latlng_to_cell(27.0, -81.5, 3)
+    _issue(db, "nws_extreme", florida, NOW - 60)
+    _surprise(db, "nws_severe_alerts", h3.cell_to_parent(florida, 2), -1, NOW - 300, q=1.0)
+    _surprise(db, "nws_extreme", florida, -1, NOW - 300, q=1 - 1e-8)
+    run_alerts(db, src, now=NOW)  # (the severe count's spike may open its own provisional alert)
+    (row,) = db.execute("SELECT stage, evidence FROM alerts WHERE evidence LIKE '%source_alert%'").fetchall()
+    assert row["stage"] < 2  # it was 2, "extreme", pushed past the budget
+    ev = json.loads(row["evidence"])
+    assert stage_of(ev, src) < 2
+
+    # an independent kind of measurement in the region still confirms it
+    import dataclasses
+    src["grid"] = dataclasses.replace(_src(sources, "grid", "infrastructural"), class_="power_grid")
+    ev.append({"stream_id": "grid", "cell": florida, "q_value": 1e-9, "modality": "infrastructural"})
+    assert stage_of(ev, src) == 2
+
+
+def test_one_storm_one_alert_per_region_not_per_county_update(db, sources):
+    src = _nws(sources)
+    counties = [h3.latlng_to_cell(lat, lon, 3) for lat, lon in   # one resolution-1 region
+                ((27.0, -81.5), (26.5, -80.5), (25.8, -80.4), (27.5, -81.0))]
+    opened = []
+    for i in range(8):  # updates every 90 minutes for 12 hours, a different county each time
+        t = NOW + 5400 * i
+        _issue(db, "nws_extreme", counties[i % len(counties)], t)
+        opened += run_alerts(db, src, now=t)
+    assert len(opened) == 1
+    # the storm reaching the next region (Tampa Bay) opens that region's one alert
+    t = NOW + 5400 * 8
+    _issue(db, "nws_extreme", h3.latlng_to_cell(28.0, -82.0, 3), t)
+    assert len(run_alerts(db, src, now=t)) == 1
