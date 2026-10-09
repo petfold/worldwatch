@@ -178,6 +178,14 @@ def build_digest(conn: sqlite3.Connection, sources: dict[str, SourceConfig], wee
         out += ["## Feed and system health (events other than ok)", ""]
         out += [f"- {r['component']}: {r['event']} x{r['n']}" for r in health]
         out.append("")
+    pushed = conn.execute(
+        "SELECT a.feedback, COUNT(DISTINCT a.alert_id) AS n FROM push_log p JOIN alerts a USING (alert_id) "
+        "WHERE p.ts >= ? AND p.ts < ? GROUP BY 1", (t0, week_end)).fetchall()
+    if pushed:
+        fb = {r["feedback"]: r["n"] for r in pushed}
+        out += ["## Your feedback on this week's pushes", "",
+                f"- {sum(fb.values())} alerts pushed: {fb.get('useful', 0)} useful, "
+                f"{fb.get('not_useful', 0)} not useful, {fb.get(None, 0)} unanswered.", ""]
     changes = conn.execute(
         "SELECT component, event, detail FROM health WHERE ts >= ? AND ts < ? "
         "AND event IN ('promoted', 'quarantined', 'released') ORDER BY ts", (t0, week_end)).fetchall()

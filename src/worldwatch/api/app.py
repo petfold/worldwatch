@@ -266,6 +266,20 @@ def create_app(
         return JSONResponse({"alert_id": alert_id, "label": body.label})
 
 
+    @app.post("/api/feedback/{alert_id}/{verdict}/{sig}")
+    def feedback(
+        alert_id: int, verdict: str, sig: str, conn: sqlite3.Connection = Depends(get_conn)
+    ) -> JSONResponse:
+        """A push's Useful / Not useful button (signed per alert and verdict; the
+        only write the public dashboard lets through)."""
+        from worldwatch.api import feedback as fb
+
+        if not fb.verify(conn, alert_id, verdict, sig):
+            raise HTTPException(status_code=403, detail="bad signature")
+        if not fb.record(conn, alert_id, verdict):
+            raise HTTPException(status_code=404, detail="alert not found")
+        return JSONResponse({"alert_id": alert_id, "feedback": verdict})
+
     @app.get("/api/overview")
     def overview(
         lookback: int = DEFAULT_LOOKBACK_SECONDS,

@@ -129,7 +129,10 @@ async def test_push_buttons_open_the_sources(db, sources):
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
         await send_ntfy(client, cfg, _alert_row(db), db, sources)
     assert seen["actions"].startswith("view, earthquake.usgs.gov, https://earthquake.usgs.gov/e/1000")
-    assert "view, Map, https://www.openstreetmap.org/" in seen["actions"]
+    # three buttons at most: the source's page, then Useful / Not useful (the map is
+    # on the dashboard's alert page, which a tap on the notification opens)
+    assert [a.split(",")[1].strip() for a in seen["actions"].split("; ")] == \
+        ["earthquake.usgs.gov", "Useful", "Not useful"]
     assert seen["click"] == "https://example.org:8001/alert/7"
 
 

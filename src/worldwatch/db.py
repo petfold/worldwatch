@@ -263,6 +263,16 @@ MIGRATIONS: list[str] = [
         updated_at      INTEGER NOT NULL
     );
     """,
+    # v13 — the operator's verdict on a push (worldwatch.api.feedback), and a
+    # small key/value store for the server's own settings (the signing secret).
+    """
+    CREATE TABLE IF NOT EXISTS settings (
+        key     TEXT PRIMARY KEY,
+        value   TEXT NOT NULL
+    );
+    ALTER TABLE alerts ADD COLUMN feedback TEXT;
+    ALTER TABLE alerts ADD COLUMN feedback_at INTEGER;
+    """,
 ]
 
 

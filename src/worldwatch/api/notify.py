@@ -429,10 +429,17 @@ async def send_ntfy(
         headers["Click"] = f"{cfg.dashboard_url}/alert/{alert['alert_id']}"  # the full report
     elif map_url:
         headers["Click"] = map_url  # no dashboard configured: open the region on a map
-    if buttons:
-        headers["Actions"] = "; ".join(
-            f"view, {_ascii(label)}, {url}" for label, url in buttons[:MAX_ACTIONS]
-        )
+    verdicts: list[str] = []
+    if cfg.dashboard_url and conn is not None:  # Useful / Not useful, from the phone
+        from worldwatch.api import feedback
+
+        verdicts = feedback.actions(conn, cfg.dashboard_url, int(alert["alert_id"]))
+    # the first source's own page, then the verdicts (ntfy shows three buttons; the
+    # map and further sources are a tap away on the dashboard's alert page)
+    actions = [f"view, {_ascii(label)}, {url}" for label, url in buttons[:MAX_ACTIONS - len(verdicts)]]
+    actions += verdicts
+    if actions:
+        headers["Actions"] = "; ".join(actions)
     if cfg.token:
         headers["Authorization"] = f"Bearer {cfg.token}"
     resp = await client.post(

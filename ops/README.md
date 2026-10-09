@@ -54,6 +54,14 @@ SSH tunnel), rate-limited, `noindex`. uvicorn itself keeps listening on
 127.0.0.1:8001. Set `WW_DASHBOARD_URL=https://categor.io:8001` so pushes open the
 alert on the dashboard; install steps are in the file's header.
 
+With `WW_DASHBOARD_URL` set, each push also carries **Useful** / **Not useful**
+buttons (`worldwatch.api.feedback`): ntfy POSTs to
+`/api/feedback/<alert>/<verdict>/<signature>`, the one write nginx lets through,
+signed per alert and verdict with a secret kept in the database (`settings`).
+The answer goes to `alerts.feedback`; the weekly digest counts them. nginx's
+copy of the file is not updated by `deploy.sh`: re-run the `cp` and reload after
+changing it.
+
 ## Storage budgets
 
 | What | Kept | Setting |
